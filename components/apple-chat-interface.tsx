@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { useUser } from '@/contexts/user-context'
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX } from "lucide-react"
+import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2 } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
 import "katex/dist/katex.min.css"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -28,14 +28,13 @@ interface Message {
   feedback?: "positive" | "negative" | null
 }
 
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    content: "Hi Alex! 👋 I'm Penny, your personalized financial advisor. I'm here to help you make smart financial decisions and achieve your goals. What would you like to discuss today? 💰✨",
-    sender: "penny",
-    timestamp: new Date(Date.now() - 300000),
-  },
-]
+interface ChatSession {
+  id: string
+  title: string
+  timestamp: Date
+  messageCount: number
+  lastMessage: string
+}
 
 const quickSuggestions = [
   "📊 Show my budget analysis",
@@ -464,7 +463,29 @@ function renderInline(text: string): React.ReactNode {
 export function AppleChatInterface() {
   const { user } = useUser()
   const { theme } = useTheme()
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  
+  // Conditionally set initial messages based on authentication
+  const getInitialMessages = (): Message[] => {
+    if (user) {
+      // For authenticated users, show a personalized welcome message
+      return [{
+        id: "1",
+        content: `Hi ${user.first_name}! 👋 I'm Penny, your personalized financial advisor. I'm here to help you make smart financial decisions and achieve your goals. What would you like to discuss today? 💰✨`,
+        sender: "penny",
+        timestamp: new Date(Date.now() - 300000),
+      }]
+    } else {
+      // For unauthenticated users, show the Alex demo message
+      return [{
+        id: "1",
+        content: "Hi Alex! 👋 I'm Penny, your personalized financial advisor. I'm here to help you make smart financial decisions and achieve your goals. What would you like to discuss today? 💰✨",
+        sender: "penny",
+        timestamp: new Date(Date.now() - 300000),
+      }]
+    }
+  }
+
+  const [messages, setMessages] = useState<Message[]>(getInitialMessages())
   const [inputValue, setInputValue] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -472,6 +493,9 @@ export function AppleChatInterface() {
   const [isMuted, setIsMuted] = useState(false)
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const recognitionRef = useRef<any>(null)
@@ -540,6 +564,94 @@ export function AppleChatInterface() {
     // This effect is no longer needed as streaming is handled by setMessages
   }, [isTyping, streamingMessageId]);
 
+  // Update messages when user changes (login/logout)
+  useEffect(() => {
+    setMessages(getInitialMessages())
+  }, [user]);
+
+  // Load chat sessions for authenticated users
+  useEffect(() => {
+    if (user) {
+      loadChatSessions()
+    } else {
+      setChatSessions([])
+      setCurrentSessionId(null)
+    }
+  }, [user])
+
+  // Load chat sessions from localStorage or API
+  const loadChatSessions = async () => {
+    if (!user) return
+    
+    try {
+      // For now, load from localStorage. In production, this would be an API call
+      const storedSessions = localStorage.getItem(`chat_sessions_${user.id}`)
+      if (storedSessions) {
+        const sessions = JSON.parse(storedSessions).map((session: any) => ({
+          ...session,
+          timestamp: new Date(session.timestamp)
+        }))
+        setChatSessions(sessions)
+      }
+    } catch (error) {
+      console.error('Failed to load chat sessions:', error)
+    }
+  }
+
+  // Save chat session
+  const saveChatSession = (session: ChatSession) => {
+    if (!user) return
+    
+    try {
+      const updatedSessions = [...chatSessions, session]
+      setChatSessions(updatedSessions)
+      localStorage.setItem(`chat_sessions_${user.id}`, JSON.stringify(updatedSessions))
+    } catch (error) {
+      console.error('Failed to save chat session:', error)
+    }
+  }
+
+  // Create new chat session
+  const createNewChat = () => {
+    const newSessionId = `session_${Date.now()}`
+    const newSession: ChatSession = {
+      id: newSessionId,
+      title: 'New Chat',
+      timestamp: new Date(),
+      messageCount: 0,
+      lastMessage: ''
+    }
+    
+    setCurrentSessionId(newSessionId)
+    setSessionId(newSessionId)
+    setMessages(getInitialMessages())
+    saveChatSession(newSession)
+    setIsSidebarOpen(false)
+  }
+
+  // Load chat session
+  const loadChatSession = (sessionId: string) => {
+    // In a real implementation, this would load the actual messages for this session
+    setCurrentSessionId(sessionId)
+    setSessionId(sessionId)
+    setMessages(getInitialMessages())
+    setIsSidebarOpen(false)
+  }
+
+  // Delete chat session
+  const deleteChatSession = (sessionId: string) => {
+    const updatedSessions = chatSessions.filter(session => session.id !== sessionId)
+    setChatSessions(updatedSessions)
+    
+    if (currentSessionId === sessionId) {
+      createNewChat()
+    }
+    
+    if (user) {
+      localStorage.setItem(`chat_sessions_${user.id}`, JSON.stringify(updatedSessions))
+    }
+  }
+
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return
     const userMessage = inputValue.trim()
@@ -565,6 +677,32 @@ export function AppleChatInterface() {
     }
     setMessages((prev) => [...prev, streamingMessage])
     setStreamingMessageId(streamingId)
+
+    // Create or update chat session for authenticated users
+    if (user && !currentSessionId) {
+      const newSessionId = `session_${Date.now()}`
+      const newSession: ChatSession = {
+        id: newSessionId,
+        title: userMessage.length > 30 ? userMessage.substring(0, 30) + '...' : userMessage,
+        timestamp: new Date(),
+        messageCount: 1,
+        lastMessage: userMessage
+      }
+      setCurrentSessionId(newSessionId)
+      setSessionId(newSessionId)
+      saveChatSession(newSession)
+    } else if (user && currentSessionId) {
+      // Update existing session
+      const updatedSessions = chatSessions.map(session => 
+        session.id === currentSessionId 
+          ? { ...session, lastMessage: userMessage, messageCount: session.messageCount + 1 }
+          : session
+      )
+      setChatSessions(updatedSessions)
+      if (user) {
+        localStorage.setItem(`chat_sessions_${user.id}`, JSON.stringify(updatedSessions))
+      }
+    }
     
     try {
       const conversationHistory = messages.map(msg => ({ sender: msg.sender, content: msg.content }))
@@ -764,14 +902,123 @@ export function AppleChatInterface() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 overflow-hidden">
+      {/* Chat History Sidebar - Only show for authenticated users */}
+      {user && (
+        <AnimatePresence>
+          {isSidebarOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="flex-shrink-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-r border-gray-200 dark:border-gray-700 overflow-hidden"
+            >
+              <div className="flex flex-col h-full">
+                {/* Sidebar Header */}
+                <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                  <h2 className="font-semibold text-gray-900 dark:text-white">Chat History</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {/* New Chat Button */}
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                  <Button
+                    onClick={createNewChat}
+                    className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Chat
+                  </Button>
+                </div>
+
+                {/* Chat Sessions List */}
+                <div className="flex-1 overflow-y-auto">
+                  {chatSessions.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500 dark:text-gray-400">
+                      <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No chat history yet</p>
+                      <p className="text-xs mt-1">Start a conversation to see it here</p>
+                    </div>
+                  ) : (
+                    <div className="p-2">
+                      {chatSessions.map((session) => (
+                        <motion.div
+                          key={session.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={`group relative mb-2 rounded-lg p-3 cursor-pointer transition-all duration-200 ${
+                            currentSessionId === session.id
+                              ? 'bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-700'
+                              : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                          }`}
+                          onClick={() => loadChatSession(session.id)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-medium text-gray-900 dark:text-white text-sm truncate">
+                                {session.title}
+                              </h3>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                                {session.lastMessage || 'No messages yet'}
+                              </p>
+                              <div className="flex items-center mt-2 text-xs text-gray-400 dark:text-gray-500">
+                                <Clock className="w-3 h-3 mr-1" />
+                                {session.timestamp.toLocaleDateString()}
+                                <span className="mx-2">•</span>
+                                {session.messageCount} messages
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                deleteChatSession(session.id)
+                              }}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+
+      {/* Main Chat Area */}
+      <div className="flex flex-col flex-1 overflow-hidden">
       {/* Enhanced Chat Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between flex-shrink-0"
       >
-        <div className="w-20"></div>
+        <div className="w-20 flex items-center">
+          {user && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
         
         <div className="flex items-center justify-center flex-1">
           <div className="flex items-center space-x-3">
@@ -1029,6 +1276,7 @@ export function AppleChatInterface() {
           </div>
         </div>
       </motion.div>
+      </div>
     </div>
   )
 }

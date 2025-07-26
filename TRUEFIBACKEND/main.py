@@ -16,7 +16,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
 from pydantic import BaseModel
-from openai import AsyncOpenAI
+import openai
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
 import asyncio
@@ -34,12 +34,46 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Async OpenAI
-client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
 
-# DB pool
-db_pool = ThreadedConnectionPool(5, 20, dsn=DATABASE_URL)
+# DB pool with better configuration
+try:
+    db_pool = ThreadedConnectionPool(
+        minconn=1,
+        maxconn=10,
+        dsn=DATABASE_URL,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5
+    )
+    logger.info("Database connection pool initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize database pool: {e}")
+    db_pool = None
 
 app = FastAPI(title="TrueFi Chatbot Backend")
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    try:
+        if db_pool is None:
+            return {"status": "error", "message": "Database pool not initialized"}
+        
+        conn = db_pool.getconn()
+        if conn is None:
+            return {"status": "error", "message": "Cannot get database connection"}
+        
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+        db_pool.putconn(conn)
+        
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {"status": "error", "message": str(e)}
 
 # CORS for Next.js frontend
 app.add_middleware(
@@ -78,15 +112,47 @@ async def authenticate(credentials: HTTPAuthorizationCredentials = Depends(secur
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-# DB cursor dependency
+# DB cursor dependency with better error handling
 def get_db_cursor():
-    conn = db_pool.getconn()
-    cur = conn.cursor()
+    conn = None
+    cur = None
     try:
+        conn = db_pool.getconn()
+        if conn is None:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        # Test connection
+        conn.autocommit = False
+        cur = conn.cursor()
+        
         yield cur, conn
+    except psycopg2.OperationalError as e:
+        logger.error(f"Database connection error: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        raise HTTPException(status_code=500, detail="Database connection error")
+    except Exception as e:
+        logger.error(f"Database error: {e}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        raise HTTPException(status_code=500, detail="Database error")
     finally:
-        cur.close()
-        db_pool.putconn(conn)
+        if cur:
+            try:
+                cur.close()
+            except:
+                pass
+        if conn:
+            try:
+                db_pool.putconn(conn)
+            except:
+                pass
 
 # Enhanced System Prompt with your existing formatting
 SYSTEM_PROMPT = """
@@ -179,10 +245,21 @@ async def chat(input: MessageInput, user_id: str = Depends(authenticate), db = D
 
         return {"message": bot_message, "session_id": session_id}
         
+    except psycopg2.OperationalError as e:
+        logger.error(f"Database connection error for user {user_id}: {str(e)}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        try:
+            conn.rollback()
+        except:
+            pass
+        raise HTTPException(status_code=500, detail="Database connection error. Please try again.")
     except Exception as e:
         logger.error(f"Chat error for user {user_id}: {str(e)}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        conn.rollback()
+        try:
+            conn.rollback()
+        except:
+            pass
         raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
 
 # End session endpoint with comprehensive analysis
