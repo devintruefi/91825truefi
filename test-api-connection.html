@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend-Backend API Connection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #fff3cd; border-color: #ffeaa7; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Frontend-Backend API Connection Test</h1>
+    
+    <div class="test-section">
+        <h3>1. Test Backend Server Connection</h3>
+        <button onclick="testServerConnection()">Test Server</button>
+        <div id="serverResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>2. Test User Creation</h3>
+        <button onclick="testUserCreation()">Create Test User</button>
+        <div id="userResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>3. Test Financial Data Retrieval</h3>
+        <button onclick="testFinancialData()" id="financialBtn" disabled>Get Financial Data</button>
+        <div id="financialResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>4. Test Plaid Integration</h3>
+        <button onclick="testPlaidToken()" id="plaidBtn" disabled>Create Plaid Token</button>
+        <div id="plaidResult"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+        let testUserId = null;
+
+        async function testServerConnection() {
+            const result = document.getElementById('serverResult');
+            result.innerHTML = '<div class="loading">Testing server connection...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/users`, { method: 'OPTIONS' });
+                if (response.ok) {
+                    result.innerHTML = '<div class="success">✅ Backend server is running and responding!</div>';
+                } else {
+                    result.innerHTML = `<div class="error">❌ Server responded with status: ${response.status}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Connection failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testUserCreation() {
+            const result = document.getElementById('userResult');
+            result.innerHTML = '<div class="loading">Creating test user...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: `frontend-test-${Date.now()}@example.com`,
+                        first_name: 'Frontend',
+                        last_name: 'Test',
+                        password: 'testpass123',
+                        is_advisor: false
+                    })
+                });
+                
+                if (response.ok) {
+                    const user = await response.json();
+                    testUserId = user.id;
+                    result.innerHTML = `
+                        <div class="success">
+                            ✅ User created successfully!<br>
+                            <strong>User ID:</strong> ${user.id}<br>
+                            <strong>Email:</strong> ${user.email}
+                        </div>
+                    `;
+                    document.getElementById('financialBtn').disabled = false;
+                    document.getElementById('plaidBtn').disabled = false;
+                } else {
+                    const error = await response.text();
+                    result.innerHTML = `<div class="error">❌ Failed to create user: ${error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        async function testFinancialData() {
+            if (!testUserId) {
+                alert('Please create a user first');
+                return;
+            }
+            
+            const result = document.getElementById('financialResult');
+            result.innerHTML = '<div class="loading">Fetching financial data...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/financial-data/${testUserId}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    result.innerHTML = `
+                        <div class="success">
+                            ✅ Financial data retrieved!<br>
+                            <strong>Accounts:</strong> ${data.accounts.length}<br>
+                            <strong>Transactions:</strong> ${data.recent_transactions.length}<br>
+                            <strong>Total Balance:</strong> $${data.summary.total_balance.toLocaleString()}
+                        </div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    const error = await response.text();
+                    result.innerHTML = `<div class="error">❌ Failed to get financial data: ${error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        async function testPlaidToken() {
+            if (!testUserId) {
+                alert('Please create a user first');
+                return;
+            }
+            
+            const result = document.getElementById('plaidResult');
+            result.innerHTML = '<div class="loading">Creating Plaid link token...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/plaid/link-token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: testUserId,
+                        user_email: `frontend-test-${Date.now()}@example.com`
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    result.innerHTML = `
+                        <div class="success">
+                            ✅ Plaid link token created!<br>
+                            <strong>Token:</strong> ${data.link_token.substring(0, 20)}...
+                        </div>
+                    `;
+                } else {
+                    const error = await response.text();
+                    result.innerHTML = `<div class="error">❌ Failed to create link token: ${error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            testServerConnection();
+        };
+    </script>
+</body>
+</html> 

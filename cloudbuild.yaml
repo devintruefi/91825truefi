@@ -1,0 +1,39 @@
+steps:
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA', '-f', 'true-fi-back-end/Dockerfile', './true-fi-back-end']
+  
+  # Step 2: Push the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA']
+  
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'truefi-api-service'
+      - '--image'
+      - 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8000'
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--max-instances'
+      - '10'
+      - '--set-env-vars'
+      - 'DB_HOST=34.173.65.237,DB_PORT=5432,DB_NAME=truefi_db,DB_USER=truefi_user,DB_SSL_MODE=disable'
+      - '--set-secrets'
+      - 'DB_PASSWORD=DB_PASSWORD:latest'
+
+images:
+  - 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA'
+logsBucket: 'gs://river-sky-455001-j1-build-logs'

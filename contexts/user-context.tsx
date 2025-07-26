@@ -1,0 +1,372 @@
+"use client"
+
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { apiClient } from '@/lib/api-client'
+
+interface User {
+  id: string
+  email: string
+  first_name: string
+  last_name: string
+  is_advisor: boolean
+  created_at: string
+}
+
+interface UserContextType {
+  user: User | null
+  loading: boolean
+  error: string | null
+  login: (email: string, password: string) => Promise<void>
+  logout: () => void
+  createUser: (userData: {
+    email: string
+    first_name: string
+    last_name: string
+    password: string
+    is_advisor: boolean
+  }) => Promise<void>
+  switchToUser: (userId: string) => Promise<void>
+}
+
+const UserContext = createContext<UserContextType | undefined>(undefined)
+
+export function UserProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Check for existing user session on mount
+  useEffect(() => {
+    const checkUserSession = async () => {
+      try {
+        const hasLoggedOut = localStorage.getItem('user_logged_out') === 'true'
+        if (hasLoggedOut) {
+          setLoading(false)
+          return
+        }
+
+        const currentUserData = localStorage.getItem('current_user_data')
+        if (currentUserData) {
+          try {
+            const user = JSON.parse(currentUserData)
+            setUser(user)
+            setLoading(false)
+            return
+          } catch (err) {
+            console.error('Failed to parse current user data:', err)
+            localStorage.removeItem('current_user_data')
+          }
+        }
+
+        const demoUserId = localStorage.getItem('demo_user_id')
+        if (demoUserId) {
+          const demoUser = {
+            id: 'demo-user-id',
+            email: 'demo@truefi.ai',
+            first_name: 'Demo',
+            last_name: 'User',
+            is_advisor: false,
+            created_at: new Date().toISOString()
+          }
+          setUser(demoUser)
+          setLoading(false)
+          return
+        }
+
+        // No user found, set to null
+        setUser(null)
+      } catch (err) {
+        console.error('Failed to initialize user session:', err)
+        setError('Failed to load user session')
+        const hasLoggedOut = localStorage.getItem('user_logged_out') === 'true'
+        if (!hasLoggedOut && 
+            window.location.pathname !== '/auth/signin' && 
+            window.location.pathname !== '/auth/signup' &&
+            window.location.pathname !== '/') {
+          window.location.href = '/auth/signin'
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    checkUserSession()
+  }, [])
+
+  useEffect(() => {
+    console.log('Redirect effect triggered:', { loading, user, pathname: window.location.pathname })
+    if (!loading && user) {
+      const hasLoggedOut = localStorage.getItem('user_logged_out') === 'true'
+      console.log('Has logged out:', hasLoggedOut)
+      if (!hasLoggedOut) {
+        const isOnAuthPage = window.location.pathname.startsWith('/auth') || window.location.pathname === '/auth'
+        console.log('Is on auth page:', isOnAuthPage)
+        if (isOnAuthPage) {
+          console.log('Redirecting to /welcome')
+          window.location.href = '/welcome'
+        }
+      }
+    }
+  }, [user, loading])
+
+  const login = async (email: string, password: string) => {
+    setLoading(true)
+    setError(null)
+    localStorage.removeItem('user_logged_out')
+    try {
+      // Special case for demo user
+      if (email === 'demo@truefi.ai' && password === 'demo123') {
+        const demoUser = {
+          id: 'demo-user-id',
+          email: 'demo@truefi.ai',
+          first_name: 'Demo',
+          last_name: 'User',
+          is_advisor: false,
+          created_at: new Date().toISOString()
+        }
+        setUser(demoUser)
+        localStorage.setItem('demo_user_id', demoUser.id)
+        return
+      }
+
+      // Try to call backend API for real user authentication
+      try {
+        const response = await fetch('http://localhost:8080/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email,
+            password: password,
+          }),
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          console.log('Login successful:', userData);
+          setUser(userData);
+          localStorage.setItem('current_user_id', userData.id);
+          localStorage.setItem('current_user_data', JSON.stringify(userData));
+          if (userData.token) {
+            localStorage.setItem('auth_token', userData.token);
+          }
+          localStorage.removeItem('demo_user_id'); // Clear demo user data
+          return;
+        } else {
+          const errorData = await response.json();
+          throw new Error(`Login failed: ${errorData.detail || errorData.message || 'Invalid credentials'}`);
+        }
+      } catch (backendError) {
+        console.log('Backend authentication not available, checking local users:', backendError);
+        
+        // Fallback: Check if user exists in localStorage
+        const localUsers = JSON.parse(localStorage.getItem('local_users') || '[]');
+        const user = localUsers.find((u: any) => u.email === email && u.password === password);
+        
+        if (user) {
+          console.log('Local user found:', user);
+          setUser({
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            is_advisor: user.is_advisor,
+            created_at: user.created_at
+          });
+          localStorage.setItem('current_user_id', user.id);
+          localStorage.setItem('current_user_data', JSON.stringify(user));
+          localStorage.removeItem('demo_user_id');
+          return;
+        }
+        
+        throw new Error('Invalid email or password');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err instanceof Error ? err.message : 'Login failed');
+      throw err;
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const logout = () => {
+    setUser(null)
+    localStorage.setItem('user_logged_out', 'true')
+    localStorage.removeItem('demo_user_id')
+    localStorage.removeItem('plaid_user_id')
+    localStorage.removeItem('current_user_id')
+    localStorage.removeItem('current_user_data')
+    window.location.href = '/'
+  }
+
+  const createUser = async (userData: {
+    email: string
+    first_name: string
+    last_name: string
+    password: string
+    is_advisor: boolean
+  }) => {
+    setLoading(true)
+    setError(null)
+    localStorage.removeItem('user_logged_out')
+    localStorage.removeItem('demo_user_id')
+    try {
+      // Try to call backend API first
+      try {
+        const response = await fetch('http://localhost:8080/api/users', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: userData.email,
+            first_name: userData.first_name,
+            last_name: userData.last_name,
+            password: userData.password,
+            is_advisor: userData.is_advisor || false,
+          }),
+        });
+
+        if (response.ok) {
+          const newUser = await response.json();
+          console.log('Created user via backend:', newUser);
+          setUser(newUser);
+          localStorage.setItem('current_user_id', newUser.id);
+          localStorage.setItem('current_user_data', JSON.stringify(newUser));
+          return;
+        } else {
+          const errorData = await response.json();
+          throw new Error(`Failed to create user: ${errorData.detail || errorData.message || 'Registration failed'}`);
+        }
+      } catch (backendError) {
+        console.log('Backend user creation not available, creating local user:', backendError);
+        
+        // Fallback: Create local user
+        const localUsers = JSON.parse(localStorage.getItem('local_users') || '[]');
+        
+        // Check if user already exists
+        const existingUser = localUsers.find((u: any) => u.email === userData.email);
+        if (existingUser) {
+          throw new Error('User with this email already exists');
+        }
+        
+        // Create new local user
+        const newUser = {
+          id: 'local-user-' + Date.now(),
+          email: userData.email,
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          password: userData.password, // Note: In production, this should be hashed
+          is_advisor: userData.is_advisor || false,
+          created_at: new Date().toISOString()
+        };
+        
+        // Add to local users array
+        localUsers.push(newUser);
+        localStorage.setItem('local_users', JSON.stringify(localUsers));
+        
+        console.log('Created local user:', newUser);
+        setUser({
+          id: newUser.id,
+          email: newUser.email,
+          first_name: newUser.first_name,
+          last_name: newUser.last_name,
+          is_advisor: newUser.is_advisor,
+          created_at: newUser.created_at
+        });
+        localStorage.setItem('current_user_id', newUser.id);
+        localStorage.setItem('current_user_data', JSON.stringify(newUser));
+      }
+    } catch (err) {
+      console.error('Create user error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create user');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const switchToUser = async (userId: string) => {
+    setLoading(true)
+    setError(null)
+    localStorage.removeItem('user_logged_out')
+    try {
+      // Try to call backend API first
+      try {
+        const response = await fetch(`http://localhost:8080/api/users/${userId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          console.log('Switched to user via backend:', userData);
+          setUser(userData);
+          localStorage.setItem('current_user_id', userData.id);
+          localStorage.setItem('current_user_data', JSON.stringify(userData));
+          localStorage.removeItem('demo_user_id');
+          return;
+        } else {
+          const errorData = await response.json();
+          throw new Error(`Failed to switch user: ${errorData.detail || errorData.message || 'User not found'}`);
+        }
+      } catch (backendError) {
+        console.log('Backend user lookup not available, checking local users:', backendError);
+        
+        // Fallback: Check local users
+        const localUsers = JSON.parse(localStorage.getItem('local_users') || '[]');
+        const user = localUsers.find((u: any) => u.id === userId);
+        
+        if (user) {
+          console.log('Found local user:', user);
+          setUser({
+            id: user.id,
+            email: user.email,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            is_advisor: user.is_advisor,
+            created_at: user.created_at
+          });
+          localStorage.setItem('current_user_id', user.id);
+          localStorage.setItem('current_user_data', JSON.stringify(user));
+          localStorage.removeItem('demo_user_id');
+          return;
+        }
+        
+        throw new Error('User not found');
+      }
+    } catch (err) {
+      console.error('Switch user error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to switch user');
+      throw err;
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <UserContext.Provider value={{
+      user,
+      loading,
+      error,
+      login,
+      logout,
+      createUser,
+      switchToUser
+    }}>
+      {children}
+    </UserContext.Provider>
+  )
+}
+
+export function useUser() {
+  const context = useContext(UserContext)
+  if (context === undefined) {
+    throw new Error('useUser must be used within a UserProvider')
+  }
+  return context
+}
