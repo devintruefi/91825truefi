@@ -17,11 +17,16 @@ pip uninstall uvicorn
 cd TRUEFIBACKEND
 pip install -r requirements.txt --user
 
-# Install each package individually
+it that doesn't work then install each package individually
+
 pip install fastapi==0.104.1 --user
+
 pip install uvicorn==0.24.0 --user
+
 pip install openai==1.3.7 --user
+
 pip install pydantic==2.5.0 --user
+
 # The others should already be installed
 
 1. Authenticate with Google Cloud (gcloud)
