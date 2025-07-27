@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input"
 import { useUser } from '@/contexts/user-context'
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2 } from "lucide-react"
+import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
 import "katex/dist/katex.min.css"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from 'next-themes'
@@ -496,6 +497,17 @@ export function AppleChatInterface() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  
+  // Add suggestions visibility state with localStorage persistence
+  const [suggestionsVisible, setSuggestionsVisible] = useState(() => {
+    // Check localStorage for saved preference, default to true
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('chat-suggestions-visible')
+      return saved !== null ? JSON.parse(saved) : true
+    }
+    return true
+  })
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const recognitionRef = useRef<any>(null)
@@ -805,6 +817,14 @@ export function AppleChatInterface() {
   const handleQuickSuggestion = (suggestion: string) => {
     setInputValue(suggestion)
     inputRef.current?.focus()
+  }
+
+  // Add toggle function for suggestions visibility
+  const toggleSuggestions = () => {
+    const newValue = !suggestionsVisible
+    setSuggestionsVisible(newValue)
+    // Save preference to localStorage
+    localStorage.setItem('chat-suggestions-visible', JSON.stringify(newValue))
   }
 
   const handleVoiceInput = () => {
@@ -1153,7 +1173,7 @@ export function AppleChatInterface() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                  onClick={() => handleFeedback(message.id ?? '', "positive")}
+                                  onClick={() => handleFeedback(message.id || '', "positive")}
                                 className={`h-6 w-6 p-0 ${message.feedback === "positive" ? "text-green-500" : "text-gray-400 hover:text-green-500"}`}
                               >
                                 <ThumbsUp className="w-3 h-3" />
@@ -1161,7 +1181,7 @@ export function AppleChatInterface() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                  onClick={() => handleFeedback(message.id ?? '', "negative")}
+                                  onClick={() => handleFeedback(message.id || '', "negative")}
                                 className={`h-6 w-6 p-0 ${message.feedback === "negative" ? "text-red-500" : "text-gray-400 hover:text-red-500"}`}
                               >
                                 <ThumbsDown className="w-3 h-3" />
@@ -1189,44 +1209,111 @@ export function AppleChatInterface() {
         className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 p-2 sm:p-4"
       >
         <div className="max-w-[1600px] mx-auto">
-          {/* Enhanced Quick Suggestions */}
-          <div className="flex flex-wrap gap-1 sm:gap-2 mb-2 sm:mb-4">
-            {quickSuggestions.slice(0, 4).map((suggestion, index) => (
-              <motion.button
-                key={index}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleQuickSuggestion(suggestion)}
-                className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 text-gray-700 dark:text-gray-300 rounded-full hover:from-cyan-100 hover:to-blue-100 dark:hover:from-cyan-800/30 dark:hover:to-blue-800/30 transition-all duration-200 border border-cyan-200 dark:border-cyan-700"
+          {/* Enhanced Quick Suggestions with Toggle */}
+          <AnimatePresence>
+            {suggestionsVisible ? (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="overflow-hidden"
               >
-                {suggestion}
-              </motion.button>
-            ))}
-            {/* Show remaining suggestions on desktop only */}
-            {quickSuggestions.slice(4).map((suggestion, index) => (
-              <motion.button
-                key={index + 4}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleQuickSuggestion(suggestion)}
-                className="hidden sm:block px-4 py-2 text-sm bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 text-gray-700 dark:text-gray-300 rounded-full hover:from-cyan-100 hover:to-blue-100 dark:hover:from-cyan-800/30 dark:hover:to-blue-800/30 transition-all duration-200 border border-cyan-200 dark:border-cyan-700"
+                {/* Suggestions Toggle Button */}
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Quick Suggestions
+                    </span>
+                  </div>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleSuggestions}
+                    className="h-8 px-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                  >
+                    <motion.div
+                      animate={{ rotate: suggestionsVisible ? 0 : 180 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {suggestionsVisible ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronUp className="w-4 h-4" />
+                      )}
+                    </motion.div>
+                  </Button>
+                </div>
+
+                {/* Quick Suggestions Buttons */}
+                <div className="flex flex-wrap gap-1 sm:gap-2 mb-2 sm:mb-4">
+                  {quickSuggestions.slice(0, 4).map((suggestion, index) => (
+                    <motion.button
+                      key={index}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.05 }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleQuickSuggestion(suggestion)}
+                      className="px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-sm bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 text-gray-700 dark:text-gray-300 rounded-full hover:from-cyan-100 hover:to-blue-100 dark:hover:from-cyan-800/30 dark:hover:to-blue-800/30 transition-all duration-200 border border-cyan-200 dark:border-cyan-700"
+                    >
+                      {suggestion}
+                    </motion.button>
+                  ))}
+                  {/* Show remaining suggestions on desktop only */}
+                  {quickSuggestions.slice(4).map((suggestion, index) => (
+                    <motion.button
+                      key={index + 4}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: (index + 4) * 0.05 }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleQuickSuggestion(suggestion)}
+                      className="hidden sm:block px-4 py-2 text-sm bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 text-gray-700 dark:text-gray-300 rounded-full hover:from-cyan-100 hover:to-blue-100 dark:hover:from-cyan-800/30 dark:hover:to-blue-800/30 transition-all duration-200 border border-cyan-200 dark:border-cyan-700"
+                    >
+                      {suggestion}
+                    </motion.button>
+                  ))}
+                  
+                  {/* End Session button for authenticated users */}
+                  {user && sessionId && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.3 }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={handleEndSession}
+                      className="px-4 py-2 text-sm bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 text-orange-700 dark:text-orange-300 rounded-full hover:from-orange-100 hover:to-red-100 dark:hover:from-orange-800/30 dark:hover:to-red-800/30 transition-all duration-200 border border-orange-200 dark:border-orange-700"
+                    >
+                      📊 End Session & Analyze
+                    </motion.button>
+                  )}
+                </div>
+              </motion.div>
+            ) : (
+              // Minimal show suggestions button when hidden
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex justify-center mb-1"
               >
-                {suggestion}
-              </motion.button>
-            ))}
-            
-            {/* End Session button for authenticated users */}
-            {user && sessionId && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleEndSession}
-                className="px-4 py-2 text-sm bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 text-orange-700 dark:text-orange-300 rounded-full hover:from-orange-100 hover:to-red-100 dark:hover:from-orange-800/30 dark:hover:to-red-800/30 transition-all duration-200 border border-orange-200 dark:border-orange-700"
-              >
-                📊 End Session & Analyze
-              </motion.button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleSuggestions}
+                  className="h-6 px-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                >
+                  <ChevronUp className="w-3 h-3" />
+                </Button>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
           
           {/* Enhanced Input Field */}
           <div className="flex items-end space-x-3 max-w-4xl mx-auto">
