@@ -93,8 +93,11 @@ export function EnhancedDashboardContent() {
   // Get unique categories for filter
   const uniqueCategories = Array.from(new Set(transactions.map(t => t.category || 'Uncategorized')));
 
-  // Calculate totals and categories from real data
-  const totalBalance = accounts?.reduce((sum, account) => sum + (account.balance || 0), 0) || 0;
+  // Calculate totals and categories from real data - FIXED TO HANDLE STRING BALANCES
+  const totalBalance = accounts?.reduce((sum, account) => {
+    const balance = parseFloat(account.balance?.toString() || '0')
+    return sum + balance
+  }, 0) || 0;
   
   // Calculate essentials, lifestyle, and savings from budget categories
   const essentialsCategories = ["Housing", "Transportation", "Food & Dining", "Utilities", "Healthcare", "Insurance"];
@@ -197,64 +200,29 @@ export function EnhancedDashboardContent() {
     );
   }
 
-  if (error || spendingError) {
-    return (
-      <div className="space-y-8 p-6">
-        <div className="text-center">
-          <AlertTriangle className="h-12 w-12 mx-auto text-red-500 mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Error Loading Dashboard</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">{error || spendingError}</p>
-          <Button onClick={() => { refresh(); refreshSpending(); }}>Try Again</Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8 p-6">
       {/* Header */}
-      <div className="text-center">
-        <h1 className="text-3xl font-bold mb-2">Financial Dashboard</h1>
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold mb-2">
+          {user ? `${user.first_name}'s Dashboard` : 'Financial Dashboard'}
+        </h1>
         <p className="text-gray-600 dark:text-gray-400">
-          {totalBalance > 0 ? `Your total balance is ${formatCurrency(totalBalance)}` : "Connect your bank to get started!"}
+          {accounts.length > 0 
+            ? `Your total balance is ${formatCurrency(totalBalance)} across ${accounts.length} account${accounts.length > 1 ? 's' : ''}`
+            : "Connect your bank to get started!"
+          }
         </p>
       </div>
 
-      {/* Budget Overview Cards - Keep existing code */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card className={`${glassmorphismCard} ${hoveredCard === 'budget' ? pulseGlow : ''}`}
-              onMouseEnter={() => setHoveredCard('budget')}
-              onMouseLeave={() => setHoveredCard(null)}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">Monthly Budget</CardTitle>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm">💰</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{formatCurrency(totalBudget)}</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Total budgeted amount</p>
-            {totalBudget > 0 && (
-              <div className="mt-2">
-                <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>Spent</span>
-                  <span>{formatCurrency(monthlyBudgetSpent)}</span>
-                </div>
-                <Progress 
-                  value={Math.min((monthlyBudgetSpent / totalBudget) * 100, 100)} 
-                  className="h-2"
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
+      {/* Budget Overview Cards */}
+      <div className="grid gap-6 md:grid-cols-3">
         <Card className={`${glassmorphismCard} ${hoveredCard === 'essentials' ? pulseGlow : ''}`}
               onMouseEnter={() => setHoveredCard('essentials')}
               onMouseLeave={() => setHoveredCard(null)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">Essentials</CardTitle>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center shadow-lg">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-red-500 to-orange-500 flex items-center justify-center shadow-lg">
               <span className="text-white text-sm">🏠</span>
             </div>
           </CardHeader>
@@ -281,8 +249,8 @@ export function EnhancedDashboardContent() {
               onMouseLeave={() => setHoveredCard(null)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">Lifestyle</CardTitle>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm">🎯</span>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center shadow-lg">
+              <span className="text-white text-sm">🎉</span>
             </div>
           </CardHeader>
           <CardContent>
@@ -419,12 +387,20 @@ export function EnhancedDashboardContent() {
       )}
 
       {/* Accounts Overview */}
-      {hasAccounts && (
         <Card>
           <CardHeader>
+          <div className="flex items-center justify-between">
             <CardTitle className="text-sm sm:text-base">Accounts Overview</CardTitle>
+            {accounts.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => window.location.href = '/accounts/manage'}>
+                <Building2 className="h-4 w-4 mr-2" />
+                Manage Accounts
+              </Button>
+            )}
+          </div>
           </CardHeader>
           <CardContent>
+          {accounts.length > 0 ? (
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               {accounts.map((account) => (
                 <div key={account.id} className="flex items-center justify-between p-4 border rounded-lg">
@@ -438,15 +414,26 @@ export function EnhancedDashboardContent() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-bold">{formatCurrency(account.balance || 0)}</p>
+                    <p className="font-bold">{formatCurrency(parseFloat(account.balance?.toString() || '0'))}</p>
                     <p className="text-xs text-gray-500">{account.currency || 'USD'}</p>
                   </div>
                 </div>
               ))}
             </div>
+          ) : (
+            <div className="text-center py-8">
+              <div className="mb-4">
+                <Building2 className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No accounts connected</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-6">
+                  Connect your bank accounts to see your financial overview and get personalized insights.
+                </p>
+              </div>
+              <PlaidConnect />
+            </div>
+          )}
           </CardContent>
         </Card>
-      )}
 
       {/* Enhanced Recent Transactions with Search, Category Editing, and Pagination */}
       {hasTransactions && (
@@ -633,12 +620,6 @@ export function EnhancedDashboardContent() {
         </Card>
       )}
 
-      {/* Plaid Connect Button */}
-      {!hasAccounts && (
-        <div className="text-center">
-          <PlaidConnect />
-        </div>
-      )}
     </div>
   );
 } 

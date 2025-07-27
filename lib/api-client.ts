@@ -181,6 +181,34 @@ class ApiClient {
     });
   }
 
+  // Account Management
+  async deleteAccount(accountId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/accounts/${accountId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getPlaidConnections(userId: string): Promise<Array<{
+    id: string;
+    institution_name: string;
+    plaid_item_id: string;
+    is_active: boolean;
+    created_at: string;
+    last_sync_at?: string;
+    accounts_count: number;
+  }>> {
+    return this.request(`/plaid/connections/${userId}`, {
+      method: 'GET',
+    });
+  }
+
+  async deletePlaidConnection(userId: string, connectionId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/plaid/connections/${userId}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ connectionId }),
+    });
+  }
+
   async getSpendingAnalytics(userId: string, startDate?: string, endDate?: string): Promise<{
     total_spending: number;
     spending_by_category: Record<string, number>;
