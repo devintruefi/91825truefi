@@ -1,30 +1,105 @@
-# TrueFi Official
+# 🧠 TrueFi.ai — AI-Native Financial Clarity Platform
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+Welcome to TrueFi — the AI-native personal finance assistant designed to help users make smart financial decisions with clarity, speed, and confidence.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/devin-patels-projects-19f12be6/v0-true-fi-official)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/tUwGMHYqeYS)
+---
 
-## Overview
+## �� AGENT PROTOCOL
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+📌 **All AI agents (Claude, Cursor, or Human)** must begin with:
 
-## Deployment
+- [`TRUEFIBACKEND/docs/1_PROJECT_CONTEXT.md`](./TRUEFIBACKEND/docs/1_PROJECT_CONTEXT.md) ← start here
+- [`TRUEFIBACKEND/docs/2_AGENT_BEHAVIOR_RULES.md`](./TRUEFIBACKEND/docs/2_AGENT_BEHAVIOR_RULES.md)
+- [`TRUEFIBACKEND/docs/3_TECHNICAL_GROUND_TRUTHS.md`](./TRUEFIBACKEND/docs/3_TECHNICAL_GROUND_TRUTHS.md)
+- [`TRUEFIBACKEND/docs/7_DATA_MODEL_OVERVIEW.md`](./TRUEFIBACKEND/docs/7_DATA_MODEL_OVERVIEW.md)
 
-Your project is live at:
+Before making any edits to the codebase, these files **must be read, understood, and followed**.
 
-**[https://vercel.com/devin-patels-projects-19f12be6/v0-true-fi-official](https://vercel.com/devin-patels-projects-19f12be6/v0-true-fi-official)**
+---
 
-## Build your app
+## �� Project Overview
 
-Continue building your app on:
+TrueFi helps users:
+- See their full financial picture in real time
+- Ask questions and get intelligent, contextual answers
+- Track goals, budgets, and liabilities
+- Get proactive insights through AI agents
 
-**[https://v0.dev/chat/projects/tUwGMHYqeYS](https://v0.dev/chat/projects/tUwGMHYqeYS)**
+Design principles:
+- Dynamic by default (nothing hardcoded)
+- AI-powered with tight data grounding
+- Loggable and explainable actions
 
-## How It Works
+---
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+## 🧰 Project Structure
+
+- `TRUEFIBACKEND/docs/` → Key agent docs (read first)
+- `TRUEFIBACKEND/prisma/` → DB schema and types
+- `TRUEFIBACKEND/api/` → API handlers and logic
+- `TRUEFIBACKEND/app/` → UI and user-facing flows
+- `TRUEFIBACKEND/hooks/` → Dynamic logic and utilities
+
+---
+
+## 🛑 Don't Do These
+
+- Hardcode financial values (budgets, limits, tax logic)
+- Modify core flows without syncing with docs
+- Skip the required docs above
+
+---
+
+## ✅ Demo Data for Unauthenticated Users
+
+**IMPORTANT**: The following hardcoded demo data is **INTENTIONAL AND ACCEPTABLE**:
+
+### 🎭 Alex Profile Demo Data
+- **Location**: `app/api/chat/route.ts` (lines 5-70)
+- **Purpose**: Provides a realistic demo experience for unauthenticated users browsing the website
+- **Content**: Alex's financial profile including accounts, budgets, goals, transactions, and investment portfolio
+- **Status**: ✅ **KEEP AS IS** - This is good UX for potential users
+
+### 🤖 Demo Chatbot
+- **Location**: `app/api/chat/route.ts` (lines 214-313)
+- **Purpose**: Allows unauthenticated users to interact with Penny using Alex's demo data
+- **Content**: Full chat functionality with realistic financial conversations
+- **Status**: ✅ **KEEP AS IS** - This demonstrates the AI capabilities
+
+### 📊 Demo Dashboard Data
+- **Location**: `components/dashboard-content.tsx`
+- **Purpose**: Shows what the dashboard looks like with sample data
+- **Content**: Sample accounts, transactions, goals, and insights
+- **Status**: ✅ **KEEP AS IS** - This showcases the platform's features
+
+**Note**: These demo elements are specifically for unauthenticated users and provide a great onboarding experience. The "dynamic by default" principle applies to authenticated users only.
+
+---
+
+## 🔄 v0.dev & Vercel Integration
+
+This project syncs automatically with [v0.dev](https://v0.dev). Edits from deployed UIs are pushed here and live at:
+
+- 🟢 [Live Vercel Deployment](https://vercel.com/devin-patels-projects-19f12be6/v0-true-fi-official)
+- 🛠️ [Build Interface on v0.dev](https://v0.dev/chat/projects/tUwGMHYqeYS)
+
+---
+
+## ✅ First time on the project?
+
+Start with:
+
+```bash
+TRUEFIBACKEND/docs/1_PROJECT_CONTEXT.md
+```
+```
+
+I've added a clear section to the README.md that documents:
+
+1. **Alex Profile Demo Data** - The hardcoded financial profile in `app/api/chat/route.ts`
+2. **Demo Chatbot** - The chat functionality for unauthenticated users
+3. **Demo Dashboard Data** - The sample dashboard content
+
+Each section clearly states that these are **INTENTIONAL AND ACCEPTABLE** for unauthenticated users and should be kept as-is. This will help prevent future confusion about whether these hardcoded values should be removed or made dynamic.
+
+The note also clarifies that the "dynamic by default" principle applies to authenticated users only, not the demo experience for unauthenticated users.
