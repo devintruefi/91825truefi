@@ -26,6 +26,7 @@ interface UserContextType {
     is_advisor: boolean
   }) => Promise<void>
   switchToUser: (userId: string) => Promise<void>
+  clearAllUserData: () => void
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -49,6 +50,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (currentUserData) {
           try {
             const user = JSON.parse(currentUserData)
+            
+            // Check if user has invalid UUID format and clear it
+            if (user.id && (user.id.startsWith('local-user-') || user.id === 'demo-user-id')) {
+              console.log('Clearing invalid user session with old UUID format')
+              localStorage.removeItem('current_user_data')
+              localStorage.removeItem('current_user_id')
+              localStorage.removeItem('demo_user_id')
+              setUser(null)
+              setLoading(false)
+              return
+            }
+            
             setUser(user)
             setLoading(false)
             return
@@ -58,10 +71,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const demoUserId = localStorage.getItem('demo_user_id')
+                const demoUserId = localStorage.getItem('demo_user_id')
         if (demoUserId) {
+          // Check if demo user ID is the old format and clear it
+          if (demoUserId === 'demo-user-id') {
+            console.log('Clearing old demo user session')
+            localStorage.removeItem('demo_user_id')
+            setUser(null)
+            setLoading(false)
+            return
+          }
+          
           const demoUser = {
-            id: 'demo-user-id',
+            id: '123e4567-e89b-12d3-a456-426614174000', // Fixed demo UUID
             email: 'demo@truefi.ai',
             first_name: 'Demo',
             last_name: 'User',
@@ -117,7 +139,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       // Special case for demo user
       if (email === 'demo@truefi.ai' && password === 'demo123') {
         const demoUser = {
-          id: 'demo-user-id',
+          id: '123e4567-e89b-12d3-a456-426614174000', // Fixed demo UUID
           email: 'demo@truefi.ai',
           first_name: 'Demo',
           last_name: 'User',
@@ -254,7 +276,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         
         // Create new local user
         const newUser = {
-          id: 'local-user-' + Date.now(),
+          id: crypto.randomUUID(),
           email: userData.email,
           first_name: userData.first_name,
           last_name: userData.last_name,
@@ -348,6 +370,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const clearAllUserData = () => {
+    localStorage.removeItem('current_user_data')
+    localStorage.removeItem('current_user_id')
+    localStorage.removeItem('demo_user_id')
+    localStorage.removeItem('local_users')
+    localStorage.removeItem('auth_token')
+    setUser(null)
+    console.log('All user data cleared')
+  }
+
   return (
     <UserContext.Provider value={{
       user,
@@ -356,7 +388,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       createUser,
-      switchToUser
+      switchToUser,
+      clearAllUserData
     }}>
       {children}
     </UserContext.Provider>

@@ -4,9 +4,9 @@ import prisma from '@/lib/db';
 // GET: Get all Plaid connections for a user
 export async function GET(
   req: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
-  const { userId } = params;
+  const { userId } = await params;
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
   }
@@ -52,9 +52,9 @@ export async function GET(
 // DELETE: Remove a Plaid connection and all associated accounts
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
-  const { userId } = params;
+  const { userId } = await params;
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
   }

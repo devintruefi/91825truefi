@@ -91,8 +91,8 @@ const subcategoryToMain = {
   'Reimbursement': 'Income',
 };
 
-export async function GET(req: NextRequest, { params }: { params: { userId: string } }) {
-  const { userId } = params;
+export async function GET(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
   }

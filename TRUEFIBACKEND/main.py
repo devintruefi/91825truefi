@@ -564,7 +564,17 @@ async def login(input: LoginInput = Body(...)):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid email or password")
         user_id, email, first_name, last_name, password_hash, is_advisor, created_at = user
-        if not bcrypt.checkpw(input.password.encode(), password_hash.encode()):
+        
+        # Check if password_hash is valid
+        if not password_hash or len(password_hash) < 20:
+            logger.error(f"Invalid password hash for user {email}")
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        try:
+            if not bcrypt.checkpw(input.password.encode(), password_hash.encode()):
+                raise HTTPException(status_code=401, detail="Invalid email or password")
+        except Exception as e:
+            logger.error(f"Bcrypt error for user {email}: {str(e)}")
             raise HTTPException(status_code=401, detail="Invalid email or password")
         # Create JWT
         token = jwt.encode({"userId": user_id}, JWT_SECRET, algorithm="HS256")

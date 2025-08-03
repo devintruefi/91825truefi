@@ -507,35 +507,35 @@ model user_preferences {
 }
 
 model users {
-  id                    String                  @id @db.Uuid
-  email                 String                  @unique(map: "ix_users_email") @db.VarChar(255)
-  first_name            String                  @db.VarChar(100)
-  last_name             String                  @db.VarChar(100)
-  password_hash         String                  @db.VarChar(255)
-  is_active             Boolean
-  is_advisor            Boolean
-  created_at            DateTime                @db.Timestamptz(6)
-  updated_at            DateTime                @db.Timestamptz(6)
-  accounts              accounts[]
-  agent_run_log         agent_run_log[]
-  budgets               budgets[]
-  chat_history          chat_history[]
-  chat_sessions         chat_sessions[]
-  contribution_schedule contribution_schedule[]
-  estate_docs           estate_docs[]
-  financial_insights    financial_insights[]
-  goals                 goals[]
-  insurances            insurances[]
-  manual_assets         manual_assets[]
-  manual_liabilities    manual_liabilities[]
-  onboarding_progress   onboarding_progress?
-  plaid_connections     plaid_connections[]
-  recurring_income      recurring_income[]
-  tax_profile           tax_profile?
-  transactions          transactions[]
-  user_identity         user_identity?
+  id                        String                      @id @db.Uuid
+  email                     String                      @unique(map: "ix_users_email") @db.VarChar(255)
+  first_name                String                      @db.VarChar(100)
+  last_name                 String                      @db.VarChar(100)
+  password_hash             String                      @db.VarChar(255)
+  is_active                 Boolean
+  is_advisor                Boolean
+  created_at                DateTime                    @db.Timestamptz(6)
+  updated_at                DateTime                    @db.Timestamptz(6)
+  accounts                  accounts[]
+  agent_run_log             agent_run_log[]
+  budgets                   budgets[]
+  chat_history              chat_history[]
+  chat_sessions             chat_sessions[]
+  contribution_schedule     contribution_schedule[]
+  estate_docs               estate_docs[]
+  financial_insights        financial_insights[]
+  goals                     goals[]
+  insurances                insurances[]
+  manual_assets             manual_assets[]
+  manual_liabilities        manual_liabilities[]
+  onboarding_progress       onboarding_progress?
+  plaid_connections         plaid_connections[]
+  recurring_income          recurring_income[]
+  tax_profile               tax_profile?
+  transactions              transactions[]
+  user_identity             user_identity?
   user_onboarding_responses user_onboarding_responses[]
-  user_preferences      user_preferences?
+  user_preferences          user_preferences?
 
   @@index([created_at], map: "idx_users_created_at")
   @@index([email], map: "idx_users_email")

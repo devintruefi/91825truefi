@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 
 // POST: Add new budget category
-export async function POST(req: NextRequest, { params }: { params: { userId: string } }) {
-  const { userId } = params;
+export async function POST(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
   const body = await req.json();
   
   if (!userId) {

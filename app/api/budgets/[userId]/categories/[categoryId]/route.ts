@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 
 // PUT: Update specific category
-export async function PUT(req: NextRequest, { params }: { params: { userId: string; categoryId: string } }) {
-  const { categoryId } = params;
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ userId: string; categoryId: string }> }) {
+  const { categoryId } = await params;
   const body = await req.json();
   
   try {
@@ -26,8 +26,8 @@ export async function PUT(req: NextRequest, { params }: { params: { userId: stri
 }
 
 // DELETE: Remove category
-export async function DELETE(req: NextRequest, { params }: { params: { userId: string; categoryId: string } }) {
-  const { categoryId } = params;
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ userId: string; categoryId: string }> }) {
+  const { categoryId } = await params;
   
   try {
     await prisma.budget_categories.delete({

@@ -5,14 +5,14 @@ import { getUserFromRequest } from '@/lib/auth';
 // DELETE: Remove account
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { accountId: string } }
+  { params }: { params: Promise<{ accountId: string }> }
 ) {
   const user = await getUserFromRequest(req);
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { accountId } = params;
+  const { accountId } = await params;
 
   try {
     // Verify the account belongs to the user

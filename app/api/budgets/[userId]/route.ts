@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 
 // GET: Fetch user's budget and categories
-export async function GET(req: NextRequest, { params }: { params: { userId: string } }) {
-  const { userId } = params;
+export async function GET(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
   
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
@@ -69,8 +69,8 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
 }
 
 // PUT: Update budget and categories
-export async function PUT(req: NextRequest, { params }: { params: { userId: string } }) {
-  const { userId } = params;
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
   const body = await req.json();
   
   if (!userId) {
