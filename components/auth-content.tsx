@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle } from "lucide-react"
 import { useUser } from "@/contexts/user-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -29,11 +29,13 @@ const handleMicrosoftAuth = () => {
 }
 
 export function AuthContent() {
-  const { login, createUser, loading, error } = useUser()
+  const { login, createUser, loading, error, user } = useUser()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [activeTab, setActiveTab] = useState("login")
   const [localError, setLocalError] = useState("")
+  const [onboardingComplete, setOnboardingComplete] = useState(false)
+  const [transferComplete, setTransferComplete] = useState(false)
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState("")
@@ -46,6 +48,64 @@ export function AuthContent() {
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [isAdvisor, setIsAdvisor] = useState(false)
+
+  // Check if user completed onboarding
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('onboarding') === 'complete') {
+      setOnboardingComplete(true);
+      // Auto-switch to register tab for onboarding completers
+      setActiveTab("register");
+    }
+  }, []);
+
+  const transferOnboardingAnswers = async () => {
+    try {
+      const tempAnswers = localStorage.getItem('temp_onboarding_answers');
+      const tempUserId = localStorage.getItem('temp_onboarding_user_id');
+      
+      if (tempAnswers && tempUserId && user) {
+        // Transfer answers to new user account
+        const response = await fetch("/api/onboarding/transfer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tempUserId,
+            newUserId: user.id,
+            answers: JSON.parse(tempAnswers)
+          }),
+        });
+        
+        if (response.ok) {
+          // Clean up temporary data
+          localStorage.removeItem('temp_onboarding_answers');
+          localStorage.removeItem('temp_onboarding_user_id');
+          console.log('Onboarding data transferred successfully');
+          setTransferComplete(true);
+        } else {
+          console.error('Failed to transfer onboarding data');
+        }
+      }
+    } catch (error) {
+      console.error("Failed to transfer onboarding answers:", error);
+    }
+  };
+
+  // Transfer onboarding data when user is created
+  useEffect(() => {
+    if (user && onboardingComplete) {
+      transferOnboardingAnswers();
+    }
+  }, [user, onboardingComplete]);
+
+  // Redirect after transfer is complete
+  useEffect(() => {
+    if (transferComplete) {
+      setTimeout(() => {
+        window.location.href = "/dashboard";
+      }, 2000);
+    }
+  }, [transferComplete]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -104,6 +164,24 @@ export function AuthContent() {
             <Alert variant="destructive" className="mb-4">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{localError || error}</AlertDescription>
+            </Alert>
+          )}
+
+          {onboardingComplete && (
+            <Alert className="mb-4 border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                Great! We've saved your financial profile. Create an account to continue with your personalized experience.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {transferComplete && (
+            <Alert className="mb-4 border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                Perfect! Your financial profile has been transferred to your new account. Redirecting you to your personalized dashboard...
+              </AlertDescription>
             </Alert>
           )}
 

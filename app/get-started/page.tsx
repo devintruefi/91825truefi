@@ -222,27 +222,45 @@ export default function GetStartedPage() {
 
   const saveOnboardingData = async () => {
     try {
-      const userId = user?.id || '123e4567-e89b-12d3-a456-426614174000';
-      
-      const response = await fetch("/api/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers, userId }),
-      })
+      if (user) {
+        // Logged-in user: save directly to database
+        const response = await fetch("/api/onboarding", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers, userId: user.id }),
+        });
 
-      if (response.ok) {
-        if (user) {
+        if (response.ok) {
           window.location.href = "/chat";
         } else {
-          window.location.href = "/auth";
+          console.error("Failed to save onboarding data:", await response.text());
         }
       } else {
-        console.error("Failed to save onboarding data:", await response.text());
+        // Non-logged-in user: store temporarily and save to database with temp user ID
+        const tempUserId = crypto.randomUUID();
+        
+        // Store answers in localStorage for later transfer
+        localStorage.setItem('temp_onboarding_answers', JSON.stringify(answers));
+        localStorage.setItem('temp_onboarding_user_id', tempUserId);
+        
+        // Save to database with temp user ID
+        const response = await fetch("/api/onboarding", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers, userId: tempUserId }),
+        });
+
+        if (response.ok) {
+          // Redirect to auth page with onboarding completion flag
+          window.location.href = "/auth?onboarding=complete";
+        } else {
+          console.error("Failed to save onboarding data:", await response.text());
+        }
       }
     } catch (error) {
-      console.error("Failed to save onboarding data:", error)
+      console.error("Failed to save onboarding data:", error);
     }
-  }
+  };
 
   const getSeasonalAnimationClass = (baseClass: string) => {
     const timeClasses = {
