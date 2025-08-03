@@ -1,16 +1,223 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 
-// GET: Fetch user's budget and categories
+// Smart budget generation utilities
+const ESSENTIALS_CATEGORIES = [
+  'Housing', 'Transportation', 'Food & Dining', 'Utilities', 
+  'Healthcare', 'Insurance', 'Debt Payments', 'Basic Groceries'
+];
+
+const LIFESTYLE_CATEGORIES = [
+  'Entertainment', 'Shopping', 'Personal Care', 'Dining Out',
+  'Travel', 'Hobbies', 'Subscriptions', 'Fitness'
+];
+
+const SAVINGS_CATEGORIES = [
+  'Savings', 'Investments', 'Emergency Fund', 'Retirement',
+  'Education', 'Major Purchases'
+];
+
+const CATEGORY_MAPPING: Record<string, string> = {
+  'Food and Drink': 'Food & Dining',
+  'Restaurants': 'Dining Out',
+  'Fast Food': 'Dining Out',
+  'Coffee Shops': 'Dining Out',
+  'Bars': 'Entertainment',
+  'Transportation': 'Transportation',
+  'Public Transportation': 'Transportation',
+  'Ride Share': 'Transportation',
+  'Gas Stations': 'Transportation',
+  'Parking': 'Transportation',
+  'Shopping': 'Shopping',
+  'Online Shopping': 'Shopping',
+  'Department Stores': 'Shopping',
+  'Clothing Stores': 'Shopping',
+  'Electronics Stores': 'Shopping',
+  'Home Improvement': 'Housing',
+  'Furniture': 'Housing',
+  'Rent': 'Housing',
+  'Mortgage': 'Housing',
+  'Utilities': 'Utilities',
+  'Electric': 'Utilities',
+  'Water': 'Utilities',
+  'Internet': 'Utilities',
+  'Phone': 'Utilities',
+  'Healthcare': 'Healthcare',
+  'Doctors': 'Healthcare',
+  'Pharmacies': 'Healthcare',
+  'Insurance': 'Insurance',
+  'Entertainment': 'Entertainment',
+  'Movies': 'Entertainment',
+  'Gyms': 'Fitness',
+  'Personal Care': 'Personal Care',
+  'Salons': 'Personal Care',
+  'Travel': 'Travel',
+  'Hotels': 'Travel',
+  'Airlines': 'Travel',
+  'Savings': 'Savings',
+  'Investments': 'Investments',
+  'Education': 'Education',
+  'Student Loans': 'Debt Payments',
+  'Credit Cards': 'Debt Payments',
+  'Loans': 'Debt Payments'
+};
+
+function mapTransactionCategory(transactionCategory: string): string {
+  if (CATEGORY_MAPPING[transactionCategory]) {
+    return CATEGORY_MAPPING[transactionCategory];
+  }
+  const lowerCategory = transactionCategory.toLowerCase();
+  for (const [key, value] of Object.entries(CATEGORY_MAPPING)) {
+    if (lowerCategory.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerCategory)) {
+      return value;
+    }
+  }
+  if (lowerCategory.includes('food') || lowerCategory.includes('restaurant') || lowerCategory.includes('dining')) {
+    return 'Food & Dining';
+  }
+  if (lowerCategory.includes('transport') || lowerCategory.includes('uber') || lowerCategory.includes('lyft')) {
+    return 'Transportation';
+  }
+  if (lowerCategory.includes('shop') || lowerCategory.includes('store') || lowerCategory.includes('amazon')) {
+    return 'Shopping';
+  }
+  if (lowerCategory.includes('entertain') || lowerCategory.includes('movie') || lowerCategory.includes('netflix')) {
+    return 'Entertainment';
+  }
+  if (lowerCategory.includes('health') || lowerCategory.includes('medical') || lowerCategory.includes('doctor')) {
+    return 'Healthcare';
+  }
+  return 'Miscellaneous';
+}
+
+function getDefaultAmount(category: string): number {
+  const defaults: Record<string, number> = {
+    'Housing': 1500,
+    'Transportation': 400,
+    'Food & Dining': 600,
+    'Utilities': 200,
+    'Healthcare': 300,
+    'Insurance': 200,
+    'Debt Payments': 500,
+    'Basic Groceries': 400,
+    'Entertainment': 200,
+    'Shopping': 300,
+    'Personal Care': 100,
+    'Dining Out': 200,
+    'Travel': 100,
+    'Hobbies': 100,
+    'Subscriptions': 50,
+    'Fitness': 50,
+    'Savings': 500,
+    'Investments': 200,
+    'Emergency Fund': 200,
+    'Retirement': 300,
+    'Education': 100,
+    'Major Purchases': 100
+  };
+  return defaults[category] || 100;
+}
+
+async function analyzeUserSpending(userId: string, months: number = 3) {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - months);
+  const transactions = await prisma.transactions.findMany({
+    where: {
+      user_id: userId,
+      date: {
+        gte: startDate,
+        lte: endDate
+      },
+      amount: {
+        gt: 0
+      }
+    },
+    orderBy: {
+      date: 'desc'
+    }
+  });
+  const totalSpending = transactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+  const averageMonthlySpending = totalSpending / months;
+  const spendingByCategory: Record<string, number> = {};
+  transactions.forEach(tx => {
+    const category = mapTransactionCategory(tx.category || 'Uncategorized');
+    spendingByCategory[category] = (spendingByCategory[category] || 0) + Math.abs(tx.amount);
+  });
+  return {
+    totalSpending,
+    spendingByCategory,
+    averageMonthlySpending,
+    transactions
+  };
+}
+
+async function generateSmartBudget(userId: string) {
+  const analysis = await analyzeUserSpending(userId);
+  const suggestedTotalBudget = Math.max(
+    analysis.averageMonthlySpending * 1.1,
+    3000
+  );
+  const budgetCategories: Array<{ category: string; amount: number; priority: string }> = [];
+  for (const [category, currentSpending] of Object.entries(analysis.spendingByCategory)) {
+    const monthlySpending = currentSpending / 3;
+    let suggestedAmount = monthlySpending;
+    let priority = 'medium';
+    if (ESSENTIALS_CATEGORIES.includes(category)) {
+      suggestedAmount = monthlySpending * 1.05;
+      priority = 'high';
+    } else if (LIFESTYLE_CATEGORIES.includes(category)) {
+      if (monthlySpending > suggestedTotalBudget * 0.15) {
+        suggestedAmount = monthlySpending * 0.9;
+        priority = 'high';
+      } else {
+        suggestedAmount = monthlySpending * 1.02;
+        priority = 'medium';
+      }
+    } else if (SAVINGS_CATEGORIES.includes(category)) {
+      if (monthlySpending < suggestedTotalBudget * 0.1) {
+        suggestedAmount = suggestedTotalBudget * 0.15;
+        priority = 'high';
+      } else {
+        suggestedAmount = monthlySpending * 1.1;
+        priority = 'medium';
+      }
+    }
+    budgetCategories.push({
+      category,
+      amount: Math.round(suggestedAmount),
+      priority
+    });
+  }
+  const existingCategories = budgetCategories.map(c => c.category);
+  for (const essential of ESSENTIALS_CATEGORIES) {
+    if (!existingCategories.includes(essential)) {
+      budgetCategories.push({
+        category: essential,
+        amount: getDefaultAmount(essential),
+        priority: 'high'
+      });
+    }
+  }
+  if (!existingCategories.includes('Savings')) {
+    budgetCategories.push({
+      category: 'Savings',
+      amount: Math.round(suggestedTotalBudget * 0.15),
+      priority: 'high'
+    });
+  }
+  return {
+    totalBudget: Math.round(suggestedTotalBudget),
+    categories: budgetCategories
+  };
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params;
-  
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
   }
-
   try {
-    // Get the active budget for the user
     const budget = await prisma.budgets.findFirst({
       where: { 
         user_id: userId, 
@@ -22,33 +229,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
         }
       }
     });
-
     if (!budget) {
-      // Create a default budget if none exists
-      const defaultBudget = await prisma.budgets.create({
+      const smartBudget = await generateSmartBudget(userId);
+      const newBudget = await prisma.budgets.create({
         data: {
           id: crypto.randomUUID(),
           user_id: userId,
-          name: 'Monthly Budget',
-          description: 'Your monthly spending plan',
-          amount: 0,
+          name: 'Smart Monthly Budget',
+          description: 'AI-generated budget based on your spending patterns',
+          amount: smartBudget.totalBudget,
           period: 'monthly',
           start_date: new Date(),
           is_active: true,
+          created_at: new Date(),
+          updated_at: new Date(),
           budget_categories: {
-            create: [
-              { id: crypto.randomUUID(), category: 'Housing', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Transportation', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Food & Dining', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Utilities', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Healthcare', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Entertainment', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Shopping', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Personal Care', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Insurance', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Savings', amount: 0 },
-              { id: crypto.randomUUID(), category: 'Miscellaneous', amount: 0 },
-            ]
+            create: smartBudget.categories.map(category => ({
+              id: crypto.randomUUID(),
+              category: category.category,
+              amount: category.amount,
+              created_at: new Date(),
+              updated_at: new Date()
+            }))
           }
         },
         include: {
@@ -57,10 +259,43 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
           }
         }
       });
-      
-      return NextResponse.json(defaultBudget);
+      return NextResponse.json(newBudget);
     }
-
+    const totalBudgetAmount = budget.budget_categories.reduce((sum, cat) => sum + Number(cat.amount), 0);
+    if (totalBudgetAmount === 0) {
+      const smartBudget = await generateSmartBudget(userId);
+      await prisma.budget_categories.deleteMany({
+        where: { budget_id: budget.id }
+      });
+      await prisma.budgets.update({
+        where: { id: budget.id },
+        data: {
+          amount: smartBudget.totalBudget,
+          updated_at: new Date()
+        }
+      });
+      for (const category of smartBudget.categories) {
+        await prisma.budget_categories.create({
+          data: {
+            id: crypto.randomUUID(),
+            budget_id: budget.id,
+            category: category.category,
+            amount: category.amount,
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        });
+      }
+      const updatedBudget = await prisma.budgets.findFirst({
+        where: { id: budget.id },
+        include: {
+          budget_categories: {
+            orderBy: { created_at: 'asc' }
+          }
+        }
+      });
+      return NextResponse.json(updatedBudget);
+    }
     return NextResponse.json(budget);
   } catch (error) {
     console.error('Error fetching budget:', error);
@@ -68,19 +303,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
   }
 }
 
-// PUT: Update budget and categories
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params;
   const body = await req.json();
-  
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
   }
-
   try {
     const { budget, categories } = body;
-
-    // Update budget
     const updatedBudget = await prisma.budgets.update({
       where: { 
         user_id: userId,
@@ -93,14 +323,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ user
         updated_at: new Date()
       }
     });
-
-    // Update categories in a transaction
     const updatedCategories = await prisma.$transaction(async (tx) => {
       const results = [];
-      
       for (const category of categories) {
         if (category.id) {
-          // Update existing category
           const updated = await tx.budget_categories.update({
             where: { id: category.id },
             data: {
@@ -111,7 +337,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ user
           });
           results.push(updated);
         } else {
-          // Create new category
           const created = await tx.budget_categories.create({
             data: {
               id: crypto.randomUUID(),
@@ -123,16 +348,41 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ user
           results.push(created);
         }
       }
-      
       return results;
     });
-
     return NextResponse.json({
       budget: updatedBudget,
       categories: updatedCategories
     });
   } catch (error) {
     console.error('Error updating budget:', error);
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
+  if (!userId) {
+    return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+  }
+  try {
+    await prisma.budget_categories.deleteMany({
+      where: {
+        budget: {
+          user_id: userId,
+          is_active: true
+        }
+      }
+    });
+    await prisma.budgets.deleteMany({
+      where: {
+        user_id: userId,
+        is_active: true
+      }
+    });
+    return NextResponse.json({ message: 'Budget deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting budget:', error);
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 } 
