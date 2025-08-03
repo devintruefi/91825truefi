@@ -164,6 +164,10 @@ export default function GetStartedPage() {
         setIsComplete(true)
         setShowConfetti(true)
         setIsTransitioning(false)
+        
+        // Save onboarding data when complete
+        saveOnboardingData();
+        
         setTimeout(() => {
           speakText(
             "Thank you for trusting me with your story. I can already see the beautiful financial future we're going to create together. You're not alone in this journey anymore.",
@@ -218,10 +222,12 @@ export default function GetStartedPage() {
 
   const saveOnboardingData = async () => {
     try {
+      const userId = user?.id || 'demo-user-id';
+      
       const response = await fetch("/api/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers, userId }),
       })
 
       if (response.ok) {
@@ -230,6 +236,8 @@ export default function GetStartedPage() {
         } else {
           window.location.href = "/auth";
         }
+      } else {
+        console.error("Failed to save onboarding data:", await response.text());
       }
     } catch (error) {
       console.error("Failed to save onboarding data:", error)
