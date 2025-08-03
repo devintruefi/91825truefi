@@ -45,6 +45,17 @@ export async function POST(req: NextRequest) {
         is_complete: true,
       },
     });
+
+    // Clean up the temporary user record
+    try {
+      await prisma.users.delete({
+        where: { id: tempUserId }
+      });
+      console.log(`Cleaned up temporary user: ${tempUserId}`);
+    } catch (error) {
+      console.error('Error cleaning up temporary user:', error);
+      // Don't fail the transfer if cleanup fails
+    }
     
     return NextResponse.json({ 
       success: true, 

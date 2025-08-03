@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle } from "lucide-react"
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle, Loader2 } from "lucide-react"
 import { useUser } from "@/contexts/user-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -36,6 +36,8 @@ export function AuthContent() {
   const [localError, setLocalError] = useState("")
   const [onboardingComplete, setOnboardingComplete] = useState(false)
   const [transferComplete, setTransferComplete] = useState(false)
+  const [isTransferring, setIsTransferring] = useState(false)
+  const [transferError, setTransferError] = useState("")
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState("")
@@ -61,6 +63,9 @@ export function AuthContent() {
 
   const transferOnboardingAnswers = async () => {
     try {
+      setIsTransferring(true);
+      setTransferError("");
+      
       const tempAnswers = localStorage.getItem('temp_onboarding_answers');
       const tempUserId = localStorage.getItem('temp_onboarding_user_id');
       
@@ -83,20 +88,26 @@ export function AuthContent() {
           console.log('Onboarding data transferred successfully');
           setTransferComplete(true);
         } else {
-          console.error('Failed to transfer onboarding data');
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to transfer onboarding data');
         }
+      } else {
+        throw new Error('No onboarding data found to transfer');
       }
     } catch (error) {
       console.error("Failed to transfer onboarding answers:", error);
+      setTransferError(error instanceof Error ? error.message : "Failed to transfer your financial profile. Please contact support.");
+    } finally {
+      setIsTransferring(false);
     }
   };
 
   // Transfer onboarding data when user is created
   useEffect(() => {
-    if (user && onboardingComplete) {
+    if (user && onboardingComplete && !transferComplete && !isTransferring) {
       transferOnboardingAnswers();
     }
-  }, [user, onboardingComplete]);
+  }, [user, onboardingComplete, transferComplete, isTransferring]);
 
   // Redirect after transfer is complete
   useEffect(() => {
@@ -109,10 +120,12 @@ export function AuthContent() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLocalError("")
     try {
       await login(loginEmail, loginPassword)
     } catch (err) {
       console.error("Login failed:", err)
+      setLocalError("Invalid email or password. Please try again.")
     }
   }
 
@@ -148,6 +161,7 @@ export function AuthContent() {
       })
     } catch (err) {
       console.error("Registration failed:", err)
+      setLocalError("Registration failed. Please try again.")
     }
   }
 
@@ -176,8 +190,24 @@ export function AuthContent() {
             </Alert>
           )}
 
-          {transferComplete && (
+          {isTransferring && (
             <Alert className="mb-4 border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <AlertDescription>
+                Transferring your financial profile to your new account...
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {transferError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{transferError}</AlertDescription>
+            </Alert>
+          )}
+
+          {transferComplete && (
+            <Alert className="mb-4 border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200">
               <CheckCircle className="h-4 w-4" />
               <AlertDescription>
                 Perfect! Your financial profile has been transferred to your new account. Redirecting you to your personalized dashboard...
@@ -537,7 +567,7 @@ export function AuthContent() {
                     <Button 
                       type="submit" 
                       className="w-full bg-cyan-600 hover:bg-cyan-700"
-                      disabled={loading}
+                      disabled={loading || isTransferring}
                     >
                       {loading ? "Creating Account..." : "Create Account"}
                     </Button>

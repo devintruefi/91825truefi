@@ -24,12 +24,12 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
   }
 
   .dark {
@@ -66,6 +66,79 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Enhanced Mobile Responsiveness */
+@layer utilities {
+  /* Touch-friendly minimum sizes */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Mobile-first responsive text */
+  .text-responsive {
+    font-size: clamp(1rem, 4vw, 1.5rem);
+  }
+  
+  .text-responsive-lg {
+    font-size: clamp(1.5rem, 5vw, 2.5rem);
+  }
+  
+  .text-responsive-xl {
+    font-size: clamp(2rem, 6vw, 3.5rem);
+  }
+  
+  /* Mobile-optimized spacing */
+  .mobile-padding {
+    padding: clamp(1rem, 4vw, 2rem);
+  }
+  
+  .mobile-margin {
+    margin: clamp(0.5rem, 2vw, 1rem);
+  }
+  
+  /* Prevent zoom on iOS input focus */
+  .no-zoom {
+    font-size: 16px;
+  }
+  
+  /* Smooth scrolling for mobile */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Mobile-optimized focus states */
+  .focus-visible-mobile:focus-visible {
+    outline: 2px solid #10b981;
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+  
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .high-contrast {
+      border-width: 2px;
+      box-shadow: 0 0 0 2px currentColor;
+    }
+  }
+  
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .reduce-motion {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+  
+  /* Dark mode optimizations */
+  @media (prefers-color-scheme: dark) {
+    .dark-mode-optimized {
+      background-color: rgba(0, 0, 0, 0.8);
+      color: rgba(255, 255, 255, 0.9);
+    }
   }
 }
 
@@ -688,5 +761,364 @@
 
   .font-extralight {
     font-weight: 200;
+  }
+}
+
+/* Professional Polish Animations */
+@layer components {
+  /* Seamless transitions */
+  .animate-seamless-fade-in {
+    animation: seamlessFadeIn 0.5s ease-out forwards;
+  }
+  
+  .animate-seamless-fade-out {
+    animation: seamlessFadeOut 0.3s ease-in forwards;
+  }
+  
+  /* Organic animations */
+  .animate-organic-fade-in {
+    animation: organicFadeIn 0.8s ease-out forwards;
+  }
+  
+  .animate-organic-scale-in {
+    animation: organicScaleIn 0.6s ease-out forwards;
+  }
+  
+  /* Gentle floating animation */
+  .animate-gentle-float {
+    animation: gentleFloat 3s ease-in-out infinite;
+  }
+  
+  /* Shimmer effect */
+  .animate-shimmer {
+    animation: shimmer 2s linear infinite;
+  }
+  
+  /* Pulse with emerald glow */
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  /* Seasonal animations */
+  .animate-dawn-fade-in {
+    animation: dawnFadeIn 1s ease-out forwards;
+  }
+  
+  .animate-morning-fade-in {
+    animation: morningFadeIn 1s ease-out forwards;
+  }
+  
+  .animate-afternoon-fade-in {
+    animation: afternoonFadeIn 1s ease-out forwards;
+  }
+  
+  .animate-evening-fade-in {
+    animation: eveningFadeIn 1s ease-out forwards;
+  }
+  
+  .animate-night-fade-in {
+    animation: nightFadeIn 1s ease-out forwards;
+  }
+  
+  .animate-spring-scale-in {
+    animation: springScaleIn 0.8s ease-out forwards;
+  }
+  
+  .animate-summer-scale-in {
+    animation: summerScaleIn 0.8s ease-out forwards;
+  }
+  
+  .animate-autumn-scale-in {
+    animation: autumnScaleIn 0.8s ease-out forwards;
+  }
+  
+  .animate-winter-scale-in {
+    animation: winterScaleIn 0.8s ease-out forwards;
+  }
+}
+
+/* Keyframe Animations */
+@keyframes seamlessFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes seamlessFadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes organicFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes organicScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes gentleFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Seasonal animations */
+@keyframes dawnFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.9);
+    filter: brightness(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes morningFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(25px) scale(0.92);
+    filter: brightness(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes afternoonFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+    filter: brightness(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes eveningFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(25px) scale(0.92);
+    filter: brightness(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes nightFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.9);
+    filter: brightness(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes springScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.7) rotate(-5deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes summerScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8) rotate(5deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes autumnScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.75) rotate(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes winterScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.85) rotate(3deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* Accessibility Enhancements */
+@layer utilities {
+  /* Screen reader only text */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  
+  /* Focus indicators */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2;
+  }
+  
+  /* High contrast focus */
+  .focus-high-contrast {
+    @apply focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-gray-900;
+  }
+  
+  /* Skip link */
+  .skip-link {
+    @apply absolute -top-10 left-6 bg-emerald-600 text-white px-4 py-2 rounded-md focus:top-6 transition-all duration-200;
+  }
+}
+
+/* Mobile-specific optimizations */
+@media (max-width: 768px) {
+  /* Prevent horizontal scroll */
+  body {
+    overflow-x: hidden;
+  }
+  
+  /* Larger touch targets on mobile */
+  button, input, select, textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Mobile-optimized spacing */
+  .mobile-container {
+    padding: 1rem;
+    margin: 0.5rem;
+  }
+  
+  /* Mobile-friendly font sizes */
+  .mobile-text {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  
+  /* Mobile-optimized cards */
+  .mobile-card {
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin: 0.5rem;
+  }
+  
+  /* Mobile-friendly buttons */
+  .mobile-button {
+    padding: 0.75rem 1.5rem;
+    font-size: 16px;
+    border-radius: 0.75rem;
+  }
+}
+
+/* Performance optimizations */
+@layer utilities {
+  /* Hardware acceleration */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+  
+  /* Optimized transitions */
+  .optimized-transition {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Reduced motion for performance */
+  .performance-mode {
+    animation-duration: 0.1s;
+    transition-duration: 0.1s;
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-friendly {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
   }
 }

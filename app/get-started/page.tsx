@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Mic, MicOff, Volume2, VolumeX, MessageSquare, ArrowRight, Heart, Sparkles, ArrowLeft } from "lucide-react"
+import { Mic, MicOff, Volume2, VolumeX, MessageSquare, ArrowRight, Heart, Sparkles, ArrowLeft, Save, AlertCircle, CheckCircle, Loader2 } from "lucide-react"
 import { OnboardingQuestion } from "@/components/onboarding/onboarding-question"
 import { PennyOrb } from "@/components/onboarding/penny-orb"
 import { SeasonalBackground } from "@/components/onboarding/seasonal-background"
@@ -14,6 +14,7 @@ import { ConfettiEffect } from "@/components/onboarding/confetti-effect"
 import { FloatingElements } from "@/components/onboarding/floating-elements"
 import { useNaturalTheme } from "@/hooks/use-natural-theme"
 import { questions } from "@/lib/onboarding/onboarding-questions"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import Image from "next/image"
 import { useUser } from '@/contexts/user-context';
 
@@ -22,6 +23,9 @@ declare global {
     webkitSpeechRecognition: any
   }
 }
+
+// Auto-save debounce delay
+const AUTO_SAVE_DELAY = 1000;
 
 export default function GetStartedPage() {
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -39,52 +43,186 @@ export default function GetStartedPage() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [nextQuestion, setNextQuestion] = useState<number | null>(null)
 
+  // Professional enhancements
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [error, setError] = useState<string | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [isResuming, setIsResuming] = useState(false)
+
   const theme = useNaturalTheme()
   const recognitionRef = useRef<any | null>(null)
   const synthRef = useRef<any | null>(null)
   const ambientAudioRef = useRef<any | null>(null)
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const { user } = useUser();
 
-  useEffect(() => {
-    // Initialize speech recognition
-    if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
-      const recognition = new (window as any).webkitSpeechRecognition()
-      recognition.continuous = false
-      recognition.interimResults = false
-      recognition.lang = "en-US"
-      recognitionRef.current = recognition
+  // Auto-save functionality
+  const autoSave = useCallback(async () => {
+    if (Object.keys(answers).length === 0) return;
+    
+    try {
+      setIsSaving(true);
+      setSaveStatus("saving");
+      
+      // Save to localStorage for immediate persistence
+      localStorage.setItem('onboarding_answers', JSON.stringify(answers));
+      localStorage.setItem('onboarding_progress', currentQuestion.toString());
+      localStorage.setItem('onboarding_timestamp', Date.now().toString());
+      
+      setSaveStatus("saved");
+      setHasUnsavedChanges(false);
+      
+      // Clear saved status after 3 seconds
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+      setSaveStatus("error");
+      setError("Failed to save progress. Please check your connection.");
+    } finally {
+      setIsSaving(false);
     }
+  }, [answers, currentQuestion]);
 
-    // Initialize speech synthesis
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      synthRef.current = window.speechSynthesis
-    }
-
-    // Initialize ambient audio
-    if (typeof window !== "undefined") {
-      const ambientAudio = new Audio("/ocean-sanctuary.mp3")
-      ambientAudio.loop = true
-      ambientAudio.volume = 0.2
-      ambientAudioRef.current = ambientAudio
-
-      const startAudio = async () => {
-        try {
-          await ambientAudio.play()
-        } catch (error) {
-          console.log("Audio autoplay blocked")
+  // Resume functionality
+  const resumeSession = useCallback(() => {
+    try {
+      const savedAnswers = localStorage.getItem('onboarding_answers');
+      const savedProgress = localStorage.getItem('onboarding_progress');
+      const savedTimestamp = localStorage.getItem('onboarding_timestamp');
+      
+      if (savedAnswers && savedProgress && savedTimestamp) {
+        const timestamp = parseInt(savedTimestamp);
+        const hoursSinceSave = (Date.now() - timestamp) / (1000 * 60 * 60);
+        
+        // Only resume if saved within last 24 hours
+        if (hoursSinceSave < 24) {
+          setIsResuming(true);
+          setAnswers(JSON.parse(savedAnswers));
+          setCurrentQuestion(parseInt(savedProgress));
+          setShowWelcome(false);
+          setShowPreQuestion(false);
+          
+          // Show resume notification
+          setSaveStatus("saved");
+          setTimeout(() => setSaveStatus("idle"), 3000);
+          
+          return true;
+        } else {
+          // Clear expired data
+          localStorage.removeItem('onboarding_answers');
+          localStorage.removeItem('onboarding_progress');
+          localStorage.removeItem('onboarding_timestamp');
         }
       }
+    } catch (error) {
+      console.error("Failed to resume session:", error);
+    }
+    
+    return false;
+  }, []);
 
-      setTimeout(() => {
-        setIsLoaded(true)
-        startAudio()
-      }, 1500)
+  // Initialize session
+  useEffect(() => {
+    // Check for existing session on load
+    if (!resumeSession()) {
+      // Initialize speech recognition
+      if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
+        const recognition = new (window as any).webkitSpeechRecognition()
+        recognition.continuous = false
+        recognition.interimResults = false
+        recognition.lang = "en-US"
+        recognitionRef.current = recognition
+      }
+
+      // Initialize speech synthesis
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        synthRef.current = window.speechSynthesis
+      }
+
+      // Initialize ambient audio
+      if (typeof window !== "undefined") {
+        const ambientAudio = new Audio("/ocean-sanctuary.mp3")
+        ambientAudio.loop = true
+        ambientAudio.volume = 0.2
+        ambientAudioRef.current = ambientAudio
+
+        const startAudio = async () => {
+          try {
+            await ambientAudio.play()
+          } catch (error) {
+            console.log("Audio autoplay blocked")
+          }
+        }
+
+        setTimeout(() => {
+          setIsLoaded(true)
+          startAudio()
+        }, 1500)
+      }
+    } else {
+      // If resuming, still initialize audio
+      if (typeof window !== "undefined") {
+        const ambientAudio = new Audio("/ocean-sanctuary.mp3")
+        ambientAudio.loop = true
+        ambientAudio.volume = 0.2
+        ambientAudioRef.current = ambientAudio
+
+        const startAudio = async () => {
+          try {
+            await ambientAudio.play()
+          } catch (error) {
+            console.log("Audio autoplay blocked")
+          }
+        }
+
+        setTimeout(() => {
+          setIsLoaded(true)
+          startAudio()
+        }, 500)
+      }
     }
 
     return () => {
       if (ambientAudioRef.current) ambientAudioRef.current.pause()
     }
-  }, [])
+  }, [resumeSession])
+
+  // Auto-save on answers change
+  useEffect(() => {
+    if (Object.keys(answers).length > 0) {
+      setHasUnsavedChanges(true);
+      
+      // Clear existing timeout
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+      
+      // Set new timeout for auto-save
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        autoSave();
+      }, AUTO_SAVE_DELAY);
+    }
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [answers, autoSave]);
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges && Object.keys(answers).length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges, answers]);
 
   const speakText = (text: string, isIntimate = false) => {
     if (!audioEnabled || !synthRef.current) return
@@ -94,10 +232,10 @@ export default function GetStartedPage() {
       const utterance = new SpeechSynthesisUtterance(text)
 
       const preferredVoice =
-        voices.find((voice) => voice.name.includes("Samantha")) ||
-        voices.find((voice) => voice.name.includes("Karen")) ||
-        voices.find((voice) => voice.name.includes("Moira")) ||
-        voices.find((voice) => voice.lang.includes("en") && voice.name.toLowerCase().includes("female"))
+        voices.find((voice: SpeechSynthesisVoice) => voice.name.includes("Samantha")) ||
+        voices.find((voice: SpeechSynthesisVoice) => voice.name.includes("Karen")) ||
+        voices.find((voice: SpeechSynthesisVoice) => voice.name.includes("Moira")) ||
+        voices.find((voice: SpeechSynthesisVoice) => voice.lang.includes("en") && voice.name.toLowerCase().includes("female"))
 
       if (preferredVoice) {
         utterance.voice = preferredVoice
@@ -124,7 +262,7 @@ export default function GetStartedPage() {
     if (!micEnabled || !recognitionRef.current) return
 
     setIsListening(true)
-    recognitionRef.current.onresult = (event) => {
+    recognitionRef.current.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript
       handleAnswer(transcript)
     }
@@ -222,6 +360,9 @@ export default function GetStartedPage() {
 
   const saveOnboardingData = async () => {
     try {
+      setError(null);
+      setIsSaving(true);
+      
       if (user) {
         // Logged-in user: save directly to database
         const response = await fetch("/api/onboarding", {
@@ -231,9 +372,14 @@ export default function GetStartedPage() {
         });
 
         if (response.ok) {
+          // Clear local storage after successful save
+          localStorage.removeItem('onboarding_answers');
+          localStorage.removeItem('onboarding_progress');
+          localStorage.removeItem('onboarding_timestamp');
           window.location.href = "/chat";
         } else {
-          console.error("Failed to save onboarding data:", await response.text());
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error occurred' }));
+          throw new Error(errorData.error || 'Failed to save your progress');
         }
       } else {
         // Non-logged-in user: store temporarily and save to database with temp user ID
@@ -251,14 +397,27 @@ export default function GetStartedPage() {
         });
 
         if (response.ok) {
+          // Clear progress data
+          localStorage.removeItem('onboarding_answers');
+          localStorage.removeItem('onboarding_progress');
+          localStorage.removeItem('onboarding_timestamp');
           // Redirect to auth page with onboarding completion flag
           window.location.href = "/auth?onboarding=complete";
         } else {
-          console.error("Failed to save onboarding data:", await response.text());
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error occurred' }));
+          throw new Error(errorData.error || 'Failed to save your progress');
         }
       }
     } catch (error) {
       console.error("Failed to save onboarding data:", error);
+      setError(error instanceof Error ? error.message : "Failed to save your progress. Please try again.");
+      
+      // Fallback: save to localStorage and show retry option
+      localStorage.setItem('onboarding_answers', JSON.stringify(answers));
+      localStorage.setItem('onboarding_progress', currentQuestion.toString());
+      localStorage.setItem('onboarding_timestamp', Date.now().toString());
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -323,6 +482,58 @@ export default function GetStartedPage() {
           </Button>
         </div>
 
+        {/* Save Status Indicator - Fixed position */}
+        {!showWelcome && !showPreQuestion && !isComplete && (
+          <div className="fixed top-20 right-4 z-50">
+            {saveStatus === "saving" && (
+              <div className="bg-white/30 backdrop-blur-2xl rounded-2xl p-3 border-2 border-emerald-200/30 shadow-[0_0_25px_rgba(16,185,129,0.15)]">
+                <div className="flex items-center gap-2 text-sm text-slate-800">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving...</span>
+                </div>
+              </div>
+            )}
+            {saveStatus === "saved" && (
+              <div className="bg-white/30 backdrop-blur-2xl rounded-2xl p-3 border-2 border-emerald-200/30 shadow-[0_0_25px_rgba(16,185,129,0.15)]">
+                <div className="flex items-center gap-2 text-sm text-emerald-700">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Saved</span>
+                </div>
+              </div>
+            )}
+            {saveStatus === "error" && (
+              <div className="bg-white/30 backdrop-blur-2xl rounded-2xl p-3 border-2 border-red-200/30 shadow-[0_0_25px_rgba(239,68,68,0.15)]">
+                <div className="flex items-center gap-2 text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Save failed</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Error Alert */}
+        {error && (
+          <div className="fixed top-32 left-4 right-4 z-50">
+            <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {/* Resume Notification */}
+        {isResuming && (
+          <div className="fixed top-32 left-4 right-4 z-50">
+            <Alert className="bg-emerald-50 border-emerald-200 text-emerald-800">
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                Welcome back! We've restored your progress from where you left off.
+              </AlertDescription>
+            </Alert>
+          </div>
+        )}
+
         {/* Main Content - Scrollable and responsive */}
         <div className="absolute inset-0 flex flex-col items-center justify-center p-4 z-10">
           <div className="w-full max-w-3xl mx-auto flex flex-col h-full">
@@ -360,7 +571,7 @@ export default function GetStartedPage() {
                     <div className={getSeasonalAnimationClass("animate-organic-scale-in")}>
                       <Button
                         onClick={handleWelcomeComplete}
-                        className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-green-400 to-teal-500 hover:from-emerald-600 hover:via-green-500 hover:to-teal-600 text-white px-8 py-4 text-lg sm:text-xl rounded-full shadow-[0_0_40px_rgba(16,185,129,0.4)] transform hover:scale-110 transition-all duration-700 font-medium tracking-wide border-2 border-emerald-400/30"
+                        className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-green-400 to-teal-500 hover:from-emerald-600 hover:via-green-500 hover:to-teal-600 text-white px-8 py-4 text-lg sm:text-xl rounded-full shadow-[0_0_40px_rgba(16,185,129,0.4)] transform hover:scale-110 transition-all duration-700 font-medium tracking-wide border-2 border-emerald-400/30 min-h-[44px] min-w-[44px]"
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/20 via-transparent to-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
                         <Heart className="mr-3 w-5 h-5 sm:w-6 sm:h-6 relative z-10" />
@@ -407,7 +618,7 @@ export default function GetStartedPage() {
                     <div className={getSeasonalAnimationClass("animate-organic-scale-in")}>
                       <Button
                         onClick={handlePreQuestionComplete}
-                        className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-green-400 to-teal-500 hover:from-emerald-600 hover:via-green-500 hover:to-teal-600 text-white px-6 py-3 text-base sm:text-lg rounded-full shadow-[0_0_30px_rgba(16,185,129,0.3)] transform hover:scale-110 transition-all duration-700 font-medium tracking-wide border-2 border-emerald-400/30"
+                        className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-green-400 to-teal-500 hover:from-emerald-600 hover:via-green-500 hover:to-teal-600 text-white px-6 py-3 text-base sm:text-lg rounded-full shadow-[0_0_30px_rgba(16,185,129,0.3)] transform hover:scale-110 transition-all duration-700 font-medium tracking-wide border-2 border-emerald-400/30 min-h-[44px] min-w-[44px]"
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/20 via-transparent to-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
                         <Sparkles className="mr-2 w-4 h-4 sm:w-5 sm:h-5 relative z-10" />
@@ -448,12 +659,22 @@ export default function GetStartedPage() {
                     <div className={getSeasonalAnimationClass("animate-organic-scale-in")}>
                       <Button
                         onClick={saveOnboardingData}
-                        className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-green-400 to-teal-500 hover:from-emerald-600 hover:via-green-500 hover:to-teal-600 text-white px-8 py-4 text-lg sm:text-xl rounded-full shadow-[0_0_50px_rgba(16,185,129,0.5)] transform hover:scale-110 transition-all duration-700 font-medium tracking-wide border-2 border-emerald-400/30"
+                        disabled={isSaving}
+                        className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-green-400 to-teal-500 hover:from-emerald-600 hover:via-green-500 hover:to-teal-600 text-white px-8 py-4 text-lg sm:text-xl rounded-full shadow-[0_0_50px_rgba(16,185,129,0.5)] transform hover:scale-110 transition-all duration-700 font-medium tracking-wide border-2 border-emerald-400/30 min-h-[44px] min-w-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-white/20 via-transparent to-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-                        <MessageSquare className="mr-3 w-5 h-5 sm:w-6 sm:h-6 relative z-10" />
-                        <span className="relative z-10">Begin Our Journey</span>
-                        <Heart className="ml-3 w-5 h-5 sm:w-6 sm:h-6 relative z-10" />
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="mr-3 w-5 h-5 sm:w-6 sm:h-6 relative z-10 animate-spin" />
+                            <span className="relative z-10">Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <MessageSquare className="mr-3 w-5 h-5 sm:w-6 sm:h-6 relative z-10" />
+                            <span className="relative z-10">Begin Our Journey</span>
+                            <Heart className="ml-3 w-5 h-5 sm:w-6 sm:h-6 relative z-10" />
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -516,7 +737,7 @@ export default function GetStartedPage() {
                       <Button
                         onClick={handleBack}
                         variant="outline"
-                        className="relative group overflow-hidden bg-white/60 backdrop-blur-xl border-2 border-emerald-200/50 text-slate-800 hover:bg-white/80 hover:border-emerald-300/70 px-6 py-3 text-base rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.1)] font-medium transition-all duration-300 hover:scale-105"
+                        className="relative group overflow-hidden bg-white/60 backdrop-blur-xl border-2 border-emerald-200/50 text-slate-800 hover:bg-white/80 hover:border-emerald-300/70 px-6 py-3 text-base rounded-2xl shadow-[0_0_20px_rgba(16,185,129,0.1)] font-medium transition-all duration-300 hover:scale-105 min-h-[44px] min-w-[44px]"
                       >
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/30 via-teal-50/40 to-green-50/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                         <ArrowLeft className="mr-2 w-4 h-4 relative z-10" />
