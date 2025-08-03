@@ -83,32 +83,42 @@ export async function POST(req: NextRequest) {
     const transactions = transactionsResponse.data.transactions;
     
     for (const tx of transactions) {
-      await prisma.transactions.upsert({
-        where: { plaid_transaction_id: tx.transaction_id },
-        update: {
-          amount: tx.amount,
-          date: new Date(tx.date),
-          category: tx.category ? tx.category.join(', ') : null,
-          name: tx.name,
-          merchant_name: tx.merchant_name,
-          pending: tx.pending,
-          currency_code: tx.iso_currency_code,
-        },
-        create: {
-          id: randomUUID(),
-          user_id: user_id,
-          account_id: tx.account_id,
-          plaid_transaction_id: tx.transaction_id,
-          amount: tx.amount,
-          date: new Date(tx.date),
-          category: tx.category ? tx.category.join(', ') : null,
-          name: tx.name,
-          merchant_name: tx.merchant_name,
-          pending: tx.pending,
-          created_at: new Date(),
-          currency_code: tx.iso_currency_code,
-        },
+      // Find the account record for this transaction
+      const account = await prisma.accounts.findFirst({
+        where: { 
+          plaid_account_id: tx.account_id,
+          user_id: user_id 
+        }
       });
+      
+      if (account) {
+        await prisma.transactions.upsert({
+          where: { plaid_transaction_id: tx.transaction_id },
+          update: {
+            amount: tx.amount,
+            date: new Date(tx.date),
+            category: tx.category ? tx.category.join(', ') : undefined,
+            name: tx.name,
+            merchant_name: tx.merchant_name || undefined,
+            pending: tx.pending,
+            currency_code: tx.iso_currency_code,
+          },
+          create: {
+            id: randomUUID(),
+            user_id: user_id,
+            account_id: account.id, // Use the account's UUID, not Plaid account_id
+            plaid_transaction_id: tx.transaction_id,
+            amount: tx.amount,
+            date: new Date(tx.date),
+            category: tx.category ? tx.category.join(', ') : undefined,
+            name: tx.name,
+            merchant_name: tx.merchant_name || undefined,
+            pending: tx.pending,
+            created_at: new Date(),
+            currency_code: tx.iso_currency_code,
+          },
+        });
+      }
     }
 
     return NextResponse.json({ 

@@ -109,11 +109,22 @@ export function AuthContent() {
     }
   }, [user, onboardingComplete, transferComplete, isTransferring]);
 
-  // Redirect after transfer is complete
+  // Refresh page after transfer is complete to ensure user context is updated
   useEffect(() => {
     if (transferComplete) {
       setTimeout(() => {
-        window.location.href = "/dashboard";
+        // Clear any temporary data from localStorage
+        localStorage.removeItem('temp_onboarding_user_id');
+        localStorage.removeItem('temp_onboarding_answers');
+        
+        // Clear the current user data to force a fresh context reload
+        // This ensures the user context picks up the new user ID from the database
+        localStorage.removeItem('current_user_data');
+        localStorage.removeItem('current_user_id');
+        
+        // Force a page reload to ensure the user context gets completely refreshed
+        // with the new user ID from the database
+        window.location.reload();
       }, 2000);
     }
   }, [transferComplete]);
