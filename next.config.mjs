@@ -17,8 +17,6 @@ const nextConfig = {
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
   },
-  // Add build output configuration
-  output: 'standalone',
 }
 
 export default nextConfig
