@@ -63,7 +63,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
 
     // Fetch goals for the user
     const goals = await prisma.goals.findMany({
-      where: { user_id: userId, is_active: true },
+      where: { 
+        user_id: userId, 
+        OR: [
+          { is_active: true },
+          { is_active: null }
+        ]
+      },
       select: {
         id: true,
         name: true,

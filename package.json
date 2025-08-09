@@ -6,7 +6,12 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "vercel-build": "prisma generate && prisma db push && next build",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -83,8 +88,25 @@
     "@types/react-katex": "^3.0.4",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
-    "prisma": "6.12.0",
+    "prisma": "^6.12.0",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
-  }
+  },
+  "description": "Welcome to TrueFi — the AI-native personal finance assistant designed to help users make smart financial decisions with clarity, speed, and confidence.",
+  "main": "debug-chart.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devintruefi/8325devin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/devintruefi/8325devin/issues"
+  },
+  "homepage": "https://github.com/devintruefi/8325devin#readme"
 }

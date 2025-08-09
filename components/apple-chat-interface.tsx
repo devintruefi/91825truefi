@@ -821,11 +821,15 @@ export function AppleChatInterface() {
 
   // Add toggle function for suggestions visibility
   const toggleSuggestions = () => {
-    const newValue = !suggestionsVisible
-    setSuggestionsVisible(newValue)
-    // Save preference to localStorage
-    localStorage.setItem('chat-suggestions-visible', JSON.stringify(newValue))
-  }
+    setSuggestionsVisible(prev => {
+      const newValue = !prev;
+      // Save preference to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('chat-suggestions-visible', JSON.stringify(newValue));
+      }
+      return newValue;
+    });
+  };
 
   const handleVoiceInput = () => {
     if (recognitionRef.current) {
@@ -1210,9 +1214,10 @@ export function AppleChatInterface() {
       >
         <div className="max-w-[1600px] mx-auto">
           {/* Enhanced Quick Suggestions with Toggle */}
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {suggestionsVisible ? (
               <motion.div
+                key="expanded"
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
@@ -1297,6 +1302,7 @@ export function AppleChatInterface() {
             ) : (
               // Minimal show suggestions button when hidden
               <motion.div
+                key="collapsed"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
