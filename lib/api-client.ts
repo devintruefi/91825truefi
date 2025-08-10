@@ -281,14 +281,12 @@ class ApiClient {
 const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
     // Browser environment
-    return process.env.NEXT_PUBLIC_BACKEND_URL || 'https://your-backend-domain.vercel.app';
+    return process.env.NEXT_PUBLIC_BACKEND_URL || '/api';
   }
   
   // Server environment
-  return process.env.BACKEND_URL || 'https://your-backend-domain.vercel.app';
+  return process.env.BACKEND_URL || '/api';
 };
 
-export const apiClient = {
-  // ... existing methods ...
-  baseURL: getBaseUrl(),
-}; 
+// Create and export a singleton instance of ApiClient
+export const apiClient = new ApiClient(getBaseUrl()); 
