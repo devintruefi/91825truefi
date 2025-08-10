@@ -461,19 +461,25 @@ function renderInline(text: string): React.ReactNode {
   return <span dangerouslySetInnerHTML={{ __html: preprocessContent(text) }} />
 }
 
+// Use a counter for stable IDs instead of Date.now()
+let messageIdCounter = 1000
+
 export function AppleChatInterface() {
   const { user } = useUser()
   const { theme } = useTheme()
   
   // Conditionally set initial messages based on authentication
   const getInitialMessages = (): Message[] => {
+    // Use a fixed timestamp to avoid hydration mismatch
+    const fixedTimestamp = new Date('2024-01-01T12:00:00')
+    
     if (user) {
       // For authenticated users, show a personalized welcome message
       return [{
         id: "1",
         content: `Hi ${user.first_name}! 👋 I'm Penny, your personalized financial advisor. I'm here to help you make smart financial decisions and achieve your goals. What would you like to discuss today? 💰✨`,
         sender: "penny",
-        timestamp: new Date(Date.now() - 300000),
+        timestamp: fixedTimestamp,
       }]
     } else {
       // For unauthenticated users, show the Alex demo message
@@ -481,7 +487,7 @@ export function AppleChatInterface() {
         id: "1",
         content: "Hi Alex! 👋 I'm Penny, your personalized financial advisor. I'm here to help you make smart financial decisions and achieve your goals. What would you like to discuss today? 💰✨",
         sender: "penny",
-        timestamp: new Date(Date.now() - 300000),
+        timestamp: fixedTimestamp,
       }]
     }
   }
@@ -498,19 +504,20 @@ export function AppleChatInterface() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   
-  // Add suggestions visibility state with localStorage persistence
-  const [suggestionsVisible, setSuggestionsVisible] = useState(() => {
-    // Check localStorage for saved preference, default to true
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('chat-suggestions-visible')
-      return saved !== null ? JSON.parse(saved) : true
-    }
-    return true
-  })
+  // Add suggestions visibility state - initialize to true for SSR consistency
+  const [suggestionsVisible, setSuggestionsVisible] = useState(true)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const recognitionRef = useRef<any>(null)
+  
+  // Load suggestions visibility preference after mount to avoid hydration mismatch
+  useEffect(() => {
+    const saved = localStorage.getItem('chat-suggestions-visible')
+    if (saved !== null) {
+      setSuggestionsVisible(JSON.parse(saved))
+    }
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })

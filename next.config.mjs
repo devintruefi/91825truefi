@@ -10,9 +10,7 @@ const nextConfig = {
     unoptimized: true,
   },
   // Add these for Vercel deployment
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client'],
-  },
+  serverExternalPackages: ['@prisma/client'],
   // Ensure proper environment variable handling
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
