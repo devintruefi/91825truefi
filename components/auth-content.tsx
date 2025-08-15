@@ -13,33 +13,6 @@ import { useUser } from "@/contexts/user-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 // Third-party auth handler functions (placeholders)
-const handleGoogleAuth = async () => {
-  try {
-    // Call the OAuth init endpoint
-    const response = await fetch('/api/auth/oauth/init', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        provider: 'google',
-        redirect_uri: `${window.location.origin}/api/auth/callback/google`
-      }),
-    });
-
-    if (response.ok) {
-      const { auth_url } = await response.json();
-      // Redirect to Google OAuth
-      window.location.href = auth_url;
-    } else {
-      throw new Error('Failed to initialize Google OAuth');
-    }
-  } catch (error) {
-    console.error('Google OAuth error:', error);
-    setLocalError('Failed to start Google authentication. Please try again.');
-  }
-};
-
 const handleAppleAuth = () => {
   console.log("Apple authentication triggered")
   // TODO: Implement Apple Sign In flow
@@ -80,6 +53,34 @@ export function AuthContent() {
       setOnboardingComplete(true);
       // Auto-switch to register tab for onboarding completers
       setActiveTab("register");
+    }
+  }, []);
+
+  // Handle OAuth callback with token
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const provider = urlParams.get('provider');
+    
+    if (token && provider) {
+      console.log('OAuth callback received with token:', { provider, token });
+      
+      // Clear any existing demo user data
+      localStorage.removeItem('demo_user_id');
+      localStorage.removeItem('current_user_data');
+      localStorage.removeItem('current_user_id');
+      
+      // Store the token in localStorage for the user context
+      localStorage.setItem('auth_token', token);
+      
+      // Clear the URL parameters to avoid showing them
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('token');
+      newUrl.searchParams.delete('provider');
+      window.history.replaceState({}, '', newUrl.toString());
+      
+      // Redirect to dashboard - the user context should pick up the token
+      window.location.href = '/dashboard';
     }
   }, []);
 
@@ -161,6 +162,33 @@ export function AuthContent() {
       setLocalError("Invalid email or password. Please try again.")
     }
   }
+
+  const handleGoogleAuth = async () => {
+    try {
+      // Call the OAuth init endpoint
+      const response = await fetch('/api/auth/oauth/init', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          provider: 'google',
+          redirect_uri: `${window.location.origin}/api/auth/callback/google`
+        }),
+      });
+
+      if (response.ok) {
+        const { auth_url } = await response.json();
+        // Redirect to Google OAuth
+        window.location.href = auth_url;
+      } else {
+        throw new Error('Failed to initialize Google OAuth');
+      }
+    } catch (error) {
+      console.error('Google OAuth error:', error);
+      setLocalError('Failed to start Google authentication. Please try again.');
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()

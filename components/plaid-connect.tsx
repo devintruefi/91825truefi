@@ -14,7 +14,13 @@ declare global {
   }
 }
 
-export function PlaidConnect() {
+interface PlaidConnectProps {
+  onSuccess?: () => void
+  variant?: "default" | "compact" | "icon"
+  className?: string
+}
+
+export function PlaidConnect({ onSuccess, variant = "default", className = "" }: PlaidConnectProps) {
   const { user } = useUser()
   const [loading, setLoading] = useState(false)
   const [linkToken, setLinkToken] = useState<string | null>(null)
@@ -77,8 +83,13 @@ export function PlaidConnect() {
           if (result.success) {
             setSuccess(`Successfully connected ${result.accounts_count} accounts!`)
             setLinkToken(null)
-            // Refresh the page to show new data
-            setTimeout(() => window.location.reload(), 2000)
+            // Call onSuccess callback if provided
+            if (onSuccess) {
+              setTimeout(() => onSuccess(), 1000)
+            } else {
+              // Refresh the page to show new data
+              setTimeout(() => window.location.reload(), 2000)
+            }
           } else {
             setError('Failed to link account')
           }
@@ -116,6 +127,43 @@ export function PlaidConnect() {
     }
   }
 
+  // Compact variant for header/inline use
+  if (variant === "compact") {
+    return (
+      <div className="inline-flex">
+        <Button 
+          onClick={handleConnectBank}
+          disabled={loading || !plaidLoaded}
+          className={`bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white ${className}`}
+        >
+          {loading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Building2 className="h-4 w-4 mr-2" />
+          )}
+          Connect Bank
+        </Button>
+        {error && (
+          <div className="fixed bottom-4 right-4 z-50">
+            <Alert variant="destructive" className="w-96">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </div>
+        )}
+        {success && (
+          <div className="fixed bottom-4 right-4 z-50">
+            <Alert className="border-green-200 bg-green-50 w-96">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">{success}</AlertDescription>
+            </Alert>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Default card variant
   return (
     <Card>
       <CardHeader>

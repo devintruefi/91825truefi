@@ -40,37 +40,53 @@ export async function POST(req: NextRequest) {
     
     let accountsCount = 0;
     for (const account of accounts) {
-      await prisma.accounts.upsert({
-        where: { plaid_account_id: account.account_id },
-        update: {
-          name: account.name,
-          type: account.type,
-          subtype: account.subtype,
-          mask: account.mask,
-          institution_name: account.official_name || account.name,
-          balance: account.balances.current,
-          available_balance: account.balances.available,
-          currency: account.balances.iso_currency_code,
-          is_active: true,
-          updated_at: new Date(),
-        },
-        create: {
-          id: randomUUID(),
-          user_id: user_id,
-          plaid_account_id: account.account_id,
-          name: account.name,
-          type: account.type,
-          subtype: account.subtype,
-          mask: account.mask,
-          institution_name: account.official_name || account.name,
-          balance: account.balances.current,
-          available_balance: account.balances.available,
-          currency: account.balances.iso_currency_code,
-          is_active: true,
-          created_at: new Date(),
-          updated_at: new Date(),
-        },
+      // First check if account exists
+      const existingAccount = await prisma.accounts.findFirst({
+        where: { plaid_account_id: account.account_id }
       });
+
+      if (existingAccount) {
+        // Update existing account
+        await prisma.accounts.update({
+          where: { id: existingAccount.id },
+          data: {
+            name: account.name,
+            type: account.type,
+            subtype: account.subtype,
+            mask: account.mask,
+            institution_name: account.official_name || account.name,
+            balance: account.balances.current,
+            available_balance: account.balances.available,
+            currency: account.balances.iso_currency_code,
+            plaid_item_id: item_id,  // Update plaid_item_id
+            plaid_connection_id: plaidConnection.id,  // Link to connection
+            is_active: true,
+            updated_at: new Date(),
+          }
+        });
+      } else {
+        // Create new account
+        await prisma.accounts.create({
+          data: {
+            id: randomUUID(),
+            user_id: user_id,
+            plaid_account_id: account.account_id,
+            plaid_item_id: item_id,  // Include plaid_item_id
+            plaid_connection_id: plaidConnection.id,  // Link to connection
+            name: account.name,
+            type: account.type,
+            subtype: account.subtype,
+            mask: account.mask,
+            institution_name: account.official_name || account.name,
+            balance: account.balances.current,
+            available_balance: account.balances.available,
+            currency: account.balances.iso_currency_code,
+            is_active: true,
+            created_at: new Date(),
+            updated_at: new Date(),
+          }
+        });
+      }
       accountsCount++;
     }
 
@@ -92,32 +108,44 @@ export async function POST(req: NextRequest) {
       });
       
       if (account) {
-        await prisma.transactions.upsert({
-          where: { plaid_transaction_id: tx.transaction_id },
-          update: {
-            amount: tx.amount,
-            date: new Date(tx.date),
-            category: tx.category ? tx.category.join(', ') : undefined,
-            name: tx.name,
-            merchant_name: tx.merchant_name || undefined,
-            pending: tx.pending,
-            currency_code: tx.iso_currency_code,
-          },
-          create: {
-            id: randomUUID(),
-            user_id: user_id,
-            account_id: account.id, // Use the account's UUID, not Plaid account_id
-            plaid_transaction_id: tx.transaction_id,
-            amount: tx.amount,
-            date: new Date(tx.date),
-            category: tx.category ? tx.category.join(', ') : undefined,
-            name: tx.name,
-            merchant_name: tx.merchant_name || undefined,
-            pending: tx.pending,
-            created_at: new Date(),
-            currency_code: tx.iso_currency_code,
-          },
+        // Check if transaction exists
+        const existingTransaction = await prisma.transactions.findFirst({
+          where: { plaid_transaction_id: tx.transaction_id }
         });
+
+        if (existingTransaction) {
+          // Update existing transaction
+          await prisma.transactions.update({
+            where: { id: existingTransaction.id },
+            data: {
+              amount: tx.amount,
+              date: new Date(tx.date),
+              category: tx.category ? tx.category.join(', ') : undefined,
+              name: tx.name,
+              merchant_name: tx.merchant_name || undefined,
+              pending: tx.pending,
+              currency_code: tx.iso_currency_code,
+            }
+          });
+        } else {
+          // Create new transaction
+          await prisma.transactions.create({
+            data: {
+              id: randomUUID(),
+              user_id: user_id,
+              account_id: account.id, // Use the account's UUID, not Plaid account_id
+              plaid_transaction_id: tx.transaction_id,
+              amount: tx.amount,
+              date: new Date(tx.date),
+              category: tx.category ? tx.category.join(', ') : undefined,
+              name: tx.name,
+              merchant_name: tx.merchant_name || undefined,
+              pending: tx.pending,
+              created_at: new Date(),
+              currency_code: tx.iso_currency_code,
+            }
+          });
+        }
       }
     }
 

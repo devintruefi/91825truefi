@@ -1804,6 +1804,66 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     is_active: Optional[bool] = None
 
+# Token validation endpoint
+@app.get("/api/auth/validate")
+async def validate_token(request: Request):
+    """Validate JWT token and return user data"""
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split(' ')[1]
+        
+        # Decode and validate token
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            user_id = payload.get("userId")
+            
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid token payload")
+            
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Get user data from database
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        try:
+            cur.execute("SELECT id, email, first_name, last_name, is_active, is_advisor, created_at FROM users WHERE id = %s", (user_id,))
+            user = cur.fetchone()
+            
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            user_id, email, first_name, last_name, is_active, is_advisor, created_at = user
+            
+            if not is_active:
+                raise HTTPException(status_code=403, detail="Account is deactivated")
+            
+            return {
+                "id": user_id,
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "is_advisor": is_advisor,
+                "created_at": created_at.isoformat() if created_at else None
+            }
+            
+        finally:
+            cur.close()
+            db_pool.putconn(conn)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token validation error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Token validation failed")
+
 # Add these endpoints after the existing ones
 
 @app.post("/api/users")
@@ -2026,6 +2086,563 @@ async def delete_user(user_id: str):
         if conn:
             conn.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete user")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+# Assets and Liabilities Management Endpoints
+class ManualAsset(BaseModel):
+    name: str
+    asset_class: str
+    value: float
+    description: Optional[str] = None
+
+class ManualLiability(BaseModel):
+    name: str
+    liability_class: str
+    balance: float
+    interest_rate: Optional[float] = None
+    minimum_payment: Optional[float] = None
+    description: Optional[str] = None
+
+@app.get("/api/assets-liabilities/{user_id}")
+async def get_assets_liabilities(user_id: str):
+    """Get all assets and liabilities for a user (both from Plaid accounts and manual entries)"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        # Get Plaid-connected accounts (assets and liabilities)
+        cur.execute("""
+            SELECT 
+                account_id, name, institution_name, type, subtype, 
+                current_balance, available_balance, currency_code,
+                created_at, updated_at
+            FROM accounts 
+            WHERE user_id = %s
+            ORDER BY type, name
+        """, (user_id,))
+        
+        plaid_accounts = []
+        for row in cur.fetchall():
+            account_type = row[3]
+            account_subtype = row[4] or ''
+            current_balance = float(row[5] or 0)
+            
+            # Determine if it's an asset or liability based on account type
+            is_asset = account_type in ['investment', 'brokerage'] or \
+                      (account_type == 'depository' and account_subtype in ['checking', 'savings', 'cd', 'money market'])
+            
+            # For credit cards and loans, positive balance means debt (liability)
+            # For checking/savings, positive balance means asset
+            if account_type in ['credit', 'loan']:
+                is_asset = False
+                current_balance = abs(current_balance)  # Make sure liabilities show as positive numbers
+            
+            plaid_accounts.append({
+                "id": row[0],
+                "name": row[1],
+                "institution": row[2],
+                "type": account_type,
+                "subtype": account_subtype,
+                "balance": current_balance,
+                "available_balance": float(row[6] or 0),
+                "currency": row[7],
+                "is_asset": is_asset,
+                "source": "plaid",
+                "created_at": row[8].isoformat() if row[8] else None,
+                "updated_at": row[9].isoformat() if row[9] else None
+            })
+        
+        # Get manual assets
+        cur.execute("""
+            SELECT 
+                id, name, asset_class, value, description,
+                created_at, updated_at
+            FROM manual_assets 
+            WHERE user_id = %s
+            ORDER BY asset_class, name
+        """, (user_id,))
+        
+        manual_assets = []
+        for row in cur.fetchall():
+            manual_assets.append({
+                "id": row[0],
+                "name": row[1],
+                "asset_class": row[2],
+                "value": float(row[3] or 0),
+                "description": row[4],
+                "source": "manual",
+                "created_at": row[5].isoformat() if row[5] else None,
+                "updated_at": row[6].isoformat() if row[6] else None
+            })
+        
+        # Get manual liabilities
+        cur.execute("""
+            SELECT 
+                id, name, liability_class, balance, interest_rate,
+                minimum_payment, description, created_at, updated_at
+            FROM manual_liabilities 
+            WHERE user_id = %s
+            ORDER BY liability_class, name
+        """, (user_id,))
+        
+        manual_liabilities = []
+        for row in cur.fetchall():
+            manual_liabilities.append({
+                "id": row[0],
+                "name": row[1],
+                "liability_class": row[2],
+                "balance": float(row[3] or 0),
+                "interest_rate": float(row[4]) if row[4] else None,
+                "minimum_payment": float(row[5]) if row[5] else None,
+                "description": row[6],
+                "source": "manual",
+                "created_at": row[7].isoformat() if row[7] else None,
+                "updated_at": row[8].isoformat() if row[8] else None
+            })
+        
+        # Combine and categorize
+        assets = []
+        liabilities = []
+        
+        # Add Plaid accounts to appropriate category
+        for account in plaid_accounts:
+            if account["is_asset"]:
+                assets.append(account)
+            else:
+                liabilities.append(account)
+        
+        # Add manual entries
+        assets.extend(manual_assets)
+        liabilities.extend(manual_liabilities)
+        
+        # Calculate totals
+        total_assets = sum(a.get("balance", 0) or a.get("value", 0) for a in assets)
+        total_liabilities = sum(l.get("balance", 0) for l in liabilities)
+        net_worth = total_assets - total_liabilities
+        
+        return {
+            "assets": assets,
+            "liabilities": liabilities,
+            "total_assets": total_assets,
+            "total_liabilities": total_liabilities,
+            "net_worth": net_worth,
+            "has_plaid_connection": len(plaid_accounts) > 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching assets/liabilities for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch assets and liabilities")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.post("/api/assets/{user_id}")
+async def create_manual_asset(user_id: str, asset: ManualAsset):
+    """Create a manual asset entry"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        asset_id = str(uuid.uuid4())
+        current_time = datetime.now(timezone.utc)
+        
+        cur.execute("""
+            INSERT INTO manual_assets (id, user_id, name, asset_class, value, description, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (asset_id, user_id, asset.name, asset.asset_class, asset.value, asset.description, current_time, current_time))
+        
+        conn.commit()
+        
+        return {"id": asset_id, "message": "Asset created successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error creating asset: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create asset")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.put("/api/assets/{asset_id}")
+async def update_manual_asset(asset_id: str, asset: ManualAsset):
+    """Update a manual asset entry"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            UPDATE manual_assets 
+            SET name = %s, asset_class = %s, value = %s, description = %s, updated_at = %s
+            WHERE id = %s
+            RETURNING id
+        """, (asset.name, asset.asset_class, asset.value, asset.description, datetime.now(timezone.utc), asset_id))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Asset not found")
+        
+        conn.commit()
+        
+        return {"message": "Asset updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating asset: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update asset")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.delete("/api/assets/{asset_id}")
+async def delete_manual_asset(asset_id: str):
+    """Delete a manual asset entry"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        cur.execute("DELETE FROM manual_assets WHERE id = %s RETURNING id", (asset_id,))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Asset not found")
+        
+        conn.commit()
+        
+        return {"message": "Asset deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting asset: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete asset")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.post("/api/liabilities/{user_id}")
+async def create_manual_liability(user_id: str, liability: ManualLiability):
+    """Create a manual liability entry"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        liability_id = str(uuid.uuid4())
+        current_time = datetime.now(timezone.utc)
+        
+        cur.execute("""
+            INSERT INTO manual_liabilities (id, user_id, name, liability_class, balance, interest_rate, minimum_payment, description, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (liability_id, user_id, liability.name, liability.liability_class, liability.balance, 
+              liability.interest_rate, liability.minimum_payment, liability.description, current_time, current_time))
+        
+        conn.commit()
+        
+        return {"id": liability_id, "message": "Liability created successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error creating liability: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create liability")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.put("/api/liabilities/{liability_id}")
+async def update_manual_liability(liability_id: str, liability: ManualLiability):
+    """Update a manual liability entry"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            UPDATE manual_liabilities 
+            SET name = %s, liability_class = %s, balance = %s, interest_rate = %s, 
+                minimum_payment = %s, description = %s, updated_at = %s
+            WHERE id = %s
+            RETURNING id
+        """, (liability.name, liability.liability_class, liability.balance, liability.interest_rate,
+              liability.minimum_payment, liability.description, datetime.now(timezone.utc), liability_id))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Liability not found")
+        
+        conn.commit()
+        
+        return {"message": "Liability updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating liability: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update liability")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.delete("/api/liabilities/{liability_id}")
+async def delete_manual_liability(liability_id: str):
+    """Delete a manual liability entry"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        cur.execute("DELETE FROM manual_liabilities WHERE id = %s RETURNING id", (liability_id,))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Liability not found")
+        
+        conn.commit()
+        
+        return {"message": "Liability deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting liability: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete liability")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+# Goals Management Endpoints
+class GoalCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    target_amount: float
+    current_amount: float = 0
+    target_date: Optional[str] = None
+    priority: Optional[str] = "medium"
+
+class GoalUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    target_amount: Optional[float] = None
+    current_amount: Optional[float] = None
+    target_date: Optional[str] = None
+    priority: Optional[str] = None
+    is_active: Optional[bool] = None
+
+@app.post("/api/goals/{user_id}")
+async def create_goal(user_id: str, goal: GoalCreate):
+    """Create a new financial goal"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        goal_id = str(uuid.uuid4())
+        current_time = datetime.now(timezone.utc)
+        
+        cur.execute("""
+            INSERT INTO goals (id, user_id, name, description, target_amount, current_amount, 
+                             target_date, priority, is_active, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (goal_id, user_id, goal.name, goal.description, goal.target_amount, 
+              goal.current_amount, goal.target_date, goal.priority, True, current_time, current_time))
+        
+        conn.commit()
+        
+        return {"id": goal_id, "message": "Goal created successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error creating goal: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create goal")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.put("/api/goals/{goal_id}")
+async def update_goal(goal_id: str, goal: GoalUpdate):
+    """Update a financial goal"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        # Build update query dynamically
+        update_fields = []
+        update_values = []
+        
+        if goal.name is not None:
+            update_fields.append("name = %s")
+            update_values.append(goal.name)
+        if goal.description is not None:
+            update_fields.append("description = %s")
+            update_values.append(goal.description)
+        if goal.target_amount is not None:
+            update_fields.append("target_amount = %s")
+            update_values.append(goal.target_amount)
+        if goal.current_amount is not None:
+            update_fields.append("current_amount = %s")
+            update_values.append(goal.current_amount)
+        if goal.target_date is not None:
+            update_fields.append("target_date = %s")
+            update_values.append(goal.target_date)
+        if goal.priority is not None:
+            update_fields.append("priority = %s")
+            update_values.append(goal.priority)
+        if goal.is_active is not None:
+            update_fields.append("is_active = %s")
+            update_values.append(goal.is_active)
+        
+        if not update_fields:
+            return {"message": "No updates provided"}
+        
+        update_fields.append("updated_at = %s")
+        update_values.append(datetime.now(timezone.utc))
+        update_values.append(goal_id)
+        
+        query = f"""
+            UPDATE goals 
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+            RETURNING id
+        """
+        
+        cur.execute(query, update_values)
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Goal not found")
+        
+        conn.commit()
+        
+        return {"message": "Goal updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating goal: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update goal")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.delete("/api/goals/{goal_id}")
+async def delete_goal(goal_id: str):
+    """Delete a financial goal"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        cur.execute("DELETE FROM goals WHERE id = %s RETURNING id", (goal_id,))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Goal not found")
+        
+        conn.commit()
+        
+        return {"message": "Goal deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting goal: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete goal")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+# Notifications endpoint
+@app.get("/api/notifications/{user_id}")
+async def get_notifications(user_id: str):
+    """Get user notifications based on their financial data"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        notifications = []
+        
+        # Check for low balances
+        cur.execute("""
+            SELECT name, current_balance 
+            FROM accounts 
+            WHERE user_id = %s AND current_balance < 100
+        """, (user_id,))
+        
+        for row in cur.fetchall():
+            notifications.append({
+                "type": "warning",
+                "title": "Low Balance Alert",
+                "message": f"Your {row[0]} has a low balance of ${row[1]:.2f}",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+        
+        # Check for upcoming bills
+        cur.execute("""
+            SELECT name, amount, due_date 
+            FROM bills 
+            WHERE user_id = %s AND due_date BETWEEN now() AND now() + interval '7 days'
+        """, (user_id,))
+        
+        for row in cur.fetchall():
+            notifications.append({
+                "type": "info",
+                "title": "Upcoming Bill",
+                "message": f"{row[0]} payment of ${row[1]:.2f} due on {row[2]}",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+        
+        # Check for goal progress
+        cur.execute("""
+            SELECT name, current_amount, target_amount 
+            FROM goals 
+            WHERE user_id = %s AND is_active = true 
+            AND current_amount >= target_amount * 0.9
+        """, (user_id,))
+        
+        for row in cur.fetchall():
+            progress = (row[1] / row[2]) * 100
+            notifications.append({
+                "type": "success",
+                "title": "Goal Achievement",
+                "message": f"You're {progress:.0f}% towards your {row[0]} goal!",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+        
+        # Check for unusual spending
+        cur.execute("""
+            SELECT category, SUM(amount) as total
+            FROM transactions
+            WHERE user_id = %s 
+            AND date >= now() - interval '30 days'
+            AND amount < 0
+            GROUP BY category
+            HAVING SUM(amount) < -1000
+            ORDER BY total
+            LIMIT 3
+        """, (user_id,))
+        
+        for row in cur.fetchall():
+            notifications.append({
+                "type": "alert",
+                "title": "High Spending Alert",
+                "message": f"You've spent ${abs(row[1]):.2f} on {row[0]} this month",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+        
+        return {"notifications": notifications}
+        
+    except Exception as e:
+        logger.error(f"Error fetching notifications: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch notifications")
     finally:
         if conn:
             db_pool.putconn(conn)

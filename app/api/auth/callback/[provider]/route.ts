@@ -33,21 +33,33 @@ export async function GET(
     
     const userData = await response.json();
     
-    // Create response with redirect
+    // The backend returns the user data and token, we need to set them and redirect to dashboard
+    console.log('OAuth callback successful, full user data received:', userData);
+    console.log('Token present?', !!userData.token);
+    console.log('User ID:', userData.user_id || userData.id);
+    
+    // Create redirect to dashboard with a flag to indicate OAuth success
     const redirectUrl = new URL('/dashboard', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+    redirectUrl.searchParams.set('oauth_success', 'true');
     const res = NextResponse.redirect(redirectUrl);
     
-    // Set cookies with user data (you might want to handle this differently)
-    res.cookies.set('auth_token', userData.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7 // 7 days
-    });
+    // Set auth token cookie - CRITICAL for authentication
+    if (userData.token) {
+      console.log('Setting auth_token cookie with token');
+      res.cookies.set('auth_token', userData.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7 // 7 days
+      });
+    } else {
+      console.error('WARNING: No token received from backend OAuth callback!');
+      console.error('This will cause authentication to fail.');
+    }
     
-    // Store user data in a way that client can access
+    // Store user data in a cookie that client can access
     res.cookies.set('user_data', JSON.stringify({
-      id: userData.user_id,
+      id: userData.user_id || userData.id,
       email: userData.email,
       first_name: userData.first_name || '',
       last_name: userData.last_name || '',

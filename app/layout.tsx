@@ -22,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} pt-[112px]`}>
+      <body className={inter.className}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
@@ -31,7 +31,12 @@ export default function RootLayout({
           storageKey="truefi-theme"
         >
           <UserProvider>
-            <SidebarProvider>{children}</SidebarProvider>
+            <SidebarProvider>
+              {/* Add a CSS class for consistent header spacing */}
+              <div className="header-spacing">
+                {children}
+              </div>
+            </SidebarProvider>
           </UserProvider>
         </ThemeProvider>
       </body>

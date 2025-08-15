@@ -13,53 +13,39 @@ export function EnhancedNavbar() {
 
   return (
     <>
-      {/* Demo Banner */}
-      <div className="bg-cyan-100 dark:bg-cyan-900/20 border-b border-cyan-200 dark:border-cyan-800">
-        <div className="container mx-auto px-4 py-2 text-center">
-          <p className="text-sm text-cyan-800 dark:text-cyan-200">
-            <strong>TrueFi.ai is Coming Soon!</strong> In the meantime, explore the demo using a sample profile named
-            Alex –{" "}
-            <Link href="/chat" className="underline font-medium hover:text-cyan-600 transition-colors">
-              Chat with Penny
-            </Link>{" "}
-            !
-          </p>
-        </div>
-      </div>
-
-      <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4">
-          <div className="flex h-16 items-center justify-between">
-            <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+      <nav className="sticky top-0 z-50 w-full bg-white/95 dark:bg-gray-950/95 backdrop-blur-2xl backdrop-saturate-200 border-b border-gray-200/30 dark:border-gray-800/30" style={{backdropFilter: 'saturate(180%) blur(20px)', WebkitBackdropFilter: 'saturate(180%) blur(20px)'}}>
+        <div className="max-w-[980px] mx-auto px-4">
+          <div className="flex items-center justify-between" style={{height: '44px'}}>
+            <Link href="/" className="flex items-center space-x-2 hover:opacity-70 transition-opacity duration-200">
               <div className="relative w-10 h-10">
                 <Image src="/images/website-logo.png" alt="TrueFi.ai Logo" fill className="object-contain" />
               </div>
-              <span className="font-semibold text-xl">TrueFi.ai</span>
+              <span className="text-[21px] font-semibold text-gray-900 dark:text-white" style={{letterSpacing: '-0.016em'}}>TrueFi.ai</span>
             </Link>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-4">
+            <div className="hidden md:flex items-center space-x-8">
               <Link
                 href="/chat"
-                className="text-sm font-medium hover:text-primary transition-colors touch-target flex items-center justify-center"
+                className="text-[14px] text-gray-900 dark:text-gray-100 hover:opacity-70 transition-opacity duration-200 flex items-center justify-center" style={{fontWeight: 400, letterSpacing: '-0.016em'}}
               >
                 Chat with Penny
               </Link>
               <Link
                 href="/dashboard"
-                className="text-sm font-medium hover:text-primary transition-colors touch-target flex items-center justify-center"
+                className="text-[14px] text-gray-900 dark:text-gray-100 hover:opacity-70 transition-opacity duration-200 flex items-center justify-center" style={{fontWeight: 400, letterSpacing: '-0.016em'}}
               >
                 My Dashboard
               </Link>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="text-sm font-medium touch-target flex items-center gap-1">
+                  <Button variant="ghost" className="text-[14px] text-gray-900 dark:text-gray-100 hover:opacity-70 transition-opacity duration-200 flex items-center gap-1" style={{fontWeight: 400, letterSpacing: '-0.016em'}}>
                     Menu
-                    <ChevronDown className="w-4 h-4" />
+                    <ChevronDown className="w-3 h-3" strokeWidth={1.5} />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-gray-950 border border-gray-200/30 dark:border-gray-800/30 shadow-xl rounded-lg" style={{backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)'}}>
                   <DropdownMenuItem>Sign Up / Log In</DropdownMenuItem>
                   <DropdownMenuItem>About Us</DropdownMenuItem>
                   <DropdownMenuItem>How to Use TrueFi</DropdownMenuItem>
@@ -85,40 +71,40 @@ export function EnhancedNavbar() {
                 className="touch-target"
                 aria-label="Toggle menu"
               >
-                {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                {isOpen ? <X className="h-[18px] w-[18px]" strokeWidth={1.5} /> : <Menu className="h-[18px] w-[18px]" strokeWidth={1.5} />}
               </Button>
             </div>
           </div>
 
           {/* Mobile Menu */}
           {isOpen && (
-            <div className="md:hidden border-t py-4 mobile-padding">
+            <div className="md:hidden border-t border-gray-200/30 dark:border-gray-800/30 py-4 px-4 bg-white dark:bg-gray-950">
               <div className="flex flex-col space-y-4">
                 <Link
                   href="/chat"
-                  className="text-sm font-medium hover:text-primary transition-colors touch-target py-2"
+                  className="text-[14px] text-gray-900 dark:text-gray-100 hover:opacity-70 transition-opacity duration-200 py-2" style={{fontWeight: 400, letterSpacing: '-0.016em'}}
                   onClick={() => setIsOpen(false)}
                 >
                   Chat with Penny
                 </Link>
                 <Link
                   href="/dashboard"
-                  className="text-sm font-medium hover:text-primary transition-colors touch-target py-2"
+                  className="text-[14px] text-gray-900 dark:text-gray-100 hover:opacity-70 transition-opacity duration-200 py-2" style={{fontWeight: 400, letterSpacing: '-0.016em'}}
                   onClick={() => setIsOpen(false)}
                 >
                   My Dashboard
                 </Link>
                 <Link
                   href="/settings"
-                  className="text-sm font-medium hover:text-primary transition-colors touch-target py-2"
+                  className="text-[14px] text-gray-900 dark:text-gray-100 hover:opacity-70 transition-opacity duration-200 py-2" style={{fontWeight: 400, letterSpacing: '-0.016em'}}
                   onClick={() => setIsOpen(false)}
                 >
                   Settings
                 </Link>
-                <div className="text-sm font-medium text-muted-foreground py-2">Sign Up / Log In</div>
-                <div className="text-sm font-medium text-muted-foreground py-2">About Us</div>
-                <div className="text-sm font-medium text-muted-foreground py-2">How to Use TrueFi</div>
-                <div className="text-sm font-medium text-muted-foreground py-2">Our Mission</div>
+                <div className="text-[14px] text-gray-600 dark:text-gray-400 py-2" style={{fontWeight: 400, letterSpacing: '-0.016em'}}>Sign Up / Log In</div>
+                <div className="text-[14px] text-gray-600 dark:text-gray-400 py-2" style={{fontWeight: 400, letterSpacing: '-0.016em'}}>About Us</div>
+                <div className="text-[14px] text-gray-600 dark:text-gray-400 py-2" style={{fontWeight: 400, letterSpacing: '-0.016em'}}>How to Use TrueFi</div>
+                <div className="text-[14px] text-gray-600 dark:text-gray-400 py-2" style={{fontWeight: 400, letterSpacing: '-0.016em'}}>Our Mission</div>
               </div>
             </div>
           )}

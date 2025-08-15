@@ -7,11 +7,11 @@ import { TrendingUp, AlertTriangle, CheckCircle, TrendingDown, DollarSign, Targe
 import { useState } from "react"
 
 // Enhanced styling classes for the premium dashboard experience
-const glassmorphismCard = "backdrop-blur-md bg-white/80 dark:bg-gray-900/80 border border-white/20 dark:border-gray-700/20 shadow-[0_2px_16px_rgba(0,0,0,0.05),inset_0_0_0.5px_rgba(255,255,255,0.15)] dark:shadow-[0_2px_16px_rgba(0,0,0,0.3),inset_0_0_0.5px_rgba(255,255,255,0.05)] hover:shadow-[0_8px_32px_rgba(0,0,0,0.08),inset_0_0_0.5px_rgba(255,255,255,0.2)] dark:hover:shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_0_0.5px_rgba(255,255,255,0.1)] transition-all duration-300 ease-in-out hover:scale-[1.02]"
+const glassmorphismCard = "backdrop-blur-xl bg-white/70 dark:bg-gray-950/70 border border-gray-200/50 dark:border-gray-800/50 shadow-2xl shadow-gray-200/20 dark:shadow-gray-950/20 hover:shadow-3xl hover:shadow-gray-300/30 dark:hover:shadow-gray-900/40 transition-all duration-500 ease-out hover:scale-[1.01] hover:-translate-y-1 rounded-2xl"
 
-const gradientText = "bg-gradient-to-r from-cyan-500 to-blue-600 dark:from-emerald-400 dark:to-cyan-400 bg-clip-text text-transparent"
+const gradientText = "bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600 dark:from-cyan-400 dark:via-emerald-400 dark:to-teal-400 bg-clip-text text-transparent font-semibold"
 
-const pulseGlow = "animate-pulse shadow-[0_0_20px_rgba(0,186,199,0.3)] dark:shadow-[0_0_20px_rgba(70,220,143,0.3)]"
+const pulseGlow = "shadow-[0_0_30px_rgba(6,182,212,0.4)] dark:shadow-[0_0_30px_rgba(52,211,153,0.4)]"
 
 const sampleAccounts = [
   { name: "Chase Total Checking", type: "Checking", balance: 8450.32, institution: "Chase Bank", icon: Building2, status: "healthy", color: "#0066CC" },

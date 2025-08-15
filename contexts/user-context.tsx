@@ -39,13 +39,97 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Check for existing user session on mount
   useEffect(() => {
     const checkUserSession = async () => {
+      console.log('=== Starting user session check ===');
       try {
+        // First, check if we're coming from an OAuth callback
+        // OAuth login should always override the logged out state
+        const urlParams = new URLSearchParams(window.location.search);
+        const isOAuthCallback = urlParams.has('oauth_success') || window.location.pathname === '/dashboard';
+        
         const hasLoggedOut = localStorage.getItem('user_logged_out') === 'true'
-        if (hasLoggedOut) {
+        if (hasLoggedOut && !isOAuthCallback) {
+          console.log('User has logged out, skipping session check');
           setLoading(false)
           return
+        } else if (hasLoggedOut && isOAuthCallback) {
+          console.log('OAuth callback detected, clearing logged out state');
+          localStorage.removeItem('user_logged_out');
         }
 
+        // Check for cookies first (from OAuth callback)
+        console.log('Checking for cookies...');
+        console.log('All cookies:', document.cookie);
+        const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+          const [key, value] = cookie.trim().split('=');
+          if (key) acc[key] = value;
+          return acc;
+        }, {} as Record<string, string>);
+        console.log('Parsed cookies:', cookies);
+
+        if (cookies.auth_token) {
+          console.log('Found auth_token in cookies, storing in localStorage');
+          // Store in localStorage for persistence
+          localStorage.setItem('auth_token', cookies.auth_token);
+        } else {
+          console.log('No auth_token cookie found');
+        }
+
+        if (cookies.user_data) {
+          try {
+            const userData = JSON.parse(decodeURIComponent(cookies.user_data));
+            console.log('Found user_data in cookies:', userData);
+            // Store in localStorage
+            localStorage.setItem('current_user_data', JSON.stringify(userData));
+            localStorage.setItem('current_user_id', userData.id);
+            // Clear the cookie after reading
+            document.cookie = 'user_data=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+          } catch (err) {
+            console.error('Failed to parse user_data cookie:', err);
+          }
+        } else {
+          console.log('No user_data cookie found');
+        }
+
+        // Check for OAuth token - this should take priority over everything else
+        const authToken = localStorage.getItem('auth_token')
+        if (authToken) {
+          try {
+            console.log('Found OAuth token, validating with backend...');
+            // Try to validate token with backend
+            const response = await fetch('http://localhost:8080/api/auth/validate', {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (response.ok) {
+              const userData = await response.json();
+              console.log('OAuth token validated successfully, user data:', userData);
+              setUser(userData);
+              localStorage.setItem('current_user_id', userData.id);
+              localStorage.setItem('current_user_data', JSON.stringify(userData));
+              // Clear any demo user data since we have a real user
+              localStorage.removeItem('demo_user_id');
+              setLoading(false);
+              return;
+            } else {
+              // Token is invalid, clear it
+              console.log('OAuth token invalid, clearing');
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('current_user_data');
+              localStorage.removeItem('current_user_id');
+            }
+          } catch (err) {
+            console.log('Backend not available for token validation:', err);
+            // If backend is not available, we should not fall back to demo user
+            // Clear the token and continue to check other auth methods
+            localStorage.removeItem('auth_token');
+          }
+        }
+
+        // Check for existing user data (but not demo users)
         const currentUserData = localStorage.getItem('current_user_data')
         if (currentUserData) {
           try {
@@ -62,17 +146,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
               return
             }
             
-            setUser(user)
-            setLoading(false)
-            return
+            // Only set user if it's not a demo user
+            if (user.email !== 'demo@truefi.ai') {
+              console.log('Setting existing user from localStorage:', user);
+              setUser(user)
+              setLoading(false)
+              return
+            } else {
+              console.log('Clearing demo user data from localStorage');
+              localStorage.removeItem('current_user_data')
+              localStorage.removeItem('current_user_id')
+            }
           } catch (err) {
             console.error('Failed to parse current user data:', err)
             localStorage.removeItem('current_user_data')
           }
         }
 
-                const demoUserId = localStorage.getItem('demo_user_id')
-        if (demoUserId) {
+        // Only check for demo user if no OAuth token and no real user data
+        const demoUserId = localStorage.getItem('demo_user_id')
+        if (demoUserId && !authToken) {
           // Check if demo user ID is the old format and clear it
           if (demoUserId === 'demo-user-id') {
             console.log('Clearing old demo user session')
@@ -82,6 +175,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             return
           }
           
+          console.log('Setting demo user as fallback');
           const demoUser = {
             id: '123e4567-e89b-12d3-a456-426614174000', // Fixed demo UUID
             email: 'demo@truefi.ai',

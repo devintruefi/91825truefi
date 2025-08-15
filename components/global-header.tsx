@@ -28,182 +28,194 @@ export function GlobalHeader() {
 
   return (
     <>
-      {/* Demo Banner */}
-      <div className="fixed top-0 left-0 right-0 z-[60] bg-cyan-50/80 dark:bg-cyan-900/10 border-b border-cyan-200 dark:border-cyan-800 min-h-[48px] py-2">
-        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-center text-center">
-          <p className="text-xs sm:text-sm text-cyan-700 dark:text-cyan-200 leading-tight">
-            <strong>TrueFi.ai is Coming Soon!</strong>{" "}
-            <span className="hidden sm:inline">
-              In the meantime, explore the demo using a sample profile named Alex –{" "}
-            </span>
-            <span className="sm:hidden">Explore the demo – </span>
-            <Link href="/chat" className="underline font-medium hover:text-cyan-600 transition-colors">
-              Chat with Penny
-            </Link>{" "}
-            !
-          </p>
-        </div>
-      </div>
-
-      <nav className="fixed top-[48px] left-0 right-0 z-50 w-full border-b bg-white/95 dark:bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:supports-[backdrop-filter]:bg-gray-900/60">
-        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
+      <nav className="fixed top-0 left-0 right-0 z-50 w-full bg-white/95 dark:bg-gray-950/95 backdrop-blur-2xl backdrop-saturate-200 border-b border-gray-200/30 dark:border-gray-800/30" style={{backdropFilter: 'saturate(180%) blur(20px)', WebkitBackdropFilter: 'saturate(180%) blur(20px)'}}>
+        <div className="w-full max-w-[980px] mx-auto px-4 sm:px-6">
+          <div className="flex h-11 items-center justify-between" style={{height: '44px'}}>
             {/* Logo */}
-            <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+            <Link href="/" className="flex items-center space-x-2 hover:opacity-70 transition-opacity duration-200">
               <div className="relative w-10 h-10">
                 <Image src="/images/fin-logo.png" alt="TrueFi.ai Logo" fill className="object-contain" />
               </div>
-              <span className="font-bold text-gray-900 dark:text-white text-2xl">TrueFi.ai</span>
+              <span className="text-[21px] font-semibold text-gray-900 dark:text-white" style={{letterSpacing: '-0.016em'}}>TrueFi.ai</span>
             </Link>
 
             {/* Desktop Navigation Links - Hidden on mobile */}
-            <div className="hidden md:flex items-center space-x-6">
+            <div className="hidden md:flex items-center space-x-8">
               <Link
                 href="/chat"
-                className="text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="text-[14px] text-gray-900 dark:text-gray-100 hover:opacity-70 transition-opacity duration-200" style={{fontWeight: 400, letterSpacing: '-0.016em'}}
               >
                 Chat with Penny
               </Link>
               <Link
                 href="/dashboard"
-                className="text-sm font-semibold text-gray-700 dark:text-gray-200 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="text-[14px] text-gray-900 dark:text-gray-100 hover:opacity-70 transition-opacity duration-200" style={{fontWeight: 400, letterSpacing: '-0.016em'}}
               >
                 My Dashboard
               </Link>
             </div>
 
             {/* Right side controls */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-4">
               <ThemeToggle />
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={toggleMenu}
-                className="text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 w-10 h-10"
+                className="text-gray-600 dark:text-gray-400 hover:opacity-70 w-9 h-9 rounded-full flex items-center justify-center transition-opacity duration-200"
                 aria-label="Toggle menu"
               >
-                <Menu className="h-6 w-6" />
+                <Menu className="h-[18px] w-[18px]" strokeWidth={1.5} />
               </Button>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Overlay */}
+      {/* Apple-style Overlay */}
       {isMenuOpen && (
-        <div className="fixed inset-0 bg-black/50 z-[70] transition-opacity duration-300" onClick={closeMenu} />
+        <div 
+          className="fixed inset-0 bg-black/40 z-[70] transition-opacity duration-500" 
+          onClick={closeMenu} 
+          style={{
+            backdropFilter: 'blur(10px)', 
+            WebkitBackdropFilter: 'blur(10px)',
+            opacity: isMenuOpen ? 1 : 0
+          }} 
+        />
       )}
 
-      {/* Slide-out Menu */}
+      {/* Apple-style Slide-out Sidebar */}
       <div
-        className={`fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-white dark:bg-gray-900 shadow-2xl z-[80] transform transition-transform duration-300 ease-in-out flex flex-col ${
+        className={`fixed top-0 right-0 h-full w-[300px] max-w-[85vw] bg-gray-50/95 dark:bg-gray-950/95 z-[80] transform flex flex-col ${
           isMenuOpen ? "translate-x-0" : "translate-x-full"
         }`}
+        style={{
+          backdropFilter: 'blur(50px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(50px) saturate(180%)',
+          transition: 'transform 0.5s cubic-bezier(0.32, 0.72, 0, 1)',
+          boxShadow: '-10px 0 30px rgba(0,0,0,0.1)'
+        }}
       >
-        {/* Menu Header - Fixed */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="relative w-8 h-8">
+        {/* Minimalist Header */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0">
+          <div className="flex items-center space-x-2">
+            <div className="relative w-7 h-7">
               <Image src="/images/fin-logo.png" alt="TrueFi.ai Logo" fill className="object-contain" />
             </div>
-            <span className="font-bold text-gray-900 dark:text-white text-xl">TrueFi.ai</span>
+            <span className="text-[19px] font-semibold text-gray-900 dark:text-white" style={{letterSpacing: '-0.019em'}}>TrueFi.ai</span>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
+          <button
             onClick={closeMenu}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 w-10 h-10"
+            className="p-2 rounded-full hover:bg-gray-200/50 dark:hover:bg-gray-800/50 transition-colors duration-200"
             aria-label="Close menu"
           >
-            <X className="h-5 w-5" />
-          </Button>
+            <X className="h-[18px] w-[18px] text-gray-500 dark:text-gray-400" strokeWidth={1.5} />
+          </button>
         </div>
-        {/* User name and sign out at the top if logged in */}
+        {/* User Section - Apple Style */}
         {user && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <span className="text-base font-medium text-gray-900 dark:text-white">{user.first_name}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              className="text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-800 w-10 h-10"
-              aria-label="Sign out"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
+          <div className="mx-5 mb-3 p-3 bg-white/50 dark:bg-gray-900/50 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">{user.first_name?.[0]?.toUpperCase()}</span>
+                </div>
+                <span className="text-[15px] text-gray-900 dark:text-white" style={{fontWeight: 500, letterSpacing: '-0.016em'}}>{user.first_name}</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="text-gray-500 hover:text-red-500 transition-colors duration-200"
+                aria-label="Sign out"
+              >
+                <LogOut className="h-[16px] w-[16px]" strokeWidth={1.5} />
+              </button>
+            </div>
           </div>
         )}
-        {/* Menu Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto max-h-[80vh]">
-          <div className="flex flex-col p-6 space-y-2">
-            {/* Main Navigation Links (always the same) */}
-            <Link
-              href="/"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-4 text-lg font-semibold text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              Home
-            </Link>
-            <Link
-              href="/chat"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-4 text-lg font-semibold text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              Chat with Penny
-            </Link>
-            <Link
-              href="/dashboard"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-4 text-lg font-semibold text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/how-to-use"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-4 text-lg font-semibold text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              How It Works
-            </Link>
-            <Link
-              href="/waitlist"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-4 text-lg font-semibold text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              Join Waitlist
-            </Link>
-            {/* Divider */}
-            <div className="border-t border-gray-200 dark:border-gray-700 my-4" />
-            <Link
-              href="/auth"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-3 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              Sign Up / Log In
-            </Link>
-            <Link
-              href="/about"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-3 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              About Us
-            </Link>
-            <Link
-              href="/mission"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-3 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              Our Mission
-            </Link>
-            <Link
-              href="/settings"
-              onClick={closeMenu}
-              className="flex items-center px-4 py-3 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors min-h-[48px] touch-manipulation"
-            >
-              Settings
-            </Link>
-            {/* Bottom padding for scroll comfort */}
-            <div className="h-4" />
+        {/* Navigation Content - Apple Style */}
+        <div className="flex-1 overflow-y-auto" style={{scrollbarWidth: 'none', msOverflowStyle: 'none'}}>
+          <div className="flex flex-col px-5 py-2">
+            {/* Primary Navigation */}
+            <div className="mb-6">
+              <Link
+                href="/"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2.5 text-[17px] text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-800/50 rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.021em'}}
+              >
+                Home
+              </Link>
+              <Link
+                href="/chat"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2.5 text-[17px] text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-800/50 rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.021em'}}
+              >
+                Chat with Penny
+              </Link>
+              <Link
+                href="/dashboard"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2.5 text-[17px] text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-800/50 rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.021em'}}
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/how-to-use"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2.5 text-[17px] text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-800/50 rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.021em'}}
+              >
+                How It Works
+              </Link>
+              <Link
+                href="/waitlist"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2.5 text-[17px] text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-800/50 rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.021em'}}
+              >
+                Join Waitlist
+              </Link>
+            </div>
+            {/* Secondary Navigation */}
+            <div className="pt-3 border-t border-gray-200/20 dark:border-gray-800/20">
+              <Link
+                href="/auth"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2 text-[15px] text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.014em'}}
+              >
+                Sign Up / Log In
+              </Link>
+              <Link
+                href="/about"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2 text-[15px] text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.014em'}}
+              >
+                About Us
+              </Link>
+              <Link
+                href="/mission"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2 text-[15px] text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.014em'}}
+              >
+                Our Mission
+              </Link>
+              <Link
+                href="/settings"
+                onClick={closeMenu}
+                className="flex items-center px-3 py-2 text-[15px] text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg transition-all duration-200" 
+                style={{fontWeight: 400, letterSpacing: '-0.014em'}}
+              >
+                Settings
+              </Link>
+            </div>
+            {/* Footer Space */}
+            <div className="h-6" />
           </div>
         </div>
       </div>
