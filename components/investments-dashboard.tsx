@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, Suspense, lazy } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -24,6 +24,10 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PlaidConnect } from "@/components/plaid-connect"
+
+// Lazy load heavy components
+const InvestmentCard = lazy(() => import('./investment-card').then(module => ({ default: module.InvestmentCard })))
+const InvestmentForm = lazy(() => import('./investment-form').then(module => ({ default: module.InvestmentForm })))
 
 interface Investment {
   id: string
@@ -94,117 +98,23 @@ const formatCompact = (num: number): string => {
   return formatCurrency(num)
 }
 
-export function InvestmentsDashboard({ userId }: { userId: string | null }) {
-  const [loading, setLoading] = useState(true)
-  const [accounts, setAccounts] = useState<InvestmentAccount[]>([])
-  const [investments, setInvestments] = useState<Investment[]>([])
-  const [activeView, setActiveView] = useState<"dashboard" | "holdings" | "performance" | "analysis">("dashboard")
-  const [config, setConfig] = useState<DashboardConfig>({
-    layout: "grid",
-    showPerformance: true,
-    showAllocation: true,
-    showDividends: true,
-    showNews: false,
-    showTargets: true,
-    groupBy: "account",
-    sortBy: "value",
-    timeframe: "1M"
-  })
-  
-  const [showAddInvestment, setShowAddInvestment] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedAccount, setSelectedAccount] = useState<string>("all")
-  const [selectedType, setSelectedType] = useState<string>("all")
-
-  // New investment form state
-  const [newInvestment, setNewInvestment] = useState<Partial<Investment>>({
-    type: "stock",
-    quantity: 0,
-    purchase_price: 0,
-    current_price: 0,
-    purchase_date: new Date().toISOString().split('T')[0]
-  })
-
-  useEffect(() => {
-    if (userId) {
-      fetchInvestmentData()
-    }
-  }, [userId])
-
-  const fetchInvestmentData = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}`)
-      if (response.ok) {
-        const data = await response.json()
-        setAccounts(data.accounts || [])
-        setInvestments(data.investments || [])
+// Memoized metrics calculation hook
+const usePortfolioMetrics = (investments: Investment[], accounts: InvestmentAccount[]) => {
+  return useMemo(() => {
+    if (!investments.length) {
+      return {
+        totalValue: 0,
+        totalCost: 0,
+        totalGainLoss: 0,
+        totalGainLossPercent: 0,
+        totalDividends: 0,
+        allocation: {},
+        riskDistribution: { low: 0, medium: 0, high: 0, very_high: 0 },
+        investmentCount: 0,
+        accountCount: accounts.length
       }
-    } catch (error) {
-      console.error("Failed to fetch investment data:", error)
-    } finally {
-      setLoading(false)
     }
-  }
 
-  const saveInvestment = async (investment: Partial<Investment>) => {
-    try {
-      const url = investment.id 
-        ? `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}/${investment.id}`
-        : `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}`
-      
-      const method = investment.id ? "PUT" : "POST"
-      
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(investment)
-      })
-
-      if (response.ok) {
-        await fetchInvestmentData()
-        setShowAddInvestment(false)
-        setEditingInvestment(null)
-        setNewInvestment({
-          type: "stock",
-          quantity: 0,
-          purchase_price: 0,
-          current_price: 0,
-          purchase_date: new Date().toISOString().split('T')[0]
-        })
-      }
-    } catch (error) {
-      console.error("Failed to save investment:", error)
-    }
-  }
-
-  const deleteInvestment = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this investment?")) return
-    
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}/${id}`,
-        { method: "DELETE" }
-      )
-      if (response.ok) {
-        await fetchInvestmentData()
-      }
-    } catch (error) {
-      console.error("Failed to delete investment:", error)
-    }
-  }
-
-  const toggleFavorite = async (id: string) => {
-    const investment = investments.find(i => i.id === id)
-    if (investment) {
-      await saveInvestment({ ...investment, is_favorite: !investment.is_favorite })
-    }
-  }
-
-  // Calculate portfolio metrics
-  const metrics = useMemo(() => {
     const totalValue = investments.reduce((sum, inv) => 
       sum + (inv.quantity * inv.current_price), 0
     )
@@ -251,16 +161,25 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
       accountCount: accounts.length
     }
   }, [investments, accounts])
+}
 
-  // Filter investments
-  const filteredInvestments = useMemo(() => {
+// Memoized filtered investments hook
+const useFilteredInvestments = (
+  investments: Investment[], 
+  searchQuery: string, 
+  selectedAccount: string, 
+  selectedType: string, 
+  sortBy: string
+) => {
+  return useMemo(() => {
     let filtered = [...investments]
     
     if (searchQuery) {
+      const query = searchQuery.toLowerCase()
       filtered = filtered.filter(inv => 
-        inv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.symbol?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+        inv.name.toLowerCase().includes(query) ||
+        inv.symbol?.toLowerCase().includes(query) ||
+        inv.tags?.some(tag => tag.toLowerCase().includes(query))
       )
     }
     
@@ -274,7 +193,7 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
     
     // Sort investments
     filtered.sort((a, b) => {
-      switch (config.sortBy) {
+      switch (sortBy) {
         case "value":
           return (b.quantity * b.current_price) - (a.quantity * a.current_price)
         case "performance":
@@ -291,9 +210,124 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
     })
     
     return filtered
-  }, [investments, searchQuery, selectedAccount, selectedType, config.sortBy])
+  }, [investments, searchQuery, selectedAccount, selectedType, sortBy])
+}
 
-  const exportData = () => {
+export function InvestmentsDashboard({ userId }: { userId: string | null }) {
+  const [loading, setLoading] = useState(true)
+  const [accounts, setAccounts] = useState<InvestmentAccount[]>([])
+  const [investments, setInvestments] = useState<Investment[]>([])
+  const [activeView, setActiveView] = useState<"dashboard" | "holdings" | "performance" | "analysis">("dashboard")
+  const [config, setConfig] = useState<DashboardConfig>({
+    layout: "grid",
+    showPerformance: true,
+    showAllocation: true,
+    showDividends: true,
+    showNews: false,
+    showTargets: true,
+    groupBy: "account",
+    sortBy: "value",
+    timeframe: "1M"
+  })
+  
+  const [showAddInvestment, setShowAddInvestment] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedAccount, setSelectedAccount] = useState<string>("all")
+  const [selectedType, setSelectedType] = useState<string>("all")
+
+  // Memoized metrics and filtered investments
+  const metrics = usePortfolioMetrics(investments, accounts)
+  const filteredInvestments = useFilteredInvestments(
+    investments, 
+    searchQuery, 
+    selectedAccount, 
+    selectedType, 
+    config.sortBy
+  )
+
+  // Debounced search to improve performance
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 300)
+    
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  useEffect(() => {
+    if (userId) {
+      fetchInvestmentData()
+    }
+  }, [userId])
+
+  const fetchInvestmentData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setAccounts(data.accounts || [])
+        setInvestments(data.investments || [])
+      }
+    } catch (error) {
+      console.error("Failed to fetch investment data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }, [userId])
+
+  const saveInvestment = useCallback(async (investment: Partial<Investment>) => {
+    try {
+      const url = investment.id 
+        ? `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}/${investment.id}`
+        : `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}`
+      
+      const method = investment.id ? "PUT" : "POST"
+      
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(investment)
+      })
+
+      if (response.ok) {
+        await fetchInvestmentData()
+        setShowAddInvestment(false)
+        setEditingInvestment(null)
+      }
+    } catch (error) {
+      console.error("Failed to save investment:", error)
+    }
+  }, [userId, fetchInvestmentData])
+
+  const deleteInvestment = useCallback(async (id: string) => {
+    if (!confirm("Are you sure you want to delete this investment?")) return
+    
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}/${id}`,
+        { method: "DELETE" }
+      )
+      if (response.ok) {
+        await fetchInvestmentData()
+      }
+    } catch (error) {
+      console.error("Failed to delete investment:", error)
+    }
+  }, [userId, fetchInvestmentData])
+
+  const toggleFavorite = useCallback(async (id: string) => {
+    const investment = investments.find(i => i.id === id)
+    if (investment) {
+      await saveInvestment({ ...investment, is_favorite: !investment.is_favorite })
+    }
+  }, [investments, saveInvestment])
+
+  const exportData = useCallback(() => {
     const csv = [
       ["Name", "Symbol", "Type", "Quantity", "Purchase Price", "Current Price", "Total Value", "Gain/Loss", "Purchase Date", "Notes"],
       ...filteredInvestments.map(inv => [
@@ -316,91 +350,7 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
     a.href = url
     a.download = `investments_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
-  }
-
-  const InvestmentCard = ({ investment }: { investment: Investment }) => {
-    const value = investment.quantity * investment.current_price
-    const gainLoss = (investment.current_price - investment.purchase_price) * investment.quantity
-    const gainLossPercent = ((investment.current_price - investment.purchase_price) / investment.purchase_price) * 100
-
-    return (
-      <Card className="hover:shadow-lg transition-all duration-200 group">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => toggleFavorite(investment.id)}
-              >
-                {investment.is_favorite ? 
-                  <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" /> : 
-                  <StarOff className="h-4 w-4" />
-                }
-              </Button>
-              <div>
-                <h4 className="font-semibold text-sm">{investment.name}</h4>
-                {investment.symbol && (
-                  <p className="text-xs text-gray-500">{investment.symbol}</p>
-                )}
-              </div>
-            </div>
-            <Badge variant={gainLoss >= 0 ? "default" : "destructive"} className="text-xs">
-              {investment.type}
-            </Badge>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-gray-500">Value</span>
-              <span className="font-semibold">{formatCurrency(value)}</span>
-            </div>
-            
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-gray-500">Gain/Loss</span>
-              <span className={cn(
-                "text-sm font-medium",
-                gainLoss >= 0 ? "text-green-600" : "text-red-600"
-              )}>
-                {formatCurrency(gainLoss)} ({formatPercent(gainLossPercent)})
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-gray-500">{investment.quantity} shares</span>
-              <span className="text-xs text-gray-500">@ {formatCurrency(investment.current_price)}</span>
-            </div>
-          </div>
-
-          <div className="flex gap-1 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 h-7 text-xs"
-              onClick={() => {
-                setEditingInvestment(investment)
-                setNewInvestment(investment)
-                setShowAddInvestment(true)
-              }}
-            >
-              <Edit2 className="h-3 w-3 mr-1" />
-              Edit
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 h-7 text-xs text-red-600 hover:text-red-700"
-              onClick={() => deleteInvestment(investment.id)}
-            >
-              <Trash2 className="h-3 w-3 mr-1" />
-              Delete
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
+  }, [filteredInvestments])
 
   if (loading) {
     return (
@@ -562,13 +512,6 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
                 className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
                 onClick={() => {
                   setEditingInvestment(null)
-                  setNewInvestment({
-                    type: "stock",
-                    quantity: 0,
-                    purchase_price: 0,
-                    current_price: 0,
-                    purchase_date: new Date().toISOString().split('T')[0]
-                  })
                   setShowAddInvestment(true)
                 }}
               >
@@ -692,9 +635,20 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {filteredInvestments.filter(i => i.is_favorite).map(inv => (
-                    <InvestmentCard key={inv.id} investment={inv} />
-                  ))}
+                  <Suspense fallback={<div>Loading...</div>}>
+                    {filteredInvestments.filter(i => i.is_favorite).map(inv => (
+                      <InvestmentCard 
+                        key={inv.id} 
+                        investment={inv}
+                        onEdit={() => {
+                          setEditingInvestment(inv)
+                          setShowAddInvestment(true)
+                        }}
+                        onDelete={() => deleteInvestment(inv.id)}
+                        onToggleFavorite={() => toggleFavorite(inv.id)}
+                      />
+                    ))}
+                  </Suspense>
                 </div>
               </CardContent>
             </Card>
@@ -709,9 +663,20 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
             <CardContent>
               {config.layout === "grid" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {filteredInvestments.map(investment => (
-                    <InvestmentCard key={investment.id} investment={investment} />
-                  ))}
+                  <Suspense fallback={<div>Loading...</div>}>
+                    {filteredInvestments.map(investment => (
+                      <InvestmentCard 
+                        key={investment.id} 
+                        investment={investment}
+                        onEdit={() => {
+                          setEditingInvestment(investment)
+                          setShowAddInvestment(true)
+                        }}
+                        onDelete={() => deleteInvestment(investment.id)}
+                        onToggleFavorite={() => toggleFavorite(investment.id)}
+                      />
+                    ))}
+                  </Suspense>
                 </div>
               )}
 
@@ -784,7 +749,6 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
                                 className="h-7 w-7"
                                 onClick={() => {
                                   setEditingInvestment(investment)
-                                  setNewInvestment(investment)
                                   setShowAddInvestment(true)
                                 }}
                               >
@@ -818,11 +782,22 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
                         </Badge>
                       </h3>
                       <div className="space-y-2">
-                        {filteredInvestments
-                          .filter(i => (i.risk_level || "medium") === risk)
-                          .map(investment => (
-                            <InvestmentCard key={investment.id} investment={investment} />
-                          ))}
+                        <Suspense fallback={<div>Loading...</div>}>
+                          {filteredInvestments
+                            .filter(i => (i.risk_level || "medium") === risk)
+                            .map(investment => (
+                              <InvestmentCard 
+                                key={investment.id} 
+                                investment={investment}
+                                onEdit={() => {
+                                  setEditingInvestment(investment)
+                                  setShowAddInvestment(true)
+                                }}
+                                onDelete={() => deleteInvestment(investment.id)}
+                                onToggleFavorite={() => toggleFavorite(investment.id)}
+                              />
+                            ))}
+                        </Suspense>
                       </div>
                     </div>
                   ))}
@@ -879,129 +854,13 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
             </DialogTitle>
           </DialogHeader>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Investment Name</Label>
-              <Input
-                value={newInvestment.name || ""}
-                onChange={(e) => setNewInvestment({...newInvestment, name: e.target.value})}
-                placeholder="e.g., Apple Inc."
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Symbol (Optional)</Label>
-              <Input
-                value={newInvestment.symbol || ""}
-                onChange={(e) => setNewInvestment({...newInvestment, symbol: e.target.value})}
-                placeholder="e.g., AAPL"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select 
-                value={newInvestment.type} 
-                onValueChange={(value) => setNewInvestment({...newInvestment, type: value as Investment["type"]})}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="stock">Stock</SelectItem>
-                  <SelectItem value="bond">Bond</SelectItem>
-                  <SelectItem value="etf">ETF</SelectItem>
-                  <SelectItem value="mutual_fund">Mutual Fund</SelectItem>
-                  <SelectItem value="crypto">Cryptocurrency</SelectItem>
-                  <SelectItem value="real_estate">Real Estate</SelectItem>
-                  <SelectItem value="commodity">Commodity</SelectItem>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Risk Level</Label>
-              <Select 
-                value={newInvestment.risk_level || "medium"} 
-                onValueChange={(value) => setNewInvestment({...newInvestment, risk_level: value as Investment["risk_level"]})}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="very_high">Very High</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Quantity</Label>
-              <Input
-                type="number"
-                value={newInvestment.quantity || ""}
-                onChange={(e) => setNewInvestment({...newInvestment, quantity: parseFloat(e.target.value)})}
-                placeholder="0"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Purchase Price</Label>
-              <Input
-                type="number"
-                value={newInvestment.purchase_price || ""}
-                onChange={(e) => setNewInvestment({...newInvestment, purchase_price: parseFloat(e.target.value)})}
-                placeholder="0.00"
-                step="0.01"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Current Price</Label>
-              <Input
-                type="number"
-                value={newInvestment.current_price || ""}
-                onChange={(e) => setNewInvestment({...newInvestment, current_price: parseFloat(e.target.value)})}
-                placeholder="0.00"
-                step="0.01"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Purchase Date</Label>
-              <Input
-                type="date"
-                value={newInvestment.purchase_date || ""}
-                onChange={(e) => setNewInvestment({...newInvestment, purchase_date: e.target.value})}
-              />
-            </div>
-            
-            <div className="col-span-2 space-y-2">
-              <Label>Notes (Optional)</Label>
-              <Textarea
-                value={newInvestment.notes || ""}
-                onChange={(e) => setNewInvestment({...newInvestment, notes: e.target.value})}
-                placeholder="Add any notes about this investment..."
-                rows={3}
-              />
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddInvestment(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => saveInvestment(newInvestment)}
-              disabled={!newInvestment.name || !newInvestment.quantity || !newInvestment.purchase_price || !newInvestment.current_price}
-            >
-              {editingInvestment ? "Update" : "Add"} Investment
-            </Button>
-          </DialogFooter>
+          <Suspense fallback={<div>Loading form...</div>}>
+            <InvestmentForm
+              investment={editingInvestment}
+              onSave={saveInvestment}
+              onCancel={() => setShowAddInvestment(false)}
+            />
+          </Suspense>
         </DialogContent>
       </Dialog>
 

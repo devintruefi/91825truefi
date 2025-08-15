@@ -253,6 +253,14 @@ export default function ManageAccountsPage() {
             </div>
             <div className="flex items-center gap-3">
               <Button
+                onClick={() => router.push('/dashboard')}
+                variant="outline"
+                size="sm"
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700"
+              >
+                ← Back to Dashboard
+              </Button>
+              <Button
                 onClick={handleRefreshData}
                 variant="outline"
                 size="sm"

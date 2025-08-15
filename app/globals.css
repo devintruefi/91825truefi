@@ -1571,3 +1571,35 @@ main, .main-content {
   padding-top: 0;
 }
 
+/* Custom scrollbar styling for connected accounts */
+.accounts-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(156 163 175) transparent;
+}
+
+.accounts-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.accounts-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.accounts-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgb(156 163 175);
+  border-radius: 3px;
+}
+
+.accounts-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(107 114 128);
+}
+
+/* Dark mode scrollbar */
+.dark .accounts-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgb(75 85 99);
+}
+
+.dark .accounts-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(107 114 128);
+}
+

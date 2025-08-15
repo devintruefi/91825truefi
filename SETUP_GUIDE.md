@@ -38,7 +38,7 @@ This opens a browser to log in with your Google account (devin@truefi.ai). Follo
 
 Then run (if the command above didn't work):
 
-gcloud auth application-default login
+gcloud auth application-default loging
 
 This sets default credentials for the proxy.
 
@@ -78,9 +78,8 @@ Run:
 
 cd TRUEFIBACKEND
 
-$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101$@127.0.0.1:5433/truefi_app_data?sslmode=disable'
-
 uvicorn main:app --reload --host 0.0.0.0 --port 8080
+
 
 
 or 5a. Start the Backend (in TRUEFIBACKEND/)

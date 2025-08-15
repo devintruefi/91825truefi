@@ -40,4 +40,5 @@ export const CATEGORY_META: Record<string, { icon: React.ReactNode; color: strin
   "Education": { icon: <GraduationCap className="w-4 h-4" />, color: "bg-blue-100 text-blue-700" },
   "Transfer": { icon: <Building2 className="w-4 h-4" />, color: "bg-gray-100 text-gray-700" },
   "Uncategorized": { icon: <Tag className="w-4 h-4" />, color: "bg-gray-100 text-gray-500" },
+  "Other": { icon: <Tag className="w-4 h-4" />, color: "bg-gray-100 text-gray-500" },
 } 

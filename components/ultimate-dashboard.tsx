@@ -101,7 +101,7 @@ export function UltimateDashboard() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [dateRange, setDateRange] = useState("30")
-  const [showAllAccounts, setShowAllAccounts] = useState(false)
+
   const [editingBudget, setEditingBudget] = useState(false)
   const [assetsLiabilities, setAssetsLiabilities] = useState<any>(null)
   const [loadingAssets, setLoadingAssets] = useState(true)
@@ -115,6 +115,9 @@ export function UltimateDashboard() {
   const [notifications, setNotifications] = useState<any[]>([])
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState<any>(null)
+  const [editingTransaction, setEditingTransaction] = useState<string | null>(null)
+  const [editingCategory, setEditingCategory] = useState<string>('')
+  const [updatingTransaction, setUpdatingTransaction] = useState<string | null>(null)
 
   // Calculate derived data
   const accounts = data?.accounts || []
@@ -295,6 +298,54 @@ export function UltimateDashboard() {
     router.push('/accounts/manage')
   }
 
+  // Handle transaction category editing
+  const startEditingCategory = (transactionId: string, currentCategory: string) => {
+    setEditingTransaction(transactionId)
+    setEditingCategory(currentCategory || 'Uncategorized')
+  }
+
+  const cancelEditingCategory = () => {
+    setEditingTransaction(null)
+    setEditingCategory('')
+  }
+
+  const saveTransactionCategory = async (transactionId: string) => {
+    if (!editingCategory.trim()) return
+    
+    setUpdatingTransaction(transactionId)
+    
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const response = await fetch(`${baseUrl}/transactions/${transactionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: editingCategory })
+      })
+      
+      if (response.ok) {
+        // Update local state
+        const updatedTransactions = transactions.map(t => 
+          t.id === transactionId 
+            ? { ...t, category: editingCategory }
+            : t
+        )
+        
+        // Update the transactions in the hook
+        // Note: This is a simplified approach - in a real app you'd want to update the hook properly
+        // For now, we'll refresh the data
+        refreshTransactions()
+      } else {
+        console.error('Failed to update transaction category')
+      }
+    } catch (error) {
+      console.error('Error updating transaction category:', error)
+    } finally {
+      setUpdatingTransaction(null)
+      setEditingTransaction(null)
+      setEditingCategory('')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
       {/* Content starts immediately below the fixed header */}
@@ -450,49 +501,55 @@ export function UltimateDashboard() {
                         size="sm"
                         onClick={handleManageAccounts}
                       >
-                        Manage All
+                        Manage Accounts
                       </Button>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {(showAllAccounts ? accounts : accounts.slice(0, 4)).map((account) => (
-                        <div key={account.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                          <div className="flex items-center space-x-4">
-                            <div className="p-3 bg-white dark:bg-gray-900 rounded-full">
-                              <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                    {accounts.length > 0 ? (
+                      <div className="space-y-3 max-h-80 overflow-y-auto pr-2 accounts-scrollbar">
+                        {accounts.length > 4 && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400 text-center pb-2 border-b border-gray-200 dark:border-gray-700">
+                            Scroll to see all {accounts.length} accounts
+                          </div>
+                        )}
+                        {accounts.map((account) => (
+                          <div key={account.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <div className="flex items-center space-x-4">
+                              <div className="p-3 bg-white dark:bg-gray-900 rounded-full">
+                                <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-gray-900 dark:text-white">{account.name}</p>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">{account.type}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-semibold text-gray-900 dark:text-white">{account.name}</p>
-                              <p className="text-sm text-gray-500 dark:text-gray-400">{account.type}</p>
+                            <div className="text-right">
+                              <p className="text-xl font-bold text-gray-900 dark:text-white">
+                                {formatCurrency(account.current_balance || 0)}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Available: {formatCurrency(account.available_balance || 0)}
+                              </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-xl font-bold text-gray-900 dark:text-white">
-                              {formatCurrency(account.current_balance || 0)}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Available: {formatCurrency(account.available_balance || 0)}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                      {accounts.length === 0 && (
-                        <div className="text-center py-8">
-                          <Building2 className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                          <h3 className="text-lg font-semibold mb-2">No accounts connected</h3>
-                          <p className="text-gray-600 dark:text-gray-400 mb-4">
-                            Connect your bank accounts to get started
-                          </p>
-                          <PlaidConnect 
-                            onSuccess={() => {
-                              refresh()
-                              fetchAssetsLiabilities()
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <Building2 className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                        <h3 className="text-lg font-semibold mb-2">No accounts connected</h3>
+                        <p className="text-gray-600 dark:text-gray-400 mb-4">
+                          Connect your bank accounts to get started
+                        </p>
+                        <PlaidConnect 
+                          onSuccess={() => {
+                            refresh()
+                            fetchAssetsLiabilities()
+                          }}
+                        />
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -691,7 +748,56 @@ export function UltimateDashboard() {
                                 <span className="font-medium">{transaction.name}</span>
                               </div>
                             </TableCell>
-                            <TableCell>{transaction.category || "Other"}</TableCell>
+                            <TableCell>
+                              {editingTransaction === transaction.id ? (
+                                <div className="flex items-center space-x-2">
+                                  <Select value={editingCategory} onValueChange={setEditingCategory}>
+                                    <SelectTrigger className="w-32">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="z-50" position="popper" side="top" align="start">
+                                      {Object.keys(CATEGORY_META).map(category => (
+                                        <SelectItem key={category} value={category}>
+                                          {category}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => saveTransactionCategory(transaction.id)}
+                                    disabled={updatingTransaction === transaction.id}
+                                    className="h-7 px-2 bg-green-600 hover:bg-green-700"
+                                  >
+                                    {updatingTransaction === transaction.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Check className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={cancelEditingCategory}
+                                    className="h-7 px-2"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center space-x-2 group">
+                                  <span>{transaction.category || "Other"}</span>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => startEditingCategory(transaction.id, transaction.category || "Other")}
+                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <Edit2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </TableCell>
                             <TableCell>{transaction.account_name || "Unknown"}</TableCell>
                             <TableCell className={`text-right font-bold ${transaction.amount < 0 ? "text-red-600" : "text-green-600"}`}>
                               {transaction.amount < 0 ? "-" : "+"}${Math.abs(transaction.amount).toFixed(2)}
