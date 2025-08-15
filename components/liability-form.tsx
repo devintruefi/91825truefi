@@ -75,7 +75,18 @@ export function LiabilityForm({ liability, onSuccess, onCancel }: LiabilityFormP
         : `${baseUrl}/liabilities/${user.id}`
       
       const method = liability?.id ? "PUT" : "POST"
-      const body = liability?.id ? { ...formData, id: liability.id } : formData
+      const body = liability?.id 
+        ? { 
+            ...formData, 
+            id: liability.id,
+            balance: formData.balance === '' ? 0 : formData.balance,
+            interest_rate: formData.interest_rate === '' ? 0 : formData.interest_rate
+          }
+        : { 
+            ...formData,
+            balance: formData.balance === '' ? 0 : formData.balance,
+            interest_rate: formData.interest_rate === '' ? 0 : formData.interest_rate
+          }
 
       console.log('Submitting liability:', { url, method, body, apiUrl: process.env.NEXT_PUBLIC_API_URL })
 
@@ -117,7 +128,8 @@ export function LiabilityForm({ liability, onSuccess, onCancel }: LiabilityFormP
   const handleInputChange = (field: keyof Liability, value: string | number) => {
     setFormData(prev => ({
       ...prev,
-      [field]: field === "balance" || field === "interest_rate" ? parseFloat(value.toString()) || 0 : value
+      [field]: (field === "balance" || field === "interest_rate") ? 
+        (value === '' ? '' : parseFloat(value.toString()) || 0) : value
     }))
   }
 

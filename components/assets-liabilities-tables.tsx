@@ -133,7 +133,10 @@ export function AssetsLiabilitiesTables() {
       const response = await fetch(url, {
         method: editingAsset ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(assetForm)
+        body: JSON.stringify({
+          ...assetForm,
+          value: assetForm.value === '' ? 0 : assetForm.value
+        })
       })
 
       if (response.ok) {
@@ -161,7 +164,12 @@ export function AssetsLiabilitiesTables() {
       const response = await fetch(url, {
         method: editingLiability ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(liabilityForm)
+        body: JSON.stringify({
+          ...liabilityForm,
+          balance: liabilityForm.balance === '' ? 0 : liabilityForm.balance,
+          interest_rate: liabilityForm.interest_rate === '' ? 0 : liabilityForm.interest_rate,
+          minimum_payment: liabilityForm.minimum_payment === '' ? 0 : liabilityForm.minimum_payment
+        })
       })
 
       if (response.ok) {
@@ -508,7 +516,7 @@ export function AssetsLiabilitiesTables() {
                 id="asset-value"
                 type="number"
                 value={assetForm.value}
-                onChange={(e) => setAssetForm({ ...assetForm, value: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setAssetForm({ ...assetForm, value: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
                 placeholder="0"
               />
             </div>
@@ -589,7 +597,7 @@ export function AssetsLiabilitiesTables() {
                 id="liability-balance"
                 type="number"
                 value={liabilityForm.balance}
-                onChange={(e) => setLiabilityForm({ ...liabilityForm, balance: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setLiabilityForm({ ...liabilityForm, balance: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
                 placeholder="0"
               />
             </div>
@@ -600,7 +608,7 @@ export function AssetsLiabilitiesTables() {
                 type="number"
                 step="0.01"
                 value={liabilityForm.interest_rate}
-                onChange={(e) => setLiabilityForm({ ...liabilityForm, interest_rate: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setLiabilityForm({ ...liabilityForm, interest_rate: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
                 placeholder="0"
               />
             </div>
@@ -610,7 +618,7 @@ export function AssetsLiabilitiesTables() {
                 id="liability-payment"
                 type="number"
                 value={liabilityForm.minimum_payment}
-                onChange={(e) => setLiabilityForm({ ...liabilityForm, minimum_payment: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setLiabilityForm({ ...liabilityForm, minimum_payment: e.target.value === '' ? '' : parseFloat(e.target.value) || 0 })}
                 placeholder="0"
               />
             </div>

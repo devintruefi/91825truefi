@@ -1252,7 +1252,7 @@ export function UltimateDashboard() {
                 <Input
                   type="number"
                   value={editingGoal?.target_amount || ""}
-                  onChange={(e) => setEditingGoal({...editingGoal, target_amount: parseFloat(e.target.value)})}
+                  onChange={(e) => setEditingGoal({...editingGoal, target_amount: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
                   placeholder="0.00"
                   step="0.01"
                 />
@@ -1263,7 +1263,7 @@ export function UltimateDashboard() {
               <Input
                 type="number"
                 value={editingGoal?.current_amount || ""}
-                onChange={(e) => setEditingGoal({...editingGoal, current_amount: parseFloat(e.target.value)})}
+                onChange={(e) => setEditingGoal({...editingGoal, current_amount: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
                 placeholder="0.00"
                 step="0.01"
               />
@@ -1282,6 +1282,13 @@ export function UltimateDashboard() {
               </Button>
               <Button onClick={() => {
                 // Handle save logic here
+                // Ensure numeric values are properly converted before saving
+                const goalToSave = {
+                  ...editingGoal,
+                  target_amount: editingGoal?.target_amount === '' ? 0 : editingGoal?.target_amount,
+                  current_amount: editingGoal?.current_amount === '' ? 0 : editingGoal?.current_amount
+                }
+                // TODO: Implement actual save logic with goalToSave
                 refresh()
                 setShowGoalModal(false)
               }}>

@@ -53,7 +53,12 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
     if (!formData.name || !formData.quantity || !formData.purchase_price || !formData.current_price) {
       return
     }
-    await onSave(formData)
+    await onSave({
+      ...formData,
+      quantity: formData.quantity === '' ? 0 : formData.quantity,
+      purchase_price: formData.purchase_price === '' ? 0 : formData.purchase_price,
+      current_price: formData.current_price === '' ? 0 : formData.current_price
+    })
   }
 
   return (
@@ -123,7 +128,7 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
           <Input
             type="number"
             value={formData.quantity || ""}
-            onChange={(e) => setFormData({...formData, quantity: parseFloat(e.target.value)})}
+            onChange={(e) => setFormData({...formData, quantity: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
             placeholder="0"
           />
         </div>
@@ -133,7 +138,7 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
           <Input
             type="number"
             value={formData.purchase_price || ""}
-            onChange={(e) => setFormData({...formData, purchase_price: parseFloat(e.target.value)})}
+            onChange={(e) => setFormData({...formData, purchase_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
             placeholder="0.00"
             step="0.01"
           />
@@ -144,7 +149,7 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
           <Input
             type="number"
             value={formData.current_price || ""}
-            onChange={(e) => setFormData({...formData, current_price: parseFloat(e.target.value)})}
+            onChange={(e) => setFormData({...formData, current_price: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
             placeholder="0.00"
             step="0.01"
           />

@@ -71,7 +71,9 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
         : `${baseUrl}/assets/${user.id}`
       
       const method = asset?.id ? "PUT" : "POST"
-      const body = asset?.id ? { ...formData, id: asset.id } : formData
+      const body = asset?.id 
+        ? { ...formData, id: asset.id, value: formData.value === '' ? 0 : formData.value }
+        : { ...formData, value: formData.value === '' ? 0 : formData.value }
 
       console.log('Submitting asset:', { url, method, body, apiUrl: process.env.NEXT_PUBLIC_API_URL })
 
@@ -113,7 +115,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
   const handleInputChange = (field: keyof Asset, value: string | number) => {
     setFormData(prev => ({
       ...prev,
-      [field]: field === "value" ? parseFloat(value.toString()) || 0 : value
+      [field]: field === "value" ? (value === '' ? '' : parseFloat(value.toString()) || 0) : value
     }))
   }
 
