@@ -17,6 +17,7 @@ import { AssetForm } from "@/components/asset-form"
 import { LiabilityForm } from "@/components/liability-form"
 import { InteractiveGoalChart } from "@/components/interactive-goal-chart"
 import { InvestmentsDashboard } from "@/components/investments-dashboard"
+import { FinancialReportPDF } from "@/components/financial-report-pdf"
 import { useRouter } from "next/navigation"
 import { 
   TrendingUp, TrendingDown, DollarSign, Target, PiggyBank, CreditCard, 
@@ -390,6 +391,31 @@ export function UltimateDashboard() {
               >
                 Connect Bank Accounts
               </Button>
+              <FinancialReportPDF
+                data={{
+                  user: user,
+                  accounts: accounts,
+                  assets: assetsLiabilities?.assets || [],
+                  liabilities: assetsLiabilities?.liabilities || [],
+                  goals: goals,
+                  investments: [],
+                  budgetCategories: budget?.categories || [],
+                  transactions: transactions,
+                  netWorth: assetsLiabilities?.net_worth || 0,
+                  totalAssets: assetsLiabilities?.total_assets || 0,
+                  totalLiabilities: assetsLiabilities?.total_liabilities || 0,
+                  totalBalance: totalBalance,
+                  monthlyIncome: (budget?.categories || []).filter(c => c.type === 'income').reduce((sum, c) => sum + (c.amount || 0), 0),
+                  monthlyExpenses: (budget?.categories || []).filter(c => c.type === 'expense').reduce((sum, c) => sum + (c.amount || 0), 0)
+                }}
+                buttonClassName="inline-flex items-center justify-center gap-2 px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 min-w-[140px]"
+                buttonText={
+                  <>
+                    <Download className="w-4 h-4" />
+                    Export Report
+                  </>
+                }
+              />
               <div className="hidden lg:flex items-center space-x-4">
                 <Select value={dateRange} onValueChange={setDateRange}>
                   <SelectTrigger className="w-32">
