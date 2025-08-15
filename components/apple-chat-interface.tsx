@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { useUser } from '@/contexts/user-context'
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown } from "lucide-react"
+import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown, Edit2, Check, X } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
 import "katex/dist/katex.min.css"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -503,6 +503,8 @@ export function AppleChatInterface() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState<string>("")
   
   // Add suggestions visibility state - initialize to true for SSR consistency
   const [suggestionsVisible, setSuggestionsVisible] = useState(true)
@@ -753,6 +755,54 @@ export function AppleChatInterface() {
     } catch (error) {
       console.error('Failed to load chat session:', error)
       setMessages(getInitialMessages())
+    }
+  }
+
+  // Start editing a session title
+  const startEditingSession = (sessionId: string, currentTitle: string) => {
+    setEditingSessionId(sessionId)
+    setEditingTitle(currentTitle)
+  }
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setEditingSessionId(null)
+    setEditingTitle("")
+  }
+
+  // Save the edited title
+  const saveSessionTitle = async (sessionId: string) => {
+    if (!editingTitle.trim()) {
+      cancelEditing()
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) return
+
+      const response = await fetch(`/api/chat/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ title: editingTitle.trim() })
+      })
+
+      if (response.ok) {
+        // Update the local state
+        setChatSessions(prev => prev.map(session => 
+          session.id === sessionId 
+            ? { ...session, title: editingTitle.trim() }
+            : session
+        ))
+        cancelEditing()
+      } else {
+        console.error('Failed to update session title')
+      }
+    } catch (error) {
+      console.error('Failed to update session title:', error)
     }
   }
 
@@ -1181,9 +1231,56 @@ export function AppleChatInterface() {
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
-                              <h3 className="font-medium text-gray-900 dark:text-white text-sm truncate">
-                                {session.title}
-                              </h3>
+                              {editingSessionId === session.id ? (
+                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                  <Input
+                                    value={editingTitle}
+                                    onChange={(e) => setEditingTitle(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        saveSessionTitle(session.id)
+                                      } else if (e.key === 'Escape') {
+                                        cancelEditing()
+                                      }
+                                    }}
+                                    className="h-6 text-sm"
+                                    autoFocus
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => saveSessionTitle(session.id)}
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <Check className="w-3 h-3 text-green-600" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={cancelEditing}
+                                    className="h-6 w-6 p-0"
+                                  >
+                                    <X className="w-3 h-3 text-red-600" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1 group">
+                                  <h3 className="font-medium text-gray-900 dark:text-white text-sm truncate flex-1">
+                                    {session.title}
+                                  </h3>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      startEditingSession(session.id, session.title)
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              )}
                               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
                                 {session.lastMessage || 'No messages yet'}
                               </p>

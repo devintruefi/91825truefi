@@ -370,6 +370,55 @@ async def get_session_messages(
         if conn:
             db_pool.putconn(conn)
 
+@app.patch("/api/chat/sessions/{session_id}")
+async def update_session_title(
+    session_id: str,
+    request: Request,
+    user_id: str = Depends(authenticate),
+    db = Depends(get_db_cursor)
+):
+    """Update the title of a chat session"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    cur, conn = db
+    try:
+        body = await request.json()
+        new_title = body.get("title")
+        
+        if not new_title:
+            raise HTTPException(status_code=400, detail="Title is required")
+        
+        # Verify session ownership
+        cur.execute("""
+            SELECT id FROM chat_sessions 
+            WHERE id = %s AND user_id = %s
+        """, (session_id, user_id))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Update the title
+        cur.execute("""
+            UPDATE chat_sessions 
+            SET title = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s AND user_id = %s
+        """, (new_title, session_id, user_id))
+        
+        conn.commit()
+        
+        return {"success": True, "title": new_title}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update session title: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update session title")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
 @app.post("/api/chat/sessions/{session_id}/messages")
 async def save_message(
     session_id: str,
@@ -658,8 +707,8 @@ async def chat(input: MessageInput, user_id: Optional[str] = Depends(authenticat
 
         session_id = input.session_id or str(uuid.uuid4())
 
-        # Create session if it doesn't exist
-        valid_session_id = create_session(cur, session_id, user_id, conn)
+        # Create session if it doesn't exist (pass the message for title generation)
+        valid_session_id = create_session(cur, session_id, user_id, conn, input.message)
 
         # Store user message
         store_message(cur, valid_session_id, "user", input.message, conn)
@@ -1049,7 +1098,7 @@ def get_data_dump(cur, user_id):
 
     return data
 
-def create_session(cur, session_id, user_id, conn):
+def create_session(cur, session_id, user_id, conn, initial_message=None):
     # Handle session_id - if it's not a valid UUID, generate a new one
     try:
         session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
@@ -1070,10 +1119,17 @@ def create_session(cur, session_id, user_id, conn):
     existing_session = cur.fetchone()
     
     if not existing_session:
+        # Generate a smart title based on the first message if provided
+        if initial_message:
+            # Truncate message to first 50 chars for title
+            title = initial_message[:50] + ("..." if len(initial_message) > 50 else "")
+        else:
+            title = f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
         cur.execute("""
             INSERT INTO chat_sessions (id, user_id, session_id, title, is_active, created_at, updated_at)
             VALUES (%s, %s, %s, %s, true, now(), now())
-        """, (str(uuid.uuid4()), str(user_uuid), str(session_uuid), f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"))
+        """, (str(uuid.uuid4()), str(user_uuid), str(session_uuid), title))
         conn.commit()
     
     return str(session_uuid)
