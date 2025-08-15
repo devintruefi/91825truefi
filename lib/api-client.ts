@@ -197,16 +197,36 @@ class ApiClient {
     last_sync_at?: string;
     accounts_count: number;
   }>> {
-    return this.request(`/plaid/connections/${userId}`, {
+    // Use Next.js API route directly, not the Python backend
+    const response = await fetch(`/api/plaid/connections/${userId}`, {
       method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch Plaid connections: ${response.statusText}`);
+    }
+    
+    return response.json();
   }
 
   async deletePlaidConnection(userId: string, connectionId: string): Promise<{ success: boolean; message: string }> {
-    return this.request(`/plaid/connections/${userId}`, {
+    // Use Next.js API route directly, not the Python backend
+    const response = await fetch(`/api/plaid/connections/${userId}`, {
       method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({ connectionId }),
     });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to delete Plaid connection: ${response.statusText}`);
+    }
+    
+    return response.json();
   }
 
   async getSpendingAnalytics(userId: string, startDate?: string, endDate?: string): Promise<{
