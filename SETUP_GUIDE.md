@@ -46,7 +46,7 @@ This sets default credentials for the proxy.
 Open a dedicated terminal (keep it open).
 Run:
 
-$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101%24@127.0.0.1:5433/truefi_app_data?sslmode=disable'
+$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101$@127.0.0.1:5433/truefi_app_data?sslmode=disable'
 cloud-sql-proxy truefi:us-central1:true-fi-db --port=5433
 
 Confirm it says "Ready for new connections." Don't close this terminal.
@@ -55,11 +55,12 @@ Confirm it says "Ready for new connections." Don't close this terminal.
 In your main project terminal:
 Run:
 
-$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101%24@127.0.0.1:5433/truefi_app_data?sslmode=disable'
+$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101$@127.0.0.1:5433/truefi_app_data?sslmode=disable'
 
 then turn on prisma:
 
 
+taskkill /f /im node.exe
 
 npx prisma generate
 
@@ -77,7 +78,7 @@ Run:
 
 cd TRUEFIBACKEND
 
-$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101%24@127.0.0.1:5433/truefi_app_data?sslmode=disable'
+$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101$@127.0.0.1:5433/truefi_app_data?sslmode=disable'
 
 uvicorn main:app --reload --host 0.0.0.0 --port 8080
 
@@ -398,3 +399,80 @@ export function EnhancedDashboardContent() {
 ---
 
 Would you like the exact code edit for your file? 
+
+## **Step 1: Check if your backend is running**
+
+First, let's verify that your backend is actually running and accessible. Open a new terminal and run:
+
+```bash
+curl http://localhost:8080/health
+```
+
+If you get a response like `{"status": "ok", "version": "2.0.0"}`, then your backend is running. If you get a connection refused error, then your backend isn't running.
+
+## **Step 2: Start your backend if it's not running**
+
+If the backend isn't running, navigate to the backend directory and start it:
+
+```bash
+cd TRUEFIBACKEND
+python main.py
+```
+
+You should see output like:
+```
+INFO:     Started server process [xxxx]
+INFO:     Waiting for application startup.
+INFO:     Uvicorn running on http://127.0.0.1:8080
+```
+
+## **Step 3: Check the browser console for debugging info**
+
+With the debugging logs I added, you should now see detailed information in your browser's developer console when you try the Google OAuth flow. 
+
+1. Open your browser's developer tools (F12)
+2. Go to the Console tab
+3. Try the Google OAuth flow again
+4. Look for the debug messages I added
+
+You should see logs like:
+- "OAuth init request received for provider: google"
+- "Backend URL: http://localhost:8080"
+- "Request body to backend: {...}"
+- "Backend response status: ..."
+
+## **Step 4: Check the backend logs**
+
+When you try the OAuth flow, check your backend terminal for any error messages or logs.
+
+## **Step 5: Test the backend endpoint directly**
+
+You can test if the backend OAuth endpoint is working by making a direct request:
+
+```bash
+curl -X POST http://localhost:8080/api/auth/oauth/init \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "google", "redirect_uri": "http://localhost:3000/api/auth/callback/google"}'
+```
+
+## **Common Issues and Solutions:**
+
+1. **Backend not running**: Start it with `python main.py` in the TRUEFIBACKEND directory
+2. **Port conflict**: Make sure nothing else is using port 8080
+3. **Environment variables**: Make sure you have the `.env.local` file with `BACKEND_URL=http://localhost:8080`
+4. **Frontend not restarted**: Restart your Next.js dev server after adding environment variables
+
+## **Quick Test:**
+
+Try this in your browser console to test the backend directly:
+
+```javascript
+<code_block_to_apply_changes_from>
+```
+
+**Please try these steps and let me know:**
+1. Is your backend running? (What does `curl http://localhost:8080/health` return?)
+2. What do you see in the browser console when you try the Google OAuth flow?
+3. What do you see in the backend terminal?
+
+This will help me identify exactly where the issue is occurring. 

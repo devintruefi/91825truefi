@@ -8,12 +8,18 @@ import uuid
 from typing import Dict, Any, List, Optional
 from .base_agent import BaseAgent
 from .sql_agent_simple import SimpleSQLAgent
+from .financial_modeling_agent import FinancialModelingAgent
 from .utils.entity_resolver import get_user_database_context, resolve_entities
 from .utils.data_enumerator import DataEnumerator
 from .utils.semantic_interpreter import SemanticInterpreter
 from .utils.result_validator import ResultValidator
 from .utils.query_explainer import QueryExplainer
 from .utils.schema_registry import SchemaRegistry
+from .utils.observability_enhanced import ObservabilityContext, json_log, log_routing_decision, create_audit_trail
+from .utils.routing_helper import RoutingGate, RoutingDecision
+from .utils.deterministic_router import DeterministicRouter
+from .utils.result_evaluation_hardening import ResultEvaluationHardening
+from .utils.currency_neutral_formatter import CurrencyNeutralFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +36,15 @@ class SimpleSupervisorAgent(BaseAgent):
     def __init__(self, openai_client, db_pool):
         super().__init__(openai_client, db_pool)
         self.sql_agent = SimpleSQLAgent(openai_client, db_pool)
+        self.financial_modeling_agent = FinancialModelingAgent(openai_client, db_pool, sql_agent=self.sql_agent)
         self.data_enumerator = DataEnumerator(db_pool)
         self.semantic_interpreter = SemanticInterpreter(openai_client)
         self.result_validator = ResultValidator(openai_client)
         self.query_explainer = QueryExplainer(openai_client)
         self.schema_registry = SchemaRegistry(db_pool)
+        self.routing_gate = RoutingGate()
+        self.deterministic_router = DeterministicRouter()
+        self.result_hardening = ResultEvaluationHardening()
         
     async def process(self, query: str, user_id: str, **kwargs) -> Dict[str, Any]:
         """
@@ -42,12 +52,33 @@ class SimpleSupervisorAgent(BaseAgent):
         """
         start_time = time.time()
         request_id = str(uuid.uuid4())[:8]
+        scenario = kwargs.get('scenario', None)
+        
+        # Initialize observability context
+        obs_ctx = ObservabilityContext('SimpleSupervisorAgent', request_id, scenario)
         
         try:
             user_name = kwargs.get('user_name', 'User')
             session_id = kwargs.get('session_id', '')
             
             logger.info(f"[{request_id}] Processing query for user {user_id}: {query[:100]}...")
+            
+            # Pre-validation check before processing
+            pre_validation = self.result_hardening.pre_llm_validation(
+                query, {'user_id': user_id}, {'user_id': user_id}
+            )
+            
+            if not pre_validation['can_proceed']:
+                logger.error(f"[{request_id}] Pre-validation failed: {pre_validation['issues']}")
+                return {
+                    "success": False,
+                    "response": "I cannot process this request due to validation issues.",
+                    "metadata": {
+                        "request_id": request_id,
+                        "validation_issues": pre_validation['issues'],
+                        "stage_failed": "pre_validation"
+                    }
+                }
             
             # Get user's financial context (same context for all agents)
             db_context = await get_user_database_context(user_id, self.db_pool)
@@ -92,11 +123,76 @@ class SimpleSupervisorAgent(BaseAgent):
             plan = await self._plan_route(query, schema_str, resolved, context_str)
             logger.info(f"[{request_id}] Plan generated: {json.dumps(plan, indent=2)}")
             
-            # ENFORCE: If plan touches user data but doesn't route to SQL, override
-            if self._requires_user_data(plan) and 'SQL_AGENT' not in plan.get('required_agents', []):
-                logger.warning(f"[{request_id}] Plan touches user data but didn't route to SQL. Overriding.")
-                plan['required_agents'] = ['SQL_AGENT']
-                plan['justification'] = 'Query involves user data - SQL agent required per policy'
+            # Use enhanced deterministic router with full audit trail
+            routing_result = self.deterministic_router.route_request(plan, db_context, request_id, user_id)
+            
+            routing_decision = routing_result['routing_decision']
+            sources_used = routing_result['data_sources_used']
+            sql_brief_needed = routing_result['sql_brief_needed']
+            
+            # Update plan with agents if needed
+            if routing_decision in ['SQL+Modeling', 'SQLOnly']:
+                if 'SQL_AGENT' not in plan.get('required_agents', []):
+                    plan['required_agents'] = list(set(plan.get('required_agents', []) + ['SQL_AGENT']))
+            
+            if routing_decision in ['SQL+Modeling', 'ModelingOnly']:
+                if 'FINANCIAL_MODELING_AGENT' not in plan.get('required_agents', []):
+                    plan['required_agents'] = list(set(plan.get('required_agents', []) + ['FINANCIAL_MODELING_AGENT']))
+            
+            # Log routing validation warnings
+            if routing_result['validation']['warnings']:
+                logger.warning(f"[{request_id}] Routing warnings: {routing_result['validation']['warnings']}")
+            
+            if not routing_result['validation']['valid']:
+                logger.error(f"[{request_id}] Routing validation failed: {routing_result['validation']['issues']}")
+            
+            # Enhanced observability logging with structured JSON and PII redaction
+            obs_ctx.set_routing(
+                routing_decision=routing_decision,
+                required_agents=plan.get('required_agents', []),
+                sources_used=sources_used,
+                sql_brief_used=sql_brief_needed
+            )
+            
+            # Add provenance step
+            obs_ctx.add_provenance_step(
+                "routing_decision", 
+                "SimpleSupervisorAgent",
+                {
+                    "decision": routing_decision,
+                    "validation": routing_result['validation'],
+                    "confidence_score": routing_result.get('confidence_score', 0.0),
+                    "decision_tree_path": routing_result.get('decision_tree_path', [])
+                }
+            )
+            
+            # Log routing decision with enhanced observability
+            log_routing_decision(
+                logger,
+                query,
+                routing_decision, 
+                plan.get('required_agents', []),
+                routing_result['validation'],
+                request_id
+            )
+            
+            obs_ctx.log(logger, 'INFO', 
+                       notes=f"Routing finalized: {routing_decision}",
+                       plan_intent=plan.get('intent', 'unknown'))
+            
+            logger.info(f"[{request_id}] routing_decision={routing_decision}; required_agents={plan.get('required_agents')}")
+            logger.info(f"[{request_id}] sql_brief_needed={sql_brief_needed}; sources_used={sources_used}")
+            
+            # Store routing metadata for downstream agents
+            kwargs['routing_metadata'] = {
+                'routing_decision': routing_decision,
+                'sources_used': sources_used,
+                'sql_brief_needed': sql_brief_needed,
+                'request_id': request_id,
+                'routing_validation': routing_result['validation'],
+                'confidence_score': routing_result.get('confidence_score', 0.0),
+                'decision_tree_path': routing_result.get('decision_tree_path', [])
+            }
             
             # Get all entity hints from resolved entities
             merchant_hints = resolved.get('merchant_names', [])
@@ -104,6 +200,12 @@ class SimpleSupervisorAgent(BaseAgent):
             all_resolved_entities = resolved  # This now includes budget_names, account_names, etc.
             
             # Execute based on plan's required agents
+            sql_result = None
+            modeling_result = None
+            used_sql = False
+            used_modeling = False
+            
+            # Check if we need SQL agent first (for transaction data)
             if 'SQL_AGENT' in plan.get('required_agents', []):
                 used_sql = True
                 # Use adapted query if available, otherwise original
@@ -169,6 +271,47 @@ class SimpleSupervisorAgent(BaseAgent):
                             "error": sql_result.get('error_message', 'SQL agent failed')
                         }
                     }
+            
+            # Check if we need Financial Modeling agent
+            if 'FINANCIAL_MODELING_AGENT' in plan.get('required_agents', []):
+                used_modeling = True
+                logger.info(f"[{request_id}] Routing to Financial Modeling Agent")
+                
+                # Route to Financial Modeling Agent
+                modeling_result = await self.financial_modeling_agent.process(
+                    query=query,
+                    user_id=user_id,
+                    **kwargs
+                )
+                
+                # Check if modeling failed
+                if not modeling_result.get('success'):
+                    logger.error(f"[{request_id}] Financial Modeling agent failed: {modeling_result.get('error_message', 'Unknown error')}")
+                    return {
+                        "success": False,
+                        "response": f"I couldn't complete the financial analysis: {modeling_result.get('error_message', 'Modeling error')}",
+                        "metadata": {
+                            "request_id": request_id,
+                            "execution_time": time.time() - start_time,
+                            "routing": {
+                                "attempted": "FinancialModelingAgent",
+                                "reasoning": plan.get('justification', ''),
+                                "query_type": plan.get('intent', '')
+                            },
+                            "error_source": "modeling_agent",
+                            "error": modeling_result.get('error_message', 'Modeling agent failed')
+                        }
+                    }
+            
+            # Determine which result to use for final response
+            if used_modeling:
+                # Financial modeling takes precedence for the response
+                final_response = modeling_result.get('response', '')
+                if modeling_result.get('recommendations'):
+                    final_response += "\n\n**Recommendations:**\n"
+                    for i, rec in enumerate(modeling_result['recommendations'], 1):
+                        final_response += f"{i}. {rec}\n"
+            elif used_sql and sql_result:
                 
                 # Optional validation and explanation (can be disabled for performance)
                 skip_validation = kwargs.get('skip_validation', False)
@@ -216,15 +359,37 @@ class SimpleSupervisorAgent(BaseAgent):
                     query, context_str, sql_result, user_name, 
                     validation, explanation, adapted_query_info
                 )
-            elif 'KNOWLEDGE_AGENT' in plan.get('required_agents', []):
+            elif routing_decision == 'KnowledgeOnly':
                 # Knowledge agent not yet available
                 used_sql = False
                 final_response = "This question requires general financial knowledge explanation. That capability isn't enabled yet - I can only answer questions about your specific financial data right now."
+            elif routing_decision == 'Unsupported':
+                # Unsupported query type
+                used_sql = False
+                logger.error(f"[{request_id}] Unsupported routing decision")
+                final_response = "I'm not sure how to handle this type of question. Please try rephrasing your question about your financial data or ask for specific analysis."
             else:
                 # Should not reach here per policy, but handle gracefully
                 used_sql = False
-                logger.error(f"[{request_id}] Unexpected routing: no valid agent in plan")
+                logger.error(f"[{request_id}] Unexpected routing: {routing_decision}")
                 final_response = "I need to route this to the appropriate agent. Please try rephrasing your question about your financial data."
+            
+            # Post-validation of final response
+            response_validation = self.result_hardening.validate_response_quality(
+                final_response, 
+                {'query': query, 'user_id': user_id},
+                {'request_id': request_id, 'routing_decision': routing_decision}
+            )
+            
+            # Log validation results
+            if not response_validation['valid']:
+                logger.error(f"[{request_id}] Response validation failed: {response_validation['issues']}")
+            
+            if response_validation['warnings']:
+                logger.warning(f"[{request_id}] Response validation warnings: {response_validation['warnings']}")
+                
+            if response_validation['score'] < 0.7:
+                logger.warning(f"[{request_id}] Low response quality score: {response_validation['score']}")
             
             execution_time = time.time() - start_time
             logger.info(f"[{request_id}] Query processed in {execution_time:.2f}s")
@@ -232,10 +397,29 @@ class SimpleSupervisorAgent(BaseAgent):
             # Enhanced logging with full details
             sql_queries = []
             api_calls = []
+            agents_used = []
             
             if used_sql and isinstance(sql_result, dict):
                 sql_queries = sql_result.get('sql_queries', [])
                 api_calls = sql_result.get('api_calls', [])
+                agents_used.append('SQL_AGENT')
+            
+            if used_modeling and isinstance(modeling_result, dict):
+                agents_used.append('FINANCIAL_MODELING_AGENT')
+            
+            # Create comprehensive audit trail
+            audit_trail = create_audit_trail(
+                agent_name="SimpleSupervisorAgent",
+                user_id=user_id,
+                query=query,
+                routing_decision=routing_decision,
+                data_sources=sources_used,
+                response_quality_score=response_validation.get('score', 0.0),
+                request_id=request_id
+            )
+            
+            # Log audit trail
+            logger.info(json.dumps(audit_trail, default=str, separators=(',', ':')))
             
             # Log execution for monitoring - COMPREHENSIVE logging of all inputs/outputs
             self._log_execution(
@@ -260,10 +444,11 @@ class SimpleSupervisorAgent(BaseAgent):
                     'response_length': len(final_response),
                     'routing': {
                         'used_sql': used_sql,
+                        'used_modeling': used_modeling,
                         'reasoning': plan.get('justification', ''),
                         'query_type': plan.get('intent', ''),
                         'required_agents': plan.get('required_agents', []),
-                        'delegated_to': 'SimpleSQLAgent' if used_sql else 'Direct Response'
+                        'delegated_to': ', '.join(agents_used) if agents_used else 'Direct Response'
                     },
                     'sql_agent_complete_response': sql_result if used_sql and isinstance(sql_result, dict) else None,
                     'sql_agent_summary': {
@@ -289,21 +474,34 @@ class SimpleSupervisorAgent(BaseAgent):
                     "execution_time": execution_time,
                     "routing": {
                         "used_sql": used_sql,
+                        "used_modeling": used_modeling,
                         "reasoning": plan.get('justification', ''),
                         "query_type": plan.get('intent', ''),
                         "required_agents": plan.get('required_agents', []),
-                        "delegated_to": 'SimpleSQLAgent' if used_sql else 'Direct Response'
+                        "delegated_to": ', '.join(agents_used) if agents_used else 'Direct Response'
                     },
                     "sql_agent_performance": {
                         "success": sql_result.get('success') if used_sql and isinstance(sql_result, dict) else None,
                         "row_count": len(sql_result.get('data', [])) if used_sql and isinstance(sql_result, dict) else None,
                         "execution_time": sql_result.get('execution_time') if used_sql and isinstance(sql_result, dict) else None
                     } if used_sql else None,
+                    "modeling_agent_performance": {
+                        "success": modeling_result.get('success') if used_modeling and isinstance(modeling_result, dict) else None,
+                        "confidence": modeling_result.get('confidence') if used_modeling and isinstance(modeling_result, dict) else None,
+                        "iterations": modeling_result.get('metadata', {}).get('iterations') if used_modeling and isinstance(modeling_result, dict) else None
+                    } if used_modeling else None,
                     "merchant_hints": merchant_hints if merchant_hints else [],
                     "semantic_interpretation": semantic_interpretation if 'semantic_interpretation' in locals() else None,
                     "query_adapted": adapted_query_info is not None if 'adapted_query_info' in locals() else False,
                     "validation_status": validation.get('validation_status') if 'validation' in locals() and validation else None,
-                    "explanation_generated": explanation is not None if 'explanation' in locals() else False
+                    "explanation_generated": explanation is not None if 'explanation' in locals() else False,
+                    "response_validation": {
+                        "quality_score": response_validation['score'],
+                        "valid": response_validation['valid'],
+                        "issues_count": len(response_validation['issues']),
+                        "warnings_count": len(response_validation['warnings']),
+                        "forbidden_tokens_found": len(response_validation['forbidden_tokens_found'])
+                    }
                 }
             }
             
@@ -349,88 +547,14 @@ class SimpleSupervisorAgent(BaseAgent):
     
     def _build_context_string(self, db_context: Dict[str, Any], user_name: str) -> str:
         """
-        Build a compact but comprehensive financial context string.
+        Build a compact but comprehensive financial context string using currency-neutral formatting.
         This same context is shared by all agents.
         """
-        context_parts = [f"User: {user_name}"]
+        # Create currency-neutral formatter
+        user_currency = db_context.get('user_currency') or db_context.get('currency_preference')
+        formatter = CurrencyNeutralFormatter(user_currency)
         
-        # Accounts - using correct key 'account_details'
-        accounts = db_context.get('account_details', [])
-        if accounts:
-            context_parts.append("\nAccounts:")
-            for acc in accounts[:20]:  # Limit for context size
-                context_parts.append(f"- {acc['name']}: ${acc['balance']:,.2f} ({acc['type']})")
-        
-        # Assets
-        assets = db_context.get('manual_assets', [])
-        if assets:
-            context_parts.append("\nAssets:")
-            for asset in assets[:10]:
-                context_parts.append(f"- {asset['name']}: ${asset['value']:,.2f}")
-        
-        # Liabilities
-        liabilities = db_context.get('manual_liabilities', [])
-        if liabilities:
-            context_parts.append("\nLiabilities:")
-            for liability in liabilities[:10]:
-                context_parts.append(f"- {liability['name']}: ${liability['balance']:,.2f}")
-        
-        # Goals
-        goals = db_context.get('goals', [])
-        if goals:
-            context_parts.append("\nGoals:")
-            for goal in goals[:10]:
-                progress = (goal['current_amount'] / goal['target_amount'] * 100) if goal['target_amount'] > 0 else 0
-                context_parts.append(f"- {goal['name']}: ${goal['current_amount']:,.2f} / ${goal['target_amount']:,.2f} ({progress:.1f}%)")
-        
-        # Budgets - Include more detail about budget categories
-        budgets = db_context.get('budgets', [])
-        budget_categories = db_context.get('budget_categories', [])
-        
-        if budgets:
-            context_parts.append("\nBudgets:")
-            for budget in budgets[:10]:
-                context_parts.append(f"- {budget['name']}: ${budget['amount']:,.2f} per {budget['period']}")
-                # Add budget categories if available
-                budget_cats = [cat for cat in budget_categories if cat.get('budget_id') == budget.get('id')]
-                if budget_cats:
-                    for cat in budget_cats[:5]:
-                        context_parts.append(f"  • {cat.get('category', 'Unknown')}: ${cat.get('limit', 0):,.2f}")
-        
-        # Recurring Income
-        income = db_context.get('recurring_income', [])
-        if income:
-            context_parts.append("\nRecurring Income:")
-            for inc in income[:5]:
-                context_parts.append(f"- {inc['source']}: ${inc['gross_monthly']:,.2f}/month")
-        
-        # Top Categories (last 6 months)
-        categories = db_context.get('top_categories', [])
-        if categories:
-            context_parts.append("\nTop Spending Categories:")
-            for cat in categories[:10]:
-                context_parts.append(f"- {cat['category']}: ${abs(cat['total_spent']):,.2f}")
-        
-        # Top Merchants (last 6 months)
-        merchants = db_context.get('top_merchants', [])
-        if merchants:
-            context_parts.append("\nTop Merchants:")
-            for merchant in merchants[:10]:
-                context_parts.append(f"- {merchant['merchant']}: ${abs(merchant['total_spent']):,.2f}")
-        
-        # Use financial_summary for net worth if available, otherwise calculate
-        financial_summary = db_context.get('financial_summary', {})
-        if financial_summary and 'net_worth' in financial_summary:
-            net_worth = financial_summary['net_worth']
-        else:
-            # Fallback calculation
-            total_assets = sum(acc['balance'] for acc in accounts) + sum(a['value'] for a in assets)
-            total_liabilities = sum(l['balance'] for l in liabilities)
-            net_worth = total_assets - total_liabilities
-        
-        context_parts.append(f"\nNet Worth: ${net_worth:,.2f}")
-        
-        return '\n'.join(context_parts)
+        return formatter.build_currency_neutral_context(db_context, user_name)
     
     def _get_merchant_hints(self, query: str, db_context: Dict[str, Any]) -> List[str]:
         """
@@ -470,12 +594,15 @@ class SimpleSupervisorAgent(BaseAgent):
 TODAY'S DATE: {current_date}
 
 CAPABILITIES:
-- SQL_AGENT: Authoritative access to user data via SQL (transactions, accounts, budgets, goals, assets, liabilities, insurances, etc.). Can filter by user_id, time, merchants, categories, accounts; can aggregate, rank, compare, and compute metrics. This is REQUIRED for any answer involving user data.
+- SQL_AGENT: Authoritative access to user data via SQL (transactions, accounts, budgets, goals, assets, liabilities, insurances, etc.). Can filter by user_id, time, merchants, categories, accounts; can aggregate, rank, compare, and compute metrics. This is REQUIRED for transaction queries and data retrieval.
+- FINANCIAL_MODELING_AGENT: Complex financial calculations, projections, scenario analysis, optimization. Use for: retirement planning, affordability analysis, debt optimization, investment projections, "what-if" scenarios, multi-year forecasts, financial goal planning.
 - KNOWLEDGE_AGENT (future): financial textbook knowledge, explanations, education. (Not available now.)
 - DIRECT_CONTEXT: DISALLOWED for answers. Context is informational only, not a data source.
 
 POLICY:
-- If the question touches user data in any way (lists/values/totals/ranks/filters/metrics/timeframes), you MUST set required_agents = ["SQL_AGENT"].
+- If the question involves financial projections, calculations, optimization, or scenario analysis, route to FINANCIAL_MODELING_AGENT.
+- If the question is about current/past transaction data, spending patterns, or account balances, route to SQL_AGENT.
+- For complex questions that need both data AND modeling (e.g., "can I afford X based on my spending?"), use both agents: ["SQL_AGENT", "FINANCIAL_MODELING_AGENT"].
 - Only if the question is purely general knowledge (no user data) would you route to KNOWLEDGE_AGENT, but that agent is not yet available—return that as "unsupported_for_now".
 
 INPUTS PROVIDED:
@@ -485,15 +612,15 @@ INPUTS PROVIDED:
 
 OUTPUT JSON (MANDATORY):
 {{
-  "intent": "rank|aggregate|filter|lookup|compare|trend|list|explain_general",
+  "intent": "rank|aggregate|filter|lookup|compare|trend|list|explain_general|projection|optimization|scenario|affordability",
   "data_sources": ["transactions","accounts","goals","budgets","manual_assets","manual_liabilities","insurances", ...],
   "dimensions": ["merchant_name","category","account_name", ...] or [],
   "metrics": ["sum_spend","count_tx","balance","goal_target","goal_current", ...] or [],
   "timeframe": {{"type":"explicit|default","window":"last_12_months|month_to_date|year_to_date|all_time|<iso/interval>"}},
   "filters": {{"user_id":"<required>", "merchants":[], "categories":[], "accounts":[], "amount_sign":"expenses|income|all"}},
   "entities_detected": {{"merchants":[], "categories":[], "accounts":[]}},
-  "required_agents": ["SQL_AGENT"] or ["KNOWLEDGE_AGENT"],
-  "justification": "Why SQL is required and what will be queried."
+  "required_agents": ["SQL_AGENT"] or ["FINANCIAL_MODELING_AGENT"] or ["SQL_AGENT", "FINANCIAL_MODELING_AGENT"] or ["KNOWLEDGE_AGENT"],
+  "justification": "Why these agents are required and what will be analyzed."
 }}
 
 Database Schema:
@@ -537,32 +664,7 @@ Entity Resolution Results:
                 "filters": {"user_id": "<required>"}
             }
     
-    def _requires_user_data(self, plan: Dict[str, Any]) -> bool:
-        """
-        Check if the plan involves user data (not just general knowledge).
-        """
-        # Check for data sources that indicate user data
-        data_sources = plan.get('data_sources', [])
-        if data_sources:
-            return True
-        
-        # Check for metrics that indicate calculations on user data
-        metrics = plan.get('metrics', [])
-        if metrics:
-            return True
-        
-        # Check for specific intents that involve user data
-        intent = plan.get('intent', '')
-        data_intents = ['rank', 'aggregate', 'filter', 'lookup', 'compare', 'trend', 'list']
-        if intent in data_intents:
-            return True
-        
-        # Check if entities were detected (indicates user-specific data)
-        entities = plan.get('entities_detected', {})
-        if any(entities.values()):
-            return True
-        
-        return False
+    # Note: Routing helper functions moved to routing_helper.py for deterministic logic
     
     async def _generate_final_response(self, query: str, context: str, 
                                       sql_result: Dict[str, Any], user_name: str,

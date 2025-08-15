@@ -792,7 +792,7 @@ def build_comprehensive_context_prompt(db_context: Dict[str, Any], query: str) -
 
 def clear_entity_cache(user_id: str = None):
     """
-    Clear entity cache for a specific user or all users.
+    Clear entity cache for a user or all users.
     """
     if user_id:
         cache_key = f"entity_cache_{user_id}"

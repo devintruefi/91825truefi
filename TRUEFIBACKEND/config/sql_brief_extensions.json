@@ -1,0 +1,10 @@
+[
+  {
+    "fields": [
+      "historical_monthly_expenses",
+      "historical_monthly_income",
+      "income_volatility_metric"
+    ],
+    "reason": "Needed to calculate essential expenses, assess reserve sufficiency, and adjust for volatile income in affordability analysis."
+  }
+]

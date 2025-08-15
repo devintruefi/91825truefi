@@ -24,8 +24,8 @@ class DataEnumerator:
         
     async def get_user_enumerations(self, user_id: str) -> Dict[str, Any]:
         """
-        Get all relevant enumerations for a specific user.
-        This includes both system-wide and user-specific values.
+        Get all relevant enumerations for a user.
+        This includes both system-wide and user values.
         """
         cache_key = f"user_enum_{user_id}"
         
@@ -181,7 +181,7 @@ class DataEnumerator:
         return "\n".join(context_parts)
     
     def clear_cache(self, user_id: Optional[str] = None):
-        """Clear cache for a specific user or all users."""
+        """Clear cache for a user or all users."""
         if user_id:
             cache_key = f"user_enum_{user_id}"
             self._cache.pop(cache_key, None)

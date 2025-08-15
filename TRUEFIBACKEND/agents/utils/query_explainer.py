@@ -250,3 +250,172 @@ Explain why this might have happened and what they can try instead."""
             parts.append(f"Has transactions in {len(categories)} categories")
         
         return "\n".join(parts) if parts else "Limited data available"
+    
+    async def explain_for_user(self,
+                              query: str,
+                              response: str,
+                              metadata: Dict[str, Any],
+                              user_name: str = "User") -> Dict[str, Any]:
+        """
+        Generate a user-safe explanation of what happened, with PII redaction.
+        This is the public-facing mirror that can be safely shown to users.
+        
+        Args:
+            query: Original user query
+            response: Final response given to user
+            metadata: Processing metadata (routing, validation, etc.)
+            user_name: User's name for personalization
+            
+        Returns:
+            User-safe explanation with PII redacted
+        """
+        
+        system_prompt = f"""You are explaining to {user_name} how their financial question was processed.
+Create a transparent but user-friendly explanation that builds trust.
+
+IMPORTANT RULES:
+1. Never mention internal system details (agent names, database queries, routing decisions)
+2. Never expose technical metadata or validation scores
+3. Focus on what matters to the user: accuracy, completeness, assumptions
+4. Use warm, encouraging language
+5. Redact any PII or sensitive technical details
+
+Structure your explanation to help the user understand:
+- How their question was interpreted
+- What data was analyzed
+- Any assumptions made
+- Why certain recommendations were given
+- What they might want to explore next
+
+Return a JSON object with these fields:
+{{
+    "interpretation": "How we understood your question",
+    "data_analyzed": "What financial information was reviewed", 
+    "key_assumptions": ["List of assumptions made in the analysis"],
+    "confidence_level": "High/Medium/Low based on data completeness",
+    "why_this_answer": "Brief explanation of the reasoning approach",
+    "next_steps": ["Suggested follow-up questions or actions"],
+    "limitations": ["Any important caveats or limitations to note"]
+}}
+
+Be helpful and educational, but never overwhelm with technical details."""
+
+        # Extract relevant metadata in user-friendly terms
+        routing_info = metadata.get('routing', {})
+        validation_info = metadata.get('response_validation', {})
+        
+        # Build context for the explanation
+        context_parts = []
+        context_parts.append(f"Original question: {query}")
+        context_parts.append(f"Response provided: {response[:500]}...")  # Truncate for context
+        
+        # Add routing information in user-friendly terms
+        if routing_info.get('used_sql'):
+            context_parts.append("Data source: Your transaction history and account information")
+        if routing_info.get('used_modeling'):
+            context_parts.append("Analysis type: Financial modeling and calculations")
+        
+        # Add quality information
+        if validation_info.get('quality_score'):
+            quality = validation_info['quality_score']
+            if quality > 0.8:
+                context_parts.append("Response quality: High confidence")
+            elif quality > 0.6:
+                context_parts.append("Response quality: Medium confidence")
+            else:
+                context_parts.append("Response quality: Lower confidence due to data limitations")
+        
+        # Add execution time if reasonable
+        execution_time = metadata.get('execution_time', 0)
+        if execution_time > 0:
+            context_parts.append(f"Processing time: {execution_time:.1f} seconds")
+        
+        context = "\\n".join(context_parts)
+        
+        user_prompt = f"""Please explain this financial analysis interaction:
+
+{context}
+
+Focus on being helpful and transparent while keeping the explanation accessible."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        try:
+            response_obj = await self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                response_format={"type": "json_object"},
+                max_tokens=1000,
+                temperature=0.3
+            )
+            
+            explanation = json.loads(response_obj.choices[0].message.content)
+            
+            # Add metadata about the explanation generation
+            explanation['generated_at'] = logger.info("Generated user explanation")
+            explanation['explanation_type'] = 'user_safe_mirror'
+            explanation['contains_pii'] = False  # Should be redacted
+            
+            return explanation
+            
+        except Exception as e:
+            logger.error(f"Error generating user explanation: {e}")
+            # Return a safe fallback explanation
+            return {
+                "interpretation": "We analyzed your financial question using your account and transaction data.",
+                "data_analyzed": "Your recent financial activity and account balances",
+                "key_assumptions": ["Standard financial calculation methods were used"],
+                "confidence_level": "Medium",
+                "why_this_answer": "Our analysis followed established financial planning principles.",
+                "next_steps": ["Consider reviewing the specific numbers mentioned", "Ask follow-up questions if anything needs clarification"],
+                "limitations": ["Results depend on the completeness and accuracy of your financial data"],
+                "generated_at": "Error fallback",
+                "explanation_type": "user_safe_mirror",
+                "contains_pii": False,
+                "error": "Explanation generation failed, using fallback"
+            }
+    
+    def redact_pii_from_explanation(self, explanation: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Additional PII redaction pass for explanations.
+        
+        Args:
+            explanation: Explanation dictionary
+            
+        Returns:
+            PII-redacted explanation
+        """
+        import re
+        
+        # PII patterns to redact
+        pii_patterns = [
+            (r'\b\d{3}-\d{2}-\d{4}\b', '[SSN]'),  # SSN
+            (r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b', '[CARD]'),  # Credit card
+            (r'\b\d{9}\b', '[ACCOUNT]'),  # Account numbers
+            (r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', '[EMAIL]'),  # Email
+            (r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', '[PHONE]'),  # Phone numbers
+            (r'\b\d{1,5}\s+\w+\s+(Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct|Circle|Cir|Boulevard|Blvd)\b', '[ADDRESS]'),  # Addresses
+        ]
+        
+        redacted_explanation = explanation.copy()
+        
+        # Redact PII from string fields
+        for key, value in redacted_explanation.items():
+            if isinstance(value, str):
+                for pattern, replacement in pii_patterns:
+                    value = re.sub(pattern, replacement, value, flags=re.IGNORECASE)
+                redacted_explanation[key] = value
+            elif isinstance(value, list):
+                redacted_list = []
+                for item in value:
+                    if isinstance(item, str):
+                        for pattern, replacement in pii_patterns:
+                            item = re.sub(pattern, replacement, item, flags=re.IGNORECASE)
+                    redacted_list.append(item)
+                redacted_explanation[key] = redacted_list
+        
+        redacted_explanation['pii_redacted'] = True
+        return redacted_explanation

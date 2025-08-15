@@ -12,6 +12,8 @@ from decimal import Decimal
 from datetime import datetime
 from .base_agent import BaseAgent
 from .utils.schema_registry import SchemaRegistry
+from .utils.observability import ObservabilityContext, json_log, check_anomalous_budgets
+from .utils.sql_brief_contract import SQLBriefContract
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import asyncio
@@ -40,12 +42,129 @@ class SimpleSQLAgent(BaseAgent):
         self.cache_timestamps = {}
         self.schema_registry = SchemaRegistry(db_pool)
         
+    def get_cashflow_brief(self, user_id: str, months: int = 6, request_id: str = None, scenario: str = None) -> Dict[str, Any]:
+        """
+        Get an enhanced cashflow brief with contract validation.
+        Returns guaranteed single row with exact schema and computed fields.
+        """
+        obs_ctx = ObservabilityContext('SimpleSQLAgent', request_id, scenario)
+        conn = None
+        try:
+            conn = self.db_pool.getconn()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # Use enhanced contract query
+            brief_query = SQLBriefContract.get_enhanced_cashflow_brief_query()
+            
+            cur.execute(brief_query, (
+                user_id, user_id, user_id, user_id, user_id, user_id,
+                months, months, f'last_{months}_months'
+            ))
+            
+            result = cur.fetchone()
+            
+            if result:
+                # Convert to dict for validation
+                raw_result = dict(result)
+                
+                # Validate contract compliance
+                validation = SQLBriefContract.validate_brief_response(raw_result)
+                
+                if not validation['valid']:
+                    logger.error(f"Brief validation failed: {validation['errors']}")
+                    # Return error brief with guaranteed schema
+                    return self._get_error_brief(months, validation['errors'])
+                
+                # Use cleaned data
+                brief = validation['cleaned_data']
+                
+                # Add contextual notes
+                brief['notes'] = SQLBriefContract.add_contextual_notes(brief)
+                
+                # Log validation warnings
+                if validation['warnings']:
+                    logger.warning(f"Brief validation warnings: {validation['warnings']}")
+                
+                # Enhanced logging with validation status
+                obs_ctx.log(logger, 'INFO',
+                           sql_brief_used=True,
+                           contract_valid=validation['valid'],
+                           validation_warnings=len(validation['warnings']),
+                           brief_fields=list(brief.keys()),
+                           cash_depository=brief.get('cash_depository', 0),
+                           total_liquid_assets=brief.get('total_liquid_assets', 0),
+                           net_worth_estimate=brief.get('net_worth_estimate', 0),
+                           has_retirement=brief.get('retirement_balances', 0) > 0,
+                           has_cc_debt=brief.get('cc_total_balance', 0) > 0)
+                
+                return brief
+            else:
+                logger.error("No result returned from brief query")
+                return self._get_error_brief(months, ["No result returned from database"])
+                
+        except Exception as e:
+            logger.error(f"Error generating cashflow brief: {e}")
+            return self._get_error_brief(months, [str(e)])
+        finally:
+            if conn:
+                cur.close()
+                self.db_pool.putconn(conn)
+    
+    def _get_error_brief(self, months: int, errors: list) -> Dict[str, Any]:
+        """
+        Return a brief with guaranteed schema when errors occur.
+        """
+        return {
+            'cash_depository': 0.0,
+            'taxable_investments': 0.0,
+            'retirement_balances': 0.0,
+            'cc_total_balance': 0.0,
+            'cc_num_cards': 0,
+            'installment_balance': 0.0,
+            'installment_avg_apr': 0.0,
+            'essentials_avg_6m': 0.0,
+            'total_liquid_assets': 0.0,
+            'total_debt': 0.0,
+            'net_worth_estimate': 0.0,
+            'time_window': f'last_{months}_months',
+            'generated_at': datetime.now().isoformat(),
+            'no_depository_accounts': True,
+            'no_retirement_accounts': True,
+            'has_cc_no_balance': False,
+            'no_essential_spending_data': True,
+            'notes': ['error_generating_brief'] + errors,
+            'contract_error': True
+        }
+    
     async def process(self, query: str, user_id: str, **kwargs) -> Dict[str, Any]:
         """
         Process natural language query to SQL and execute.
+        Enhanced to use cashflow brief when needed.
         """
         start_time = time.time()
         correlation_id = str(uuid.uuid4())[:8]
+        
+        # Check if we need a cashflow brief
+        routing_metadata = kwargs.get('routing_metadata', {})
+        if routing_metadata.get('sql_brief_needed'):
+            logger.info(f"[{correlation_id}] Generating cashflow brief for user {user_id}")
+            brief = self.get_cashflow_brief(user_id)
+            
+            # Return the brief as the SQL result
+            return {
+                'success': True,
+                'data': [brief],
+                'sql_query': 'CASHFLOW_BRIEF',
+                'sql_queries': ['CASHFLOW_BRIEF'],
+                'api_calls': [],
+                'metadata': {
+                    'correlation_id': correlation_id,
+                    'row_count': 1,
+                    'execution_time': time.time() - start_time,
+                    'cached': False,
+                    'brief_type': 'cashflow_brief'
+                }
+            }
         
         try:
             # Get user context, merchant hints, and policy

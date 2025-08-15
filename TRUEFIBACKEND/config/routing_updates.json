@@ -1,0 +1,6 @@
+[
+  {
+    "rule": "affordability_analysis_gate",
+    "change": "Ensure queries mentioning reserves, emergency funds, or income volatility are routed to modules that handle both cash reserve constraints and income variability modeling."
+  }
+]

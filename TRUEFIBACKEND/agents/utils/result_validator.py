@@ -313,7 +313,7 @@ Determine if these results make sense given what the user asked for and what dat
                 # Suggest more specific queries
                 improvements.append({
                     'original_issue': 'Results don\'t match query intent',
-                    'improved_query': self._suggest_specific_query(query, user_context),
+                    'improved_query': self._suggest_targeted_query(query, user_context),
                     'explanation': 'Made query more specific to your data structure'
                 })
         
@@ -326,7 +326,7 @@ Determine if these results make sense given what the user asked for and what dat
             return query.replace('checking and savings', 'all active accounts')
         return query
     
-    def _suggest_specific_query(self, query: str, context: Dict[str, Any]) -> str:
+    def _suggest_targeted_query(self, query: str, context: Dict[str, Any]) -> str:
         """Suggest a more specific version of the query."""
         # This is a simplified example - in practice, use LLM for better suggestions
         return query + " in the last 3 months"

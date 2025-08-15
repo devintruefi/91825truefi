@@ -7,7 +7,7 @@ import uuid
 import logging
 import json
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, List
 from dotenv import load_dotenv
 import os
@@ -22,23 +22,7 @@ from psycopg2.pool import ThreadedConnectionPool
 import asyncio
 import bcrypt
 import time # Added for time.time()
-
-# Import the Simplified LLM-driven Agentic Framework v3.0
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from agents.simple_supervisor_agent import SimpleSupervisorAgent
-from agents.sql_agent_simple import SimpleSQLAgent
-from agents.base_agent import BaseAgent
-from agents.utils.schema_registry import SchemaRegistry
-
-load_dotenv()
-
-# Config
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-DATABASE_URL = os.getenv("DATABASE_URL")
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+import secrets # Added for secrets.token_urlsafe
 
 # Enhanced Logging Configuration
 logging.basicConfig(
@@ -51,13 +35,89 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Plaid imports
+try:
+    import plaid
+    from plaid.api import plaid_api
+    from plaid.model.link_token_create_request import LinkTokenCreateRequest
+    from plaid.model.country_code import CountryCode
+    from plaid.model.products import Products
+    from plaid.configuration import Configuration
+    from plaid.api_client import ApiClient
+    PLAID_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Plaid module not available: {e}")
+    PLAID_AVAILABLE = False
+
+# Import the Simplified LLM-driven Agentic Framework v3.0
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from agents.simple_supervisor_agent import SimpleSupervisorAgent
+from agents.sql_agent_simple import SimpleSQLAgent
+from agents.financial_modeling_agent import FinancialModelingAgent
+from agents.base_agent import BaseAgent
+from agents.utils.schema_registry import SchemaRegistry
+
+load_dotenv()
+
 # Set specific loggers to DEBUG for detailed tracing
 logging.getLogger("agents.simple_supervisor_agent").setLevel(logging.DEBUG)
 logging.getLogger("agents.sql_agent_simple").setLevel(logging.DEBUG)
 logging.getLogger("agents.base_agent").setLevel(logging.DEBUG)
 
+# Import OAuth modules
+try:
+    from oauth_config import get_oauth_config
+    from oauth_auth import google_oauth
+    OAUTH_AVAILABLE = True
+    logger.info("OAuth modules imported successfully")
+except ImportError as e:
+    logger.warning(f"OAuth modules not available: {e}")
+    OAUTH_AVAILABLE = False
+
+# Config
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
+JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+
 # Async OpenAI
 client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
+
+# Plaid configuration
+if PLAID_AVAILABLE:
+    PLAID_CLIENT_ID = os.getenv("PLAID_CLIENT_ID")
+    PLAID_SECRET = os.getenv("PLAID_SECRET")
+    PLAID_ENV = os.getenv("PLAID_ENV", "sandbox")
+    
+    # Map environment string to Plaid Environment
+    env_map = {
+        'sandbox': plaid.Environment.sandbox,
+        'development': plaid.Environment.development,
+        'production': plaid.Environment.production
+    } if hasattr(plaid.Environment, 'sandbox') else {
+        'sandbox': plaid.Environment.Sandbox,
+        'development': plaid.Environment.Development,
+        'production': plaid.Environment.Production
+    }
+    
+    # Initialize Plaid client
+    default_env = plaid.Environment.Sandbox if hasattr(plaid.Environment, 'Sandbox') else plaid.Environment.sandbox
+    plaid_configuration = Configuration(
+        host=env_map.get(PLAID_ENV, default_env),
+        api_key={
+            'clientId': PLAID_CLIENT_ID,
+            'secret': PLAID_SECRET,
+        }
+    )
+    plaid_api_client = ApiClient(plaid_configuration)
+    plaid_client = plaid_api.PlaidApi(plaid_api_client)
+    
+    logger.info(f"Plaid client initialized for {PLAID_ENV} environment")
+else:
+    plaid_client = None
+    logger.warning("Plaid client not initialized")
 
 # DB pool with better configuration
 try:
@@ -111,7 +171,7 @@ async def health_check():
 # CORS for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://your-domain.com"],
+    allow_origins=["http://localhost:3000", "https://truefi.ai"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -131,9 +191,20 @@ class LoginInput(BaseModel):
     email: str
     password: str
 
+# Data models for chat sessions
+class ChatSessionCreate(BaseModel):
+    title: Optional[str] = "New Chat"
+
+class ChatMessageCreate(BaseModel):
+    session_id: str
+    message_type: str  # 'user' or 'assistant'
+    content: str
+    rich_content: Optional[Dict] = None
+
 # Global agent variables
 supervisor_agent = None
 sql_agent = None
+financial_modeling_agent = None
 
 async def authenticate(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
     """Optional authentication - returns user_id if authenticated, None if not"""
@@ -164,6 +235,308 @@ def get_db_cursor():
     cur = conn.cursor()
     return cur, conn
 
+# Chat History Endpoints
+
+@app.post("/api/chat/sessions")
+async def create_chat_session(
+    session_data: ChatSessionCreate,
+    user_id: str = Depends(authenticate),
+    db = Depends(get_db_cursor)
+):
+    """Create a new chat session"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    cur, conn = db
+    try:
+        session_id = str(uuid.uuid4())
+        session_identifier = f"session_{int(time.time() * 1000)}"
+        
+        cur.execute("""
+            INSERT INTO chat_sessions (id, user_id, session_id, title, is_active, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, true, NOW(), NOW())
+            RETURNING id, session_id, title, is_active, created_at
+        """, (session_id, user_id, session_identifier, session_data.title))
+        
+        result = cur.fetchone()
+        conn.commit()
+        
+        return {
+            "id": result[0],
+            "session_id": result[1],
+            "title": result[2],
+            "is_active": result[3],
+            "created_at": result[4].isoformat() if result[4] else None,
+            "message_count": 0
+        }
+    except Exception as e:
+        logger.error(f"Failed to create chat session: {e}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create chat session")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.get("/api/chat/sessions")
+async def get_chat_sessions(
+    user_id: str = Depends(authenticate),
+    db = Depends(get_db_cursor)
+):
+    """Get all chat sessions for a user"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    cur, conn = db
+    try:
+        cur.execute("""
+            SELECT 
+                cs.id, cs.session_id, cs.title, cs.is_active, cs.created_at,
+                COUNT(cm.id) as message_count,
+                MAX(cm.content) as last_message
+            FROM chat_sessions cs
+            LEFT JOIN chat_messages cm ON cs.id = cm.session_id
+            WHERE cs.user_id = %s
+            GROUP BY cs.id, cs.session_id, cs.title, cs.is_active, cs.created_at
+            ORDER BY cs.updated_at DESC
+        """, (user_id,))
+        
+        sessions = []
+        for row in cur.fetchall():
+            sessions.append({
+                "id": row[0],
+                "session_id": row[1],
+                "title": row[2],
+                "is_active": row[3],
+                "created_at": row[4].isoformat() if row[4] else None,
+                "message_count": row[5] or 0,
+                "last_message": row[6] or ""
+            })
+        
+        return sessions
+    except Exception as e:
+        logger.error(f"Failed to get chat sessions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get chat sessions")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.get("/api/chat/sessions/{session_id}/messages")
+async def get_session_messages(
+    session_id: str,
+    user_id: str = Depends(authenticate),
+    db = Depends(get_db_cursor)
+):
+    """Get all messages for a specific session"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    cur, conn = db
+    try:
+        # Verify session ownership
+        cur.execute("""
+            SELECT id FROM chat_sessions 
+            WHERE id = %s AND user_id = %s
+        """, (session_id, user_id))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get messages
+        cur.execute("""
+            SELECT id, message_type, content, rich_content, turn_number, created_at
+            FROM chat_messages
+            WHERE session_id = %s
+            ORDER BY turn_number ASC
+        """, (session_id,))
+        
+        messages = []
+        for row in cur.fetchall():
+            messages.append({
+                "id": row[0],
+                "message_type": row[1],
+                "content": row[2],
+                "rich_content": row[3],
+                "turn_number": row[4],
+                "created_at": row[5].isoformat() if row[5] else None
+            })
+        
+        return messages
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get session messages: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get messages")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.post("/api/chat/sessions/{session_id}/messages")
+async def save_message(
+    session_id: str,
+    message_data: ChatMessageCreate,
+    user_id: str = Depends(authenticate),
+    db = Depends(get_db_cursor)
+):
+    """Save a message to a session"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    cur, conn = db
+    try:
+        # Verify session ownership
+        cur.execute("""
+            SELECT id FROM chat_sessions 
+            WHERE id = %s AND user_id = %s
+        """, (session_id, user_id))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get next turn number
+        cur.execute("""
+            SELECT COALESCE(MAX(turn_number), 0) + 1 
+            FROM chat_messages 
+            WHERE session_id = %s
+        """, (session_id,))
+        turn_number = cur.fetchone()[0]
+        
+        # Insert message
+        message_id = str(uuid.uuid4())
+        cur.execute("""
+            INSERT INTO chat_messages (id, session_id, message_type, content, rich_content, turn_number, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            RETURNING id, created_at
+        """, (
+            message_id, 
+            session_id,
+            message_data.message_type,
+            message_data.content,
+            json.dumps(message_data.rich_content) if message_data.rich_content else None,
+            turn_number
+        ))
+        
+        result = cur.fetchone()
+        
+        # Update session updated_at
+        cur.execute("""
+            UPDATE chat_sessions 
+            SET updated_at = NOW() 
+            WHERE id = %s
+        """, (session_id,))
+        
+        conn.commit()
+        
+        return {
+            "id": result[0],
+            "session_id": session_id,
+            "message_type": message_data.message_type,
+            "content": message_data.content,
+            "rich_content": message_data.rich_content,
+            "turn_number": turn_number,
+            "created_at": result[1].isoformat() if result[1] else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save message: {e}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to save message")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.delete("/api/chat/sessions/{session_id}")
+async def delete_chat_session(
+    session_id: str,
+    user_id: str = Depends(authenticate),
+    db = Depends(get_db_cursor)
+):
+    """Delete a chat session and all its messages"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    cur, conn = db
+    try:
+        # Verify session ownership
+        cur.execute("""
+            SELECT id FROM chat_sessions 
+            WHERE id = %s AND user_id = %s
+        """, (session_id, user_id))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Delete messages first (foreign key constraint)
+        cur.execute("DELETE FROM chat_messages WHERE session_id = %s", (session_id,))
+        
+        # Delete session
+        cur.execute("DELETE FROM chat_sessions WHERE id = %s", (session_id,))
+        
+        conn.commit()
+        
+        return {"success": True, "message": "Session deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete session: {e}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete session")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.patch("/api/chat/sessions/{session_id}")
+async def update_chat_session(
+    session_id: str,
+    update_data: Dict,
+    user_id: str = Depends(authenticate),
+    db = Depends(get_db_cursor)
+):
+    """Update a chat session (e.g., rename)"""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    cur, conn = db
+    try:
+        # Verify session ownership
+        cur.execute("""
+            SELECT id FROM chat_sessions 
+            WHERE id = %s AND user_id = %s
+        """, (session_id, user_id))
+        
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Update title if provided
+        if "title" in update_data:
+            cur.execute("""
+                UPDATE chat_sessions 
+                SET title = %s, updated_at = NOW() 
+                WHERE id = %s
+                RETURNING title, updated_at
+            """, (update_data["title"], session_id))
+            
+            result = cur.fetchone()
+            conn.commit()
+            
+            return {
+                "id": session_id,
+                "title": result[0],
+                "updated_at": result[1].isoformat() if result[1] else None
+            }
+        else:
+            return {"message": "No updates provided"}
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update session: {e}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update session")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
 # Traditional system prompt for non-authenticated users
 SYSTEM_PROMPT = """You are Penny, a friendly and knowledgeable financial assistant for TrueFi. You help users with general financial questions, budgeting advice, and financial education.
 
@@ -178,7 +551,7 @@ Remember: You're here to help users feel more confident about their finances."""
 
 def initialize_agents():
     """Initialize the agentic framework"""
-    global supervisor_agent, sql_agent
+    global supervisor_agent, sql_agent, financial_modeling_agent
     
     if supervisor_agent is not None:
         return  # Already initialized
@@ -193,6 +566,13 @@ def initialize_agents():
             db_pool=db_pool
         )
         
+        # Initialize financial modeling agent with openai client and db_pool
+        financial_modeling_agent = FinancialModelingAgent(
+            openai_client=client,
+            db_pool=db_pool,
+            sql_agent=sql_agent
+        )
+        
         # Initialize supervisor agent with openai client and db_pool
         supervisor_agent = SimpleSupervisorAgent(
             openai_client=client,
@@ -205,6 +585,7 @@ def initialize_agents():
         logger.error(f"Full traceback: {traceback.format_exc()}")
         supervisor_agent = None
         sql_agent = None
+        financial_modeling_agent = None
 
 # Chat endpoint for non-authenticated users (basic functionality)
 @app.post("/chat/public")
@@ -1052,6 +1433,602 @@ async def test_agents(input: MessageInput):
             "message": f"Agent test failed: {str(e)}",
             "traceback": traceback.format_exc()
         }
+
+# ============ PLAID ENDPOINTS ============
+
+class PlaidLinkTokenRequest(BaseModel):
+    user_id: str
+    user_email: str
+
+@app.post("/api/plaid/link-token")
+async def create_plaid_link_token(request: PlaidLinkTokenRequest):
+    """Create a Plaid Link token for the user."""
+    if not PLAID_AVAILABLE or not plaid_client:
+        raise HTTPException(status_code=500, detail="Plaid service not available")
+    
+    try:
+        # Create the request object
+        link_token_request = LinkTokenCreateRequest(
+            products=[Products('transactions')],
+            client_name='TrueFi',
+            country_codes=[CountryCode('US')],
+            language='en',
+            user={
+                'client_user_id': request.user_id,
+                'email_address': request.user_email
+            }
+        )
+        
+        # Create link token
+        response = plaid_client.link_token_create(link_token_request)
+        
+        return {
+            "link_token": response['link_token'],
+            "expiration": response['expiration']
+        }
+        
+    except plaid.ApiException as e:
+        logger.error(f"Plaid API error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating Plaid link token: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create link token")
+
+class PlaidExchangeRequest(BaseModel):
+    public_token: str
+    user_id: str
+
+@app.post("/api/plaid/exchange")
+async def exchange_public_token(request: PlaidExchangeRequest):
+    """Exchange a Plaid public token for an access token."""
+    if not PLAID_AVAILABLE or not plaid_client:
+        raise HTTPException(status_code=500, detail="Plaid service not available")
+    
+    try:
+        from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+        
+        exchange_request = ItemPublicTokenExchangeRequest(
+            public_token=request.public_token
+        )
+        
+        response = plaid_client.item_public_token_exchange(exchange_request)
+        access_token = response['access_token']
+        item_id = response['item_id']
+        
+        # Store the access token in the database
+        conn = db_pool.getconn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO plaid_items (user_id, access_token, item_id, created_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (item_id) DO UPDATE
+                SET access_token = EXCLUDED.access_token
+            """, (request.user_id, access_token, item_id))
+            conn.commit()
+            
+            # Fetch accounts for this item
+            from plaid.model.accounts_get_request import AccountsGetRequest
+            accounts_request = AccountsGetRequest(access_token=access_token)
+            accounts_response = plaid_client.accounts_get(accounts_request)
+            
+            # Store accounts in database
+            for account in accounts_response['accounts']:
+                cur.execute("""
+                    INSERT INTO accounts (
+                        user_id, plaid_account_id, plaid_item_id, 
+                        name, type, subtype, balance_current, 
+                        balance_available, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (plaid_account_id) DO UPDATE
+                    SET balance_current = EXCLUDED.balance_current,
+                        balance_available = EXCLUDED.balance_available
+                """, (
+                    request.user_id,
+                    account['account_id'],
+                    item_id,
+                    account['name'],
+                    account['type'],
+                    account.get('subtype'),
+                    account['balances']['current'],
+                    account['balances']['available']
+                ))
+            
+            conn.commit()
+            
+            return {
+                "success": True,
+                "item_id": item_id,
+                "accounts": len(accounts_response['accounts'])
+            }
+            
+        finally:
+            db_pool.putconn(conn)
+            
+    except plaid.ApiException as e:
+        logger.error(f"Plaid API error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error exchanging public token: {e}")
+        raise HTTPException(status_code=500, detail="Failed to exchange token")
+
+@app.get("/api/plaid/accounts/{user_id}")
+async def get_plaid_accounts(user_id: str):
+    """Get all Plaid-linked accounts for a user."""
+    try:
+        conn = db_pool.getconn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT a.*, p.access_token
+                FROM accounts a
+                JOIN plaid_items p ON a.plaid_item_id = p.item_id
+                WHERE a.user_id = %s
+            """, (user_id,))
+            
+            accounts = []
+            for row in cur.fetchall():
+                accounts.append({
+                    "id": row[0],
+                    "name": row[4],
+                    "type": row[5],
+                    "subtype": row[6],
+                    "balance_current": float(row[7]) if row[7] else 0,
+                    "balance_available": float(row[8]) if row[8] else 0
+                })
+            
+            return {"accounts": accounts}
+            
+        finally:
+            db_pool.putconn(conn)
+            
+    except Exception as e:
+        logger.error(f"Error fetching accounts: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch accounts")
+
+# ============ OAUTH ENDPOINTS ============
+
+# OAuth initialization endpoint
+@app.post("/api/auth/oauth/init")
+async def oauth_init(request: Request):
+    """Initialize OAuth flow for Google, Microsoft, or Apple"""
+    if not OAUTH_AVAILABLE:
+        raise HTTPException(
+            status_code=503, 
+            detail="OAuth not available. Please check OAuth configuration."
+        )
+    
+    try:
+        body = await request.json()
+        provider = body.get('provider')
+        redirect_uri = body.get('redirect_uri')
+        
+        if not provider or not redirect_uri:
+            raise HTTPException(status_code=400, detail="Provider and redirect_uri are required")
+        
+        if provider not in ['google', 'microsoft', 'apple']:
+            raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
+        
+        try:
+            oauth_config = get_oauth_config(provider)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        
+        # Check if OAuth is properly configured
+        if provider == 'google' and not oauth_config.get('client_id'):
+            raise HTTPException(
+                status_code=503, 
+                detail="Google OAuth not configured. Please set GOOGLE_CLIENT_ID environment variable."
+            )
+        
+        # Generate OAuth URL
+        if provider == 'google':
+            oauth_url, state = google_oauth.generate_oauth_url(redirect_uri)
+            
+            # Store state for verification (in production, use Redis or database)
+            # For now, we'll return the state with the URL
+            return {
+                "auth_url": oauth_url,
+                "state": state,
+                "provider": provider
+            }
+        else:
+            # For Microsoft and Apple, return the auth URL with parameters
+            auth_url = oauth_config['auth_url']
+            state = secrets.token_urlsafe(32)
+            
+            params = {
+                'client_id': oauth_config['client_id'],
+                'redirect_uri': redirect_uri,
+                'scope': ' '.join(oauth_config['scopes']),
+                'response_type': 'code',
+                'state': state
+            }
+            
+            if provider == 'microsoft':
+                params['response_mode'] = 'query'
+            
+            query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+            full_auth_url = f"{auth_url}?{query_string}"
+            
+            return {
+                "auth_url": full_auth_url,
+                "state": state,
+                "provider": provider
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OAuth init error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to initialize OAuth")
+
+# OAuth callback endpoint
+@app.get("/api/auth/callback/{provider}")
+async def oauth_callback(provider: str, code: str, state: str = None):
+    """Handle OAuth callback from providers"""
+    if not OAUTH_AVAILABLE:
+        raise HTTPException(
+            status_code=503, 
+            detail="OAuth not available. Please check OAuth configuration."
+        )
+    
+    try:
+        logger.info(f"OAuth callback received for provider: {provider}")
+        logger.info(f"Code length: {len(code) if code else 0}")
+        logger.info(f"State: {state}")
+        
+        if provider not in ['google', 'microsoft', 'apple']:
+            raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
+        
+        if not code:
+            raise HTTPException(status_code=400, detail="Authorization code is required")
+        
+        # For now, we'll focus on Google OAuth
+        if provider == 'google':
+            # Exchange code for tokens
+            redirect_uri = f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/api/auth/callback/{provider}"
+            logger.info(f"Exchanging code for tokens with redirect_uri: {redirect_uri}")
+            
+            token_data = await google_oauth.exchange_code_for_tokens(code, redirect_uri)
+            logger.info(f"Token exchange successful. Token data keys: {list(token_data.keys())}")
+            
+            # Get user info from ID token
+            id_token = token_data.get('id_token')
+            if not id_token:
+                logger.error("No ID token received from Google")
+                raise HTTPException(status_code=400, detail="No ID token received")
+            
+            logger.info(f"ID token received, length: {len(id_token)}")
+            
+            # Verify ID token and get user info
+            user_info = await google_oauth.verify_id_token(id_token)
+            logger.info(f"ID token verified. User info: {user_info}")
+            
+            email = user_info.get('email')
+            first_name = user_info.get('given_name', '')
+            last_name = user_info.get('family_name', '')
+            
+            if not email:
+                logger.error("No email received from OAuth provider")
+                raise HTTPException(status_code=400, detail="No email received from OAuth provider")
+            
+            logger.info(f"User email: {email}, first_name: {first_name}, last_name: {last_name}")
+            
+            # Check if user exists, create if not
+            conn = db_pool.getconn()
+            cur = conn.cursor()
+            
+            try:
+                # Check if user exists
+                cur.execute("SELECT id, first_name, last_name, is_active FROM users WHERE email = %s", (email,))
+                user = cur.fetchone()
+                
+                if user:
+                    user_id, db_first_name, db_last_name, is_active = user
+                    logger.info(f"Existing user found: {user_id}")
+                    if not is_active:
+                        raise HTTPException(status_code=403, detail="Account is deactivated")
+                    
+                    # Update user info if needed
+                    if first_name and last_name and (db_first_name != first_name or db_last_name != last_name):
+                        cur.execute(
+                            "UPDATE users SET first_name = %s, last_name = %s WHERE id = %s",
+                            (first_name, last_name, user_id)
+                        )
+                        conn.commit()
+                        logger.info("Updated user info")
+                else:
+                    # Create new user
+                    user_id = str(uuid.uuid4())
+                    current_time = datetime.now(timezone.utc)
+                    # Generate a placeholder password hash for OAuth users (they can set a real password later)
+                    placeholder_password_hash = bcrypt.hashpw("oauth_user_placeholder".encode(), bcrypt.gensalt()).decode()
+                    
+                    cur.execute(
+                        "INSERT INTO users (id, email, first_name, last_name, password_hash, is_active, is_advisor, created_at, updated_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                        (user_id, email, first_name, last_name, placeholder_password_hash, True, False, current_time, current_time)
+                    )
+                    conn.commit()
+                    logger.info(f"Created new user: {user_id}")
+                
+                # Generate JWT token
+                token = jwt.encode({"userId": user_id}, JWT_SECRET, algorithm="HS256")
+                
+                # Redirect to frontend with token
+                frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+                redirect_url = f"{frontend_url}/auth?token={token}&provider={provider}"
+                
+                logger.info(f"OAuth callback successful for user: {user_id}")
+                
+                return {
+                    "redirect_url": redirect_url,
+                    "user_id": user_id,
+                    "email": email,
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "token": token
+                }
+                
+            finally:
+                cur.close()
+                db_pool.putconn(conn)
+        
+        else:
+            # For Microsoft and Apple, return placeholder
+            raise HTTPException(status_code=501, detail=f"{provider.title()} OAuth not yet implemented")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OAuth callback error: {str(e)}")
+        logger.error(f"Exception type: {type(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="OAuth callback failed")
+
+# Add these imports at the top if not already present
+from typing import Optional, List
+from pydantic import BaseModel
+
+# Add these data models
+class UserCreate(BaseModel):
+    email: str
+    first_name: str
+    last_name: str
+    password: str
+    is_advisor: bool = False
+
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+# Add these endpoints after the existing ones
+
+@app.post("/api/users")
+async def create_user(user_data: UserCreate):
+    """Create a new user"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        # Check if user already exists
+        cur.execute("SELECT id FROM users WHERE email = %s", (user_data.email,))
+        if cur.fetchone():
+            raise HTTPException(status_code=409, detail="User already exists")
+        
+        # Hash password
+        password_hash = bcrypt.hashpw(user_data.password.encode(), bcrypt.gensalt()).decode()
+        
+        # Create user
+        user_id = str(uuid.uuid4())
+        current_time = datetime.now(timezone.utc)
+        
+        cur.execute("""
+            INSERT INTO users (id, email, first_name, last_name, password_hash, is_active, is_advisor, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, email, first_name, last_name, is_active, is_advisor, created_at
+        """, (
+            user_id, user_data.email, user_data.first_name, user_data.last_name,
+            password_hash, True, user_data.is_advisor, current_time, current_time
+        ))
+        
+        result = cur.fetchone()
+        conn.commit()
+        
+        return {
+            "id": result[0],
+            "email": result[1],
+            "first_name": result[2],
+            "last_name": result[3],
+            "is_active": result[4],
+            "is_advisor": result[5],
+            "created_at": result[6].isoformat() if result[6] else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create user")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.get("/api/users")
+async def get_users():
+    """Get all users (for admin purposes)"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, email, first_name, last_name, is_active, is_advisor, created_at, updated_at
+            FROM users
+            ORDER BY created_at DESC
+        """)
+        
+        users = []
+        for row in cur.fetchall():
+            users.append({
+                "id": row[0],
+                "email": row[1],
+                "first_name": row[2],
+                "last_name": row[3],
+                "is_active": row[4],
+                "is_advisor": row[5],
+                "created_at": row[6].isoformat() if row[6] else None,
+                "updated_at": row[7].isoformat() if row[7] else None
+            })
+        
+        return {"users": users}
+        
+    except Exception as e:
+        logger.error(f"Error fetching users: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch users")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.get("/api/users/{user_id}")
+async def get_user(user_id: str):
+    """Get a specific user by ID"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT id, email, first_name, last_name, is_active, is_advisor, created_at, updated_at
+            FROM users
+            WHERE id = %s
+        """, (user_id,))
+        
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {
+            "id": user[0],
+            "email": user[1],
+            "first_name": user[2],
+            "last_name": user[3],
+            "is_active": user[4],
+            "is_advisor": user[5],
+            "created_at": user[6].isoformat() if user[6] else None,
+            "updated_at": user[7].isoformat() if user[7] else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch user")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.put("/api/users/{user_id}")
+async def update_user(user_id: str, user_data: UserUpdate):
+    """Update a user"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        # Check if user exists
+        cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Build update query dynamically
+        update_fields = []
+        update_values = []
+        
+        if user_data.first_name is not None:
+            update_fields.append("first_name = %s")
+            update_values.append(user_data.first_name)
+        
+        if user_data.last_name is not None:
+            update_fields.append("last_name = %s")
+            update_values.append(user_data.last_name)
+        
+        if user_data.is_active is not None:
+            update_fields.append("is_active = %s")
+            update_values.append(user_data.is_active)
+        
+        if not update_fields:
+            return {"message": "No updates provided"}
+        
+        update_fields.append("updated_at = %s")
+        update_values.append(datetime.now(timezone.utc))
+        update_values.append(user_id)
+        
+        query = f"""
+            UPDATE users 
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+            RETURNING id, email, first_name, last_name, is_active, updated_at
+        """
+        
+        cur.execute(query, update_values)
+        result = cur.fetchone()
+        conn.commit()
+        
+        return {
+            "id": result[0],
+            "email": result[1],
+            "first_name": result[2],
+            "last_name": result[3],
+            "is_active": result[4],
+            "updated_at": result[5].isoformat() if result[5] else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating user {user_id}: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update user")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
+
+@app.delete("/api/users/{user_id}")
+async def delete_user(user_id: str):
+    """Delete a user (soft delete by setting is_active to false)"""
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        # Check if user exists
+        cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Soft delete by setting is_active to false
+        cur.execute("""
+            UPDATE users 
+            SET is_active = false, updated_at = %s
+            WHERE id = %s
+        """, (datetime.now(timezone.utc), user_id))
+        
+        conn.commit()
+        
+        return {"message": "User deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting user {user_id}: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete user")
+    finally:
+        if conn:
+            db_pool.putconn(conn)
 
 @app.on_event("shutdown")
 def shutdown():

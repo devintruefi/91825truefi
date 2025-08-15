@@ -2,21 +2,72 @@ import psycopg2
 import json
 import time
 import re
-from functools import lru_cache
-from typing import Dict, List, Tuple, Optional
+import hashlib
+from functools import lru_cache, wraps
+from typing import Dict, List, Tuple, Optional, Set, Any
 import logging
 
 logger = logging.getLogger(__name__)
 
+def memoize_with_ttl(ttl_seconds: int = 300):
+    """
+    Memoization decorator with TTL (time-to-live) for schema operations.
+    """
+    def decorator(func):
+        cache = {}
+        cache_timestamps = {}
+        
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Create cache key from function args
+            key = hashlib.md5(str((args, kwargs)).encode()).hexdigest()
+            current_time = time.time()
+            
+            # Check if cached and not expired
+            if key in cache and (current_time - cache_timestamps[key]) < ttl_seconds:
+                return cache[key]
+            
+            # Execute function and cache result
+            result = func(*args, **kwargs)
+            cache[key] = result
+            cache_timestamps[key] = current_time
+            
+            # Clean old entries (basic cleanup)
+            if len(cache) > 100:  # Arbitrary limit
+                oldest_key = min(cache_timestamps, key=cache_timestamps.get)
+                del cache[oldest_key]
+                del cache_timestamps[oldest_key]
+            
+            return result
+        return wrapper
+    return decorator
+
 class SchemaRegistry:
     """
+    Enhanced schema registry with memoization and tenant safety.
     - Loads table / column metadata via information_schema once per app boot
     - Stores FK relationships and basic data type
     - Exposes helper to return *subset* of schema relevant to a question
+    - Implements caching and tenant filtering for safety
     """
+    
+    # Tables that must have tenant filtering (user_id column)
+    TENANT_FILTERED_TABLES = {
+        'accounts', 'transactions', 'budgets', 'budget_categories',
+        'manual_liabilities', 'goals', 'recurring_income', 'users'
+    }
+    
+    # Sensitive columns that should be handled carefully
+    SENSITIVE_COLUMNS = {
+        'password', 'api_key', 'token', 'secret', 'private_key',
+        'ssn', 'tax_id', 'account_number'
+    }
     
     def __init__(self, db_pool):
         self.db_pool = db_pool
+        self._schema_cache = {}
+        self._relationship_cache = {}
+        self._last_schema_load = 0
         self._full_schema = self._load_schema()
         self._relationships = self._load_relationships()
         logger.info(f"SchemaRegistry initialized with {len(self._full_schema)} tables")
@@ -230,4 +281,220 @@ class SchemaRegistry:
             'columns': [{'name': col, 'type': dtype, 'nullable': nullable, 'default': default} 
                        for col, dtype, nullable, default in columns],
             'relationships': relationships
+        }
+    
+    @memoize_with_ttl(600)  # 10-minute cache for schema operations
+    def get_tenant_safe_schema(self, keywords: str, user_context: Optional[Dict] = None) -> str:
+        """
+        Get schema subset with tenant safety guidance.
+        
+        Args:
+            keywords: Keywords from query to determine relevant tables
+            user_context: Context about the user for additional safety
+            
+        Returns:
+            Schema string with tenant filtering guidance
+        """
+        base_schema = self.get_subset(keywords)
+        
+        # Add tenant filtering guidance
+        guidance_lines = [
+            "",
+            "### TENANT FILTERING REQUIREMENTS",
+            "CRITICAL: Always include user_id filters for these tables:",
+        ]
+        
+        # Check which relevant tables need tenant filtering
+        relevant_tables = self._extract_table_names_from_schema(base_schema)
+        tenant_filtered_needed = relevant_tables & self.TENANT_FILTERED_TABLES
+        
+        if tenant_filtered_needed:
+            for table in sorted(tenant_filtered_needed):
+                guidance_lines.append(f"- {table}: WHERE user_id = %s")
+        
+        guidance_lines.extend([
+            "",
+            "### SENSITIVE DATA HANDLING",
+            "Never expose these column types in results:",
+        ])
+        
+        # Check for sensitive columns in relevant tables
+        sensitive_found = set()
+        for table in relevant_tables:
+            if table in self._full_schema:
+                for col, _, _, _ in self._full_schema[table]:
+                    if any(sensitive in col.lower() for sensitive in self.SENSITIVE_COLUMNS):
+                        sensitive_found.add(f"{table}.{col}")
+        
+        if sensitive_found:
+            for sensitive in sorted(sensitive_found):
+                guidance_lines.append(f"- {sensitive}")
+        else:
+            guidance_lines.append("- None detected in current query scope")
+        
+        return base_schema + "\n" + "\n".join(guidance_lines)
+    
+    def _extract_table_names_from_schema(self, schema_str: str) -> Set[str]:
+        """Extract table names from a schema string."""
+        tables = set()
+        for line in schema_str.split('\n'):
+            if line.startswith('**') and '**' in line[2:]:
+                # Extract table name from markdown bold text
+                table_match = re.search(r'\*\*(\w+)\*\*', line)
+                if table_match:
+                    tables.add(table_match.group(1))
+        return tables
+    
+    @memoize_with_ttl(900)  # 15-minute cache
+    def get_full_schema_with_safety(self) -> str:
+        """
+        Get full schema with comprehensive safety guidance.
+        
+        Returns:
+            Complete schema with safety annotations
+        """
+        base_schema = self.get_full_schema_smart()
+        
+        safety_guidance = [
+            "",
+            "### COMPREHENSIVE TENANT SAFETY",
+            "",
+            "#### Multi-Tenant Tables (ALWAYS filter by user_id):",
+        ]
+        
+        for table in sorted(self.TENANT_FILTERED_TABLES):
+            if table in self._full_schema:
+                safety_guidance.append(f"- {table}: MANDATORY user_id = %s filter")
+        
+        safety_guidance.extend([
+            "",
+            "#### Sensitive Columns (NEVER expose in results):",
+        ])
+        
+        for table, columns in self._full_schema.items():
+            for col, dtype, _, _ in columns:
+                if any(sensitive in col.lower() for sensitive in self.SENSITIVE_COLUMNS):
+                    safety_guidance.append(f"- {table}.{col} ({dtype})")
+        
+        safety_guidance.extend([
+            "",
+            "#### Query Safety Checklist:",
+            "1. Every multi-tenant table has user_id filter",
+            "2. No sensitive columns in SELECT clauses",
+            "3. Use parameterized queries (not string concatenation)",
+            "4. LIMIT clauses to prevent excessive results",
+            "5. Read-only operations only (no INSERT/UPDATE/DELETE)",
+        ])
+        
+        return base_schema + "\n" + "\n".join(safety_guidance)
+    
+    def validate_query_safety(self, sql_query: str) -> Dict[str, Any]:
+        """
+        Validate SQL query for tenant safety and best practices.
+        
+        Args:
+            sql_query: SQL query to validate
+            
+        Returns:
+            Validation results with safety recommendations
+        """
+        validation = {
+            'safe': True,
+            'warnings': [],
+            'errors': [],
+            'tenant_safety_score': 1.0,
+            'recommendations': []
+        }
+        
+        query_upper = sql_query.upper()
+        
+        # Check for dangerous operations
+        dangerous_keywords = ['DROP', 'DELETE', 'INSERT', 'UPDATE', 'ALTER', 'CREATE', 'TRUNCATE']
+        for keyword in dangerous_keywords:
+            if keyword in query_upper:
+                validation['safe'] = False
+                validation['errors'].append(f"Dangerous operation detected: {keyword}")
+        
+        # Check for tenant filtering on multi-tenant tables
+        for table in self.TENANT_FILTERED_TABLES:
+            if table.upper() in query_upper:
+                # Check if user_id filter is present
+                if 'USER_ID' not in query_upper:
+                    validation['warnings'].append(f"Table {table} accessed without user_id filter")
+                    validation['tenant_safety_score'] *= 0.7
+        
+        # Check for sensitive column exposure
+        for table, columns in self._full_schema.items():
+            for col, _, _, _ in columns:
+                if any(sensitive in col.lower() for sensitive in self.SENSITIVE_COLUMNS):
+                    col_pattern = fr'\b{re.escape(col)}\b'
+                    if re.search(col_pattern, sql_query, re.IGNORECASE):
+                        validation['warnings'].append(f"Sensitive column {table}.{col} may be exposed")
+                        validation['tenant_safety_score'] *= 0.8
+        
+        # Check for SQL injection patterns
+        injection_patterns = [
+            r"';",  # Statement termination
+            r"--",  # Comment injection
+            r"/\*.*\*/",  # Block comments
+            r"union\s+select",  # Union injection
+            r"drop\s+table",  # Table dropping
+        ]
+        
+        for pattern in injection_patterns:
+            if re.search(pattern, sql_query, re.IGNORECASE):
+                validation['safe'] = False
+                validation['errors'].append(f"Potential SQL injection pattern: {pattern}")
+        
+        # Generate recommendations
+        if validation['warnings']:
+            validation['recommendations'].append("Review tenant filtering for all multi-tenant tables")
+        
+        if validation['tenant_safety_score'] < 0.8:
+            validation['recommendations'].append("Improve tenant isolation in query")
+        
+        if not validation['safe']:
+            validation['recommendations'].append("Query contains dangerous operations - reject or sanitize")
+        
+        return validation
+    
+    def refresh_schema_cache(self) -> bool:
+        """
+        Refresh the schema cache if it's stale.
+        
+        Returns:
+            True if cache was refreshed, False if still fresh
+        """
+        current_time = time.time()
+        cache_age = current_time - self._last_schema_load
+        
+        if cache_age > 3600:  # Refresh after 1 hour
+            logger.info(f"Refreshing schema cache (age: {cache_age:.0f}s)")
+            try:
+                self._full_schema = self._load_schema()
+                self._relationships = self._load_relationships()
+                self._last_schema_load = current_time
+                
+                # Clear method caches
+                self.get_subset.cache_clear()
+                
+                return True
+            except Exception as e:
+                logger.error(f"Failed to refresh schema cache: {e}")
+                return False
+        
+        return False
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get caching statistics for monitoring."""
+        cache_info = self.get_subset.cache_info()
+        
+        return {
+            'lru_cache_hits': cache_info.hits,
+            'lru_cache_misses': cache_info.misses,
+            'lru_cache_size': cache_info.currsize,
+            'lru_cache_max_size': cache_info.maxsize,
+            'schema_age_seconds': time.time() - self._last_schema_load,
+            'tables_cached': len(self._full_schema),
+            'relationships_cached': len(self._relationships)
         } 

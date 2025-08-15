@@ -184,7 +184,7 @@ Generate an adapted query that preserves the user's intent but works with their 
             parts.append("Account types user has: None found")
             
         if enumerations.get('user_account_names'):
-            parts.append(f"Specific accounts: {', '.join(enumerations['user_account_names'][:5])}")
+            parts.append(f"User accounts: {', '.join(enumerations['user_account_names'][:5])}")
             
         # Categories and merchants
         if enumerations.get('user_categories'):
