@@ -54,15 +54,15 @@ Design principles:
 
 **IMPORTANT**: The following hardcoded demo data is **INTENTIONAL AND ACCEPTABLE**:
 
-### 🎭 Alex Profile Demo Data
+### 🎭 Sample User Profile Demo Data
 - **Location**: `app/api/chat/route.ts` (lines 5-70)
 - **Purpose**: Provides a realistic demo experience for unauthenticated users browsing the website
-- **Content**: Alex's financial profile including accounts, budgets, goals, transactions, and investment portfolio
+- **Content**: Sample User's financial profile including accounts, budgets, goals, transactions, and investment portfolio
 - **Status**: ✅ **KEEP AS IS** - This is good UX for potential users
 
 ### 🤖 Demo Chatbot
 - **Location**: `app/api/chat/route.ts` (lines 214-313)
-- **Purpose**: Allows unauthenticated users to interact with Penny using Alex's demo data
+- **Purpose**: Allows unauthenticated users to interact with Penny using Sample User's demo data
 - **Content**: Full chat functionality with realistic financial conversations
 - **Status**: ✅ **KEEP AS IS** - This demonstrates the AI capabilities
 
@@ -96,7 +96,7 @@ TRUEFIBACKEND/docs/1_PROJECT_CONTEXT.md
 
 I've added a clear section to the README.md that documents:
 
-1. **Alex Profile Demo Data** - The hardcoded financial profile in `app/api/chat/route.ts`
+1. **Sample User Profile Demo Data** - The hardcoded financial profile in `app/api/chat/route.ts`
 2. **Demo Chatbot** - The chat functionality for unauthenticated users
 3. **Demo Dashboard Data** - The sample dashboard content
 

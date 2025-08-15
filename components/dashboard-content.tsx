@@ -96,7 +96,7 @@ export function DashboardContent() {
       {/* Dynamic Greeting Header */}
       <div className="text-center mb-8">
         <h1 className={`text-4xl font-light ${gradientText} mb-2`}>
-          Hello Alex!
+          Hello Sample User!
         </h1>
         <p className="text-gray-600 dark:text-gray-400 text-lg font-light">
           You're <span className="font-semibold text-green-600 dark:text-green-400">$2.4K ahead</span> of your quarterly savings goal 🎯
@@ -578,18 +578,6 @@ export function DashboardContent() {
         </CardContent>
       </Card>
 
-      {/* AI Assistant Chat Bubble */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <div className="w-14 h-14 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 cursor-pointer group">
-          <div className="relative">
-            <span className="text-white text-lg">🤖</span>
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-          </div>
-          <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">
-            Ask Penny anything
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

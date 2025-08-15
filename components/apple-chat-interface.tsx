@@ -482,10 +482,10 @@ export function AppleChatInterface() {
         timestamp: fixedTimestamp,
       }]
     } else {
-      // For unauthenticated users, show the Alex demo message
+      // For unauthenticated users, show the Sample User demo message
       return [{
         id: "1",
-        content: "Hi Alex! 👋 I'm Penny, your personalized financial advisor. I'm here to help you make smart financial decisions and achieve your goals. What would you like to discuss today? 💰✨",
+        content: "Hi Sample User! 👋 I'm Penny, your personalized financial advisor. I'm here to help you make smart financial decisions and achieve your goals. What would you like to discuss today? 💰✨",
         sender: "penny",
         timestamp: fixedTimestamp,
       }]

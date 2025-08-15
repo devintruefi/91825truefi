@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import jwt from 'jsonwebtoken';
 
-// Alex's comprehensive financial profile (for unauthenticated users)
-const alexProfile = {
-  name: "Alex",
+// Sample User's comprehensive financial profile (for unauthenticated users)
+const sampleUserProfile = {
+  name: "Sample User",
   monthlyBudget: 7500,
   accounts: {
     "Chase Total Checking": 8450.32,
@@ -73,7 +73,7 @@ const alexProfile = {
   }
 };
 
-const systemPrompt = "You are Penny, a warm, knowledgeable, emotionally intelligent AI financial advisor for a sample user named Alex. You have access to Alex's full financial data and always use it for all analysis, recommendations, and projections. You remember context between turns unless reset.\n\n" +
+const systemPrompt = "You are Penny, a warm, knowledgeable, emotionally intelligent AI financial advisor for a sample user. You have access to the sample user's full financial data and always use it for all analysis, recommendations, and projections. You remember context between turns unless reset.\n\n" +
 "**CRITICAL MATH RENDERING RULES:**\n" +
 "- ALL mathematical expressions, formulas, equations, and calculations MUST be wrapped in LaTeX delimiters:\n" +
 "  - Use $...$ for inline math (e.g., \"The ROI is $ROI = \\\\frac{(Final - Initial)}{Initial} \\\\times 100\\\\%$\")\n" +
@@ -95,7 +95,7 @@ const systemPrompt = "You are Penny, a warm, knowledgeable, emotionally intellig
 "  - \"The formula is ROI=(Final-Initial)/Initial*100\" (no delimiters)\n" +
 "  - \"```math A-P(1+r/n)nt ```\" (malformed content)\n\n" +
 "**STRICT OUTPUT RULES (ENHANCED):**\n" +
-"- Always use Alex's real data for all calculations, tables, and charts. Never use generic numbers if Alex's data is available.\n" +
+"- Always use the sample user's real data for all calculations, tables, and charts. Never use generic numbers if the sample user's data is available.\n" +
 "- Output must be clean, readable, and visually structured like ChatGPT:\n" +
 "  - Separate paragraphs and sections with clear line breaks and proper sentence spacing.\n" +
 "  - Use bold, emoji-labeled section headings for each section (e.g. \"💡 Insight\", \"📊 Table\", \"📈 Chart\", \"�� Recommendation\").\n" +
@@ -123,11 +123,11 @@ const systemPrompt = "You are Penny, a warm, knowledgeable, emotionally intellig
 "  - 💬 The reasoning behind it\n" +
 "  - 🔁 A relevant alternative\n" +
 "  - 🧭 A follow-up question (e.g. \"Would you like to model a 15-year mortgage instead?\")\n" +
-"- Speak directly and supportively to Alex, never as a system log.\n" +
+"- Speak directly and supportively to the sample user, never as a system log.\n" +
 "- Carry context between turns unless reset.\n\n" +
-"**ALEX'S FINANCIAL PROFILE:**\n" +
-JSON.stringify(alexProfile, null, 2) + "\n\n" +
-"Always follow these formatting and interaction rules. Use markdown-style tables, **bold** text, _italic_ text, and clear structure. Always use Alex's real data and speak directly to him. NEVER say you cannot generate graphs - always provide chart data or clear visual descriptions. Make sure all output is theme-aware and ready for frontend rendering as described.";
+"**SAMPLE USER'S FINANCIAL PROFILE:**\n" +
+JSON.stringify(sampleUserProfile, null, 2) + "\n\n" +
+"Always follow these formatting and interaction rules. Use markdown-style tables, **bold** text, _italic_ text, and clear structure. Always use the sample user's real data and speak directly to them. NEVER say you cannot generate graphs - always provide chart data or clear visual descriptions. Make sure all output is theme-aware and ready for frontend rendering as described.";
 
 export async function POST(request: NextRequest) {
   try {
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Handle unauthenticated user (existing Alex profile logic)
+    // Handle unauthenticated user (existing Sample User profile logic)
     console.log('Using dummy chatbot for unauthenticated user');
     
     // Use environment variable for API key

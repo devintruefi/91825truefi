@@ -29,7 +29,7 @@ const initialMessages: Message[] = [
   {
     id: "1",
     content:
-      "Hi Alex! I'm Penny, your AI financial advisor. I've been analyzing your financial profile and I'm here to help you make smarter money decisions. What would you like to discuss today?",
+      "Hi Sample User! I'm Penny, your AI financial advisor. I've been analyzing your financial profile and I'm here to help you make smarter money decisions. What would you like to discuss today?",
     sender: "penny",
     timestamp: new Date(Date.now() - 5 * 60 * 1000),
   },

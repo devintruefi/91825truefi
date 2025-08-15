@@ -68,16 +68,16 @@ export function SettingsContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" defaultValue="Alex" />
+                    <Input id="firstName" defaultValue="Sample" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" defaultValue="Johnson" />
+                    <Input id="lastName" defaultValue="User" />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" type="email" defaultValue="alex.johnson@example.com" />
+                  <Input id="email" type="email" defaultValue="sample.user@example.com" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
