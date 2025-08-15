@@ -746,8 +746,9 @@ export function AppleChatInterface() {
           setMessages(getInitialMessages())
         }
       } else {
-        console.error('Failed to load chat messages')
-        setMessages(getInitialMessages())
+        const errorText = await response.text()
+        console.error('Failed to load chat messages:', response.status, errorText)
+        throw new Error('Failed to load chat messages')
       }
     } catch (error) {
       console.error('Failed to load chat session:', error)
