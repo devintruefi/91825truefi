@@ -139,10 +139,22 @@ class ApiClient {
 
   // Plaid Integration
   async createLinkToken(userId: string, userEmail: string): Promise<{ link_token: string }> {
-    return this.request<{ link_token: string }>('/plaid/link-token', {
+    // Use Next.js API route which proxies to Python backend
+    const response = await fetch('/api/plaid/link-token', {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({ user_id: userId, user_email: userEmail }),
     });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to create link token:', errorText);
+      throw new Error('Failed to create link token');
+    }
+    
+    return response.json();
   }
 
   async linkPlaidAccount(data: {
