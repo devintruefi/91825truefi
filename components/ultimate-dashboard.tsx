@@ -1237,13 +1237,58 @@ export function UltimateDashboard() {
           <DialogHeader>
             <DialogTitle>{editingGoal ? "Edit Goal" : "Add New Goal"}</DialogTitle>
           </DialogHeader>
-          <BudgetEditor 
-            data={editingGoal} 
-            onSuccess={() => {
-              refresh()
-              setShowGoalModal(false)
-            }}
-          />
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Goal Name</Label>
+                <Input
+                  value={editingGoal?.name || ""}
+                  onChange={(e) => setEditingGoal({...editingGoal, name: e.target.value})}
+                  placeholder="e.g., Emergency Fund"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Target Amount</Label>
+                <Input
+                  type="number"
+                  value={editingGoal?.target_amount || ""}
+                  onChange={(e) => setEditingGoal({...editingGoal, target_amount: parseFloat(e.target.value)})}
+                  placeholder="0.00"
+                  step="0.01"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Current Amount</Label>
+              <Input
+                type="number"
+                value={editingGoal?.current_amount || ""}
+                onChange={(e) => setEditingGoal({...editingGoal, current_amount: parseFloat(e.target.value)})}
+                placeholder="0.00"
+                step="0.01"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Target Date (Optional)</Label>
+              <Input
+                type="date"
+                value={editingGoal?.target_date ? new Date(editingGoal.target_date).toISOString().split('T')[0] : ""}
+                onChange={(e) => setEditingGoal({...editingGoal, target_date: e.target.value})}
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setShowGoalModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => {
+                // Handle save logic here
+                refresh()
+                setShowGoalModal(false)
+              }}>
+                {editingGoal ? "Update" : "Add"} Goal
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
