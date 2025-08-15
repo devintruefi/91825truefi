@@ -598,12 +598,45 @@ export function AppleChatInterface() {
     }
   }, [user])
 
-  // Load chat sessions from localStorage or API
+  // Load chat sessions from backend API
   const loadChatSessions = async () => {
     if (!user) return
     
     try {
-      // For now, load from localStorage. In production, this would be an API call
+      const token = localStorage.getItem('auth_token')
+      if (!token) return
+      
+      const response = await fetch('/api/chat/sessions', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
+        const sessions = await response.json()
+        // Convert backend format to frontend format
+        const formattedSessions = sessions.map((session: any) => ({
+          id: session.id,
+          title: session.title,
+          timestamp: new Date(session.created_at),
+          messageCount: session.message_count || 0,
+          lastMessage: session.last_message || ''
+        }))
+        setChatSessions(formattedSessions)
+      } else {
+        // Fallback to localStorage if API fails
+        const storedSessions = localStorage.getItem(`chat_sessions_${user.id}`)
+        if (storedSessions) {
+          const sessions = JSON.parse(storedSessions).map((session: any) => ({
+            ...session,
+            timestamp: new Date(session.timestamp)
+          }))
+          setChatSessions(sessions)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load chat sessions:', error)
+      // Fallback to localStorage
       const storedSessions = localStorage.getItem(`chat_sessions_${user.id}`)
       if (storedSessions) {
         const sessions = JSON.parse(storedSessions).map((session: any) => ({
@@ -612,58 +645,139 @@ export function AppleChatInterface() {
         }))
         setChatSessions(sessions)
       }
-    } catch (error) {
-      console.error('Failed to load chat sessions:', error)
     }
   }
 
-  // Save chat session
-  const saveChatSession = (session: ChatSession) => {
+  // Save chat session to backend
+  const saveChatSession = async (session: ChatSession) => {
     if (!user) return
     
     try {
+      const token = localStorage.getItem('auth_token')
+      if (token) {
+        // Save to backend
+        const response = await fetch('/api/chat/sessions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ title: session.title })
+        })
+        
+        if (response.ok) {
+          const savedSession = await response.json()
+          const formattedSession = {
+            id: savedSession.id,
+            title: savedSession.title,
+            timestamp: new Date(savedSession.created_at),
+            messageCount: 0,
+            lastMessage: ''
+          }
+          setChatSessions(prev => [...prev, formattedSession])
+          return savedSession.id
+        }
+      }
+      
+      // Fallback to localStorage if backend fails
       const updatedSessions = [...chatSessions, session]
       setChatSessions(updatedSessions)
       localStorage.setItem(`chat_sessions_${user.id}`, JSON.stringify(updatedSessions))
+      return session.id
     } catch (error) {
       console.error('Failed to save chat session:', error)
+      // Fallback to localStorage
+      const updatedSessions = [...chatSessions, session]
+      setChatSessions(updatedSessions)
+      localStorage.setItem(`chat_sessions_${user.id}`, JSON.stringify(updatedSessions))
+      return session.id
     }
   }
 
   // Create new chat session
-  const createNewChat = () => {
-    const newSessionId = `session_${Date.now()}`
-    const newSession: ChatSession = {
-      id: newSessionId,
-      title: 'New Chat',
-      timestamp: new Date(),
-      messageCount: 0,
-      lastMessage: ''
-    }
-    
-    setCurrentSessionId(newSessionId)
-    setSessionId(newSessionId)
+  const createNewChat = async () => {
     setMessages(getInitialMessages())
-    saveChatSession(newSession)
+    setCurrentSessionId(null)
+    setSessionId(null)
     setIsSidebarOpen(false)
+    
+    // Session will be created on first message
   }
 
-  // Load chat session
-  const loadChatSession = (sessionId: string) => {
-    // In a real implementation, this would load the actual messages for this session
+  // Load chat session with actual messages from backend
+  const loadChatSession = async (sessionId: string) => {
     setCurrentSessionId(sessionId)
     setSessionId(sessionId)
-    setMessages(getInitialMessages())
     setIsSidebarOpen(false)
+    
+    if (!user) {
+      setMessages(getInitialMessages())
+      return
+    }
+    
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) {
+        setMessages(getInitialMessages())
+        return
+      }
+      
+      // Load messages for this session
+      const response = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      if (response.ok) {
+        const messages = await response.json()
+        if (messages && messages.length > 0) {
+          // Convert backend messages to frontend format
+          const formattedMessages = messages.map((msg: any) => ({
+            id: msg.id,
+            content: msg.content,
+            sender: msg.message_type === 'user' ? 'user' : 'penny',
+            timestamp: new Date(msg.created_at),
+            feedback: null
+          }))
+          setMessages(formattedMessages)
+        } else {
+          // No messages in this session yet
+          setMessages(getInitialMessages())
+        }
+      } else {
+        console.error('Failed to load chat messages')
+        setMessages(getInitialMessages())
+      }
+    } catch (error) {
+      console.error('Failed to load chat session:', error)
+      setMessages(getInitialMessages())
+    }
   }
 
-  // Delete chat session
-  const deleteChatSession = (sessionId: string) => {
+  // Delete chat session from backend
+  const deleteChatSession = async (sessionId: string) => {
+    if (user) {
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (token) {
+          await fetch(`/api/chat/sessions/${sessionId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Failed to delete chat session:', error)
+      }
+    }
+    
     const updatedSessions = chatSessions.filter(session => session.id !== sessionId)
     setChatSessions(updatedSessions)
     
     if (currentSessionId === sessionId) {
-      createNewChat()
+      await createNewChat()
     }
     
     if (user) {
@@ -697,29 +811,72 @@ export function AppleChatInterface() {
     setMessages((prev) => [...prev, streamingMessage])
     setStreamingMessageId(streamingId)
 
-    // Create or update chat session for authenticated users
-    if (user && !currentSessionId) {
-      const newSessionId = `session_${Date.now()}`
-      const newSession: ChatSession = {
-        id: newSessionId,
-        title: userMessage.length > 30 ? userMessage.substring(0, 30) + '...' : userMessage,
-        timestamp: new Date(),
-        messageCount: 1,
-        lastMessage: userMessage
+    // Create chat session on first message for authenticated users
+    let activeSessionId = currentSessionId || sessionId
+    if (user && !activeSessionId) {
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (token) {
+          const response = await fetch('/api/chat/sessions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ 
+              title: userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage 
+            })
+          })
+          
+          if (response.ok) {
+            const newSession = await response.json()
+            activeSessionId = newSession.id
+            setCurrentSessionId(activeSessionId)
+            setSessionId(activeSessionId)
+            
+            // Add to sessions list
+            const formattedSession = {
+              id: newSession.id,
+              title: newSession.title,
+              timestamp: new Date(newSession.created_at),
+              messageCount: 1,
+              lastMessage: userMessage
+            }
+            setChatSessions(prev => [...prev, formattedSession])
+          }
+        }
+      } catch (error) {
+        console.error('Failed to create chat session:', error)
       }
-      setCurrentSessionId(newSessionId)
-      setSessionId(newSessionId)
-      saveChatSession(newSession)
-    } else if (user && currentSessionId) {
-      // Update existing session
-      const updatedSessions = chatSessions.map(session => 
-        session.id === currentSessionId 
+    } else if (user && activeSessionId) {
+      // Update existing session in list
+      setChatSessions(prev => prev.map(session => 
+        session.id === activeSessionId 
           ? { ...session, lastMessage: userMessage, messageCount: session.messageCount + 1 }
           : session
-      )
-      setChatSessions(updatedSessions)
-      if (user) {
-        localStorage.setItem(`chat_sessions_${user.id}`, JSON.stringify(updatedSessions))
+      ))
+    }
+    
+    // Save user message to backend if authenticated
+    if (user && activeSessionId) {
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (token) {
+          await fetch(`/api/chat/sessions/${activeSessionId}/messages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              session_id: activeSessionId,
+              message_type: 'user',
+              content: userMessage
+            })
+          })
+        }
+      } catch (error) {
+        console.error('Failed to save user message:', error)
       }
     }
     
@@ -746,7 +903,7 @@ export function AppleChatInterface() {
         body: JSON.stringify({ 
           message: userMessage, 
           conversationHistory,
-          sessionId: sessionId
+          sessionId: activeSessionId || sessionId
         }),
       })
       
@@ -758,6 +915,8 @@ export function AppleChatInterface() {
         console.error('API Error Response:', errorText);
         throw new Error(`API Error: ${response.status} - ${errorText}`);
       }
+      
+      let aiResponseContent = ""
       
       // Check if response supports streaming
       if (response.headers.get('content-type')?.includes('text/plain')) {
@@ -772,6 +931,7 @@ export function AppleChatInterface() {
           const chunk = decoder.decode(value);
           accumulatedContent += chunk;
         }
+        aiResponseContent = accumulatedContent
         // When done, update the streaming message with the full content
         setMessages(prev => prev.map(msg =>
               msg.id === streamingId 
@@ -786,16 +946,42 @@ export function AppleChatInterface() {
         // Update session ID if provided
         if (data.session_id) {
           setSessionId(data.session_id)
+          if (!activeSessionId) activeSessionId = data.session_id
         }
+        
+        aiResponseContent = data.message || data.response
         
         // Update the streaming message with full content
         setMessages((prev) => 
           prev.map(msg => 
             msg.id === streamingId 
-              ? { ...msg, content: data.message || data.response }
+              ? { ...msg, content: aiResponseContent }
               : msg
           )
         )
+      }
+      
+      // Save AI response to backend if authenticated
+      if (user && activeSessionId && aiResponseContent) {
+        try {
+          const token = localStorage.getItem('auth_token')
+          if (token) {
+            await fetch(`/api/chat/sessions/${activeSessionId}/messages`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                session_id: activeSessionId,
+                message_type: 'assistant',
+                content: aiResponseContent
+              })
+            })
+          }
+        } catch (error) {
+          console.error('Failed to save AI response:', error)
+        }
       }
     } catch (error) {
       console.error('Error getting AI response:', error)

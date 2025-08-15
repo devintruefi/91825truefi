@@ -13,10 +13,32 @@ import { useUser } from "@/contexts/user-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 // Third-party auth handler functions (placeholders)
-const handleGoogleAuth = () => {
-  console.log("Google authentication triggered")
-  // TODO: Implement Google OAuth flow
-}
+const handleGoogleAuth = async () => {
+  try {
+    // Call the OAuth init endpoint
+    const response = await fetch('/api/auth/oauth/init', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        provider: 'google',
+        redirect_uri: `${window.location.origin}/api/auth/callback/google`
+      }),
+    });
+
+    if (response.ok) {
+      const { auth_url } = await response.json();
+      // Redirect to Google OAuth
+      window.location.href = auth_url;
+    } else {
+      throw new Error('Failed to initialize Google OAuth');
+    }
+  } catch (error) {
+    console.error('Google OAuth error:', error);
+    setLocalError('Failed to start Google authentication. Please try again.');
+  }
+};
 
 const handleAppleAuth = () => {
   console.log("Apple authentication triggered")
