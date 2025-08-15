@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, List
 from dotenv import load_dotenv
 import os
-from fastapi import FastAPI, Request, HTTPException, Depends, status, Body
+from fastapi import FastAPI, Request, HTTPException, Depends, status, Body, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
@@ -1585,6 +1585,113 @@ async def get_plaid_accounts(user_id: str):
     except Exception as e:
         logger.error(f"Error fetching accounts: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch accounts")
+
+@app.get("/financial-data/{user_id}")
+async def get_financial_data(
+    user_id: str,
+    limit: int = Query(10, description="Number of transactions to return"),
+    offset: int = Query(0, description="Offset for pagination"),
+    includeTransactions: bool = Query(True, description="Include transactions in response")
+):
+    """Get comprehensive financial data for a user including accounts, transactions, and goals."""
+    logger.info(f"Getting financial data for user: {user_id}")
+    try:
+        conn = db_pool.getconn()
+        try:
+            cur = conn.cursor()
+            
+            # Fetch accounts for the user
+            logger.info(f"Fetching accounts for user {user_id}")
+            cur.execute("""
+                SELECT id, user_id, plaid_account_id, plaid_item_id, name, type, subtype, 
+                       balance, available_balance, currency
+                FROM accounts
+                WHERE user_id = %s
+            """, (user_id,))
+            
+            accounts = []
+            account_rows = cur.fetchall()
+            logger.info(f"Found {len(account_rows)} accounts")
+            for row in account_rows:
+                accounts.append({
+                    "id": row[0],
+                    "name": row[4],
+                    "type": row[5],
+                    "current_balance": float(row[7]) if row[7] else 0,
+                    "available_balance": float(row[8]) if row[8] else 0,
+                    "currency": row[9] or "USD"
+                })
+            
+            # Fetch transactions with pagination (only if requested)
+            recent_transactions = []
+            total_transactions = 0
+            
+            if includeTransactions:
+                # Get total count for pagination info
+                cur.execute("""
+                    SELECT COUNT(*) FROM transactions WHERE user_id = %s
+                """, (user_id,))
+                total_transactions = cur.fetchone()[0]
+                
+                # Fetch paginated transactions
+                cur.execute("""
+                    SELECT id, amount, name, merchant_name, category, date, pending, currency_code
+                    FROM transactions
+                    WHERE user_id = %s
+                    ORDER BY date DESC
+                    LIMIT %s OFFSET %s
+                """, (user_id, limit, offset))
+                
+                for row in cur.fetchall():
+                    recent_transactions.append({
+                        "id": row[0],
+                        "amount": float(row[1]) if row[1] else 0,
+                        "name": row[2],
+                        "merchant_name": row[3],
+                        "category": row[4],
+                        "date": row[5].isoformat() if row[5] else None,
+                        "pending": row[6],
+                        "currency_code": row[7]
+                    })
+            
+            # Fetch goals for the user
+            cur.execute("""
+                SELECT id, name, description, target_amount, current_amount, target_date, priority, is_active
+                FROM goals
+                WHERE user_id = %s AND (is_active = true OR is_active IS NULL)
+            """, (user_id,))
+            
+            goals = []
+            for row in cur.fetchall():
+                goals.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "description": row[2],
+                    "target_amount": float(row[3]) if row[3] else 0,
+                    "current_amount": float(row[4]) if row[4] else 0,
+                    "target_date": row[5].isoformat() if row[5] else None,
+                    "priority": row[6],
+                    "is_active": row[7]
+                })
+            
+            return {
+                "accounts": accounts,
+                "recent_transactions": recent_transactions,
+                "goals": goals,
+                "pagination": {
+                    "total": total_transactions,
+                    "limit": limit,
+                    "offset": offset,
+                    "hasMore": offset + limit < total_transactions
+                }
+            }
+            
+        finally:
+            db_pool.putconn(conn)
+            
+    except Exception as e:
+        logger.error(f"Error fetching financial data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch financial data: {str(e)}")
 
 # ============ OAUTH ENDPOINTS ============
 
