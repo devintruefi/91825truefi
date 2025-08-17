@@ -2,6 +2,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import jwt from 'jsonwebtoken';
+import { 
+  ONBOARDING_STEPS, 
+  getNextStep, 
+  getStepComponent,
+  getContextualResponse,
+  getMilestoneMessage
+} from '@/lib/onboarding/onboarding-manager';
 
 // Sample User's comprehensive financial profile (for unauthenticated users)
 const sampleUserProfile = {
@@ -76,20 +83,20 @@ const sampleUserProfile = {
 const systemPrompt = "You are Penny, a warm, knowledgeable, emotionally intelligent AI financial advisor for a sample user. You have access to the sample user's full financial data and always use it for all analysis, recommendations, and projections. You remember context between turns unless reset.\n\n" +
 "**CRITICAL MATH RENDERING RULES:**\n" +
 "- ALL mathematical expressions, formulas, equations, and calculations MUST be wrapped in LaTeX delimiters:\n" +
-"  - Use $...$ for inline math (e.g., \"The ROI is $ROI = \\\\frac{(Final - Initial)}{Initial} \\\\times 100\\\\%$\")\n" +
-"  - Use $$...$$ for display/block math (e.g., \"$$Net\\\\ Gain = Final\\\\ Value - Initial\\\\ Cost$$\")\n" +
+"  - Use $...$ for inline math (e.g., \"The ROI is $ROI = \\frac{(Final - Initial)}{Initial} \\times 100\\%$\")\n" +
+"  - Use $$...$$ for display/block math (e.g., \"$$Net\\ Gain = Final\\ Value - Initial\\ Cost$$\")\n" +
 "- NEVER output plain text formulas like \"SavingsRate = MonthlySavings / MonthlyIncome * 100\"\n" +
 "- NEVER output malformed code blocks with mixed content\n" +
 "- ALWAYS use proper LaTeX syntax:\n" +
-"  - Fractions: $\\\\frac{numerator}{denominator}$\n" +
-"  - Text in math: $\\\\text{Savings Rate}$\n" +
-"  - Percentages: $100\\\\%$\n" +
-"  - Operators: $\\\\times$, $\\\\div$, $\\\\pm$, $\\\\leq$, $\\\\geq$\n" +
+"  - Fractions: $\\frac{numerator}{denominator}$\n" +
+"  - Text in math: $\\text{Savings Rate}$\n" +
+"  - Percentages: $100\\%$\n" +
+"  - Operators: $\\times$, $\\div$, $\\pm$, $\\leq$, $\\geq$\n" +
 "  - Exponents: $x^2$, $(1 + r)^t$\n" +
 "- Examples of CORRECT output:\n" +
-"  - \"Your savings rate is $\\\\text{Savings Rate} = \\\\frac{\\\\text{Monthly Savings}}{\\\\text{Monthly Income}} \\\\times 100\\\\%$\"\n" +
-"  - \"The compound interest formula is $$A = P(1 + \\\\frac{r}{n})^{nt}$$\"\n" +
-"  - \"The ROI formula is $$\\\\text{ROI} = \\\\frac{\\\\text{Final Value} - \\\\text{Initial Value}}{\\\\text{Initial Value}} \\\\times 100\\\\%$$\"\n" +
+"  - \"Your savings rate is $\\text{Savings Rate} = \\frac{\\text{Monthly Savings}}{\\text{Monthly Income}} \\times 100\\%$\"\n" +
+"  - \"The compound interest formula is $$A = P(1 + \\frac{r}{n})^{nt}$$\"\n" +
+"  - \"The ROI formula is $$\\text{ROI} = \\frac{\\text{Final Value} - \\text{Initial Value}}{\\text{Initial Value}} \\times 100\\%$$\"\n" +
 "- Examples of INCORRECT output:\n" +
 "  - \"Savings Rate=Monthly IncomeMonthly Savings*100\" (plain text)\n" +
 "  - \"The formula is ROI=(Final-Initial)/Initial*100\" (no delimiters)\n" +
@@ -98,7 +105,7 @@ const systemPrompt = "You are Penny, a warm, knowledgeable, emotionally intellig
 "- Always use the sample user's real data for all calculations, tables, and charts. Never use generic numbers if the sample user's data is available.\n" +
 "- Output must be clean, readable, and visually structured like ChatGPT:\n" +
 "  - Separate paragraphs and sections with clear line breaks and proper sentence spacing.\n" +
-"  - Use bold, emoji-labeled section headings for each section (e.g. \"💡 Insight\", \"📊 Table\", \"📈 Chart\", \"�� Recommendation\").\n" +
+"  - Use bold, emoji-labeled section headings for each section (e.g. \"💡 Insight\", \"📊 Table\", \"📈 Chart\", \"🚀 Recommendation\").\n" +
 "  - Use bullet points and multi-line structure for readability. Avoid dense blocks of text.\n" +
 "  - Use **bold** and _italic_ for emphasis (never HTML tags).\n" +
 "  - Start every response with the phrase: \"Penny is thinking...\" as a placeholder, but ensure it is replaced entirely by the full response once generated (for streaming/UX purposes).\n\n" +
@@ -137,7 +144,15 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
     const isAuthenticated = authHeader?.startsWith('Bearer ');
     
-    const { message, conversationHistory, sessionId, endSession } = await request.json();
+    const { 
+      message, 
+      conversationHistory, 
+      sessionId, 
+      endSession,
+      isOnboarding = false,
+      onboardingPhase = 'welcome',
+      onboardingProgress = {}
+    } = await request.json();
 
     if (!message && !endSession) {
       return NextResponse.json(
@@ -177,7 +192,115 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (isAuthenticated) {
+    // Handle onboarding mode for authenticated users
+    if (isAuthenticated && isOnboarding) {
+      console.log('=== ONBOARDING MODE ACTIVE ===');
+      console.log('Message:', message);
+      console.log('Current step:', onboardingProgress.currentStep);
+      console.log('Progress:', onboardingProgress);
+      console.log('isOnboarding flag:', isOnboarding);
+      
+      // Get user info from token
+      const token = authHeader!.replace('Bearer ', '');
+      let userId = '';
+      let userFirstName = 'there';
+      
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        userId = decoded.user_id || decoded.sub;
+        userFirstName = decoded.first_name || 'there';
+      } catch (error) {
+        console.error('Error decoding token:', error);
+      }
+      
+      // Import comprehensive onboarding manager
+      const { OnboardingManager, ONBOARDING_FLOW } = await import('@/lib/onboarding/comprehensive-onboarding');
+      
+      // Parse component response value from message
+      let componentValue = null;
+      let isComponentResponse = false;
+      if (message.includes('[Component Response:')) {
+        isComponentResponse = true;
+        const match = message.match(/\[Component Response: [^\]]+\] (.+)/);
+        if (match) {
+          try {
+            componentValue = JSON.parse(match[1]);
+          } catch {
+            componentValue = match[1];
+          }
+        }
+      }
+      
+      // Determine current and next steps
+      const currentStep = onboardingProgress.currentStep || 'MAIN_GOAL';
+      let nextStep = currentStep;
+      let responseMessage = '';
+      
+      // Only advance to next step if this was a component response
+      if (isComponentResponse) {
+        // User selected something, move to next step
+        nextStep = OnboardingManager.getNextStep(currentStep, componentValue);
+        responseMessage = OnboardingManager.getFollowUp(currentStep, componentValue, userFirstName);
+      } else {
+        // User typed something - just acknowledge and show the current step again
+        responseMessage = "I see you're eager to move forward! Let me guide you through the process step by step. 😊";
+        // Keep the current step
+        nextStep = currentStep;
+      }
+      
+      // Get the flow step configuration
+      const flowStep = ONBOARDING_FLOW[nextStep as keyof typeof ONBOARDING_FLOW];
+      const componentToShow = flowStep?.component;
+      
+      console.log('=== COMPONENT DEBUG ===');
+      console.log('Current step:', currentStep);
+      console.log('Next step:', nextStep);
+      console.log('Component to show:', componentToShow);
+      console.log('Is component response:', isComponentResponse);
+      
+      // Add the next question/prompt based on the next step
+      if (nextStep && nextStep !== 'COMPLETE' && isComponentResponse && flowStep) {
+        // Use the message from the flow configuration
+        const message = typeof flowStep.message === 'function' 
+          ? flowStep.message(userFirstName, onboardingProgress)
+          : flowStep.message;
+        responseMessage = responseMessage + "\n\n" + message;
+      }
+      
+      // Update progress with the next step
+      const updatedProgress = {
+        ...onboardingProgress,
+        currentStep: nextStep
+      };
+      
+      console.log('=== RETURNING ONBOARDING RESPONSE ===');
+      console.log('Next step:', nextStep);
+      console.log('Component to show:', componentToShow);
+      console.log('Response message:', responseMessage);
+      
+      const finalResponse = {
+        message: responseMessage,
+        component: componentToShow,  // Always include the component
+        onboardingUpdate: {
+          phase: nextStep,
+          progress: updatedProgress,
+          complete: nextStep === ONBOARDING_STEPS.COMPLETE
+        },
+        session_id: sessionId
+      };
+      
+      console.log('=== FINAL RESPONSE OBJECT ===');
+      console.log('Final response:', JSON.stringify(finalResponse, null, 2));
+      
+      return NextResponse.json(finalResponse);
+    }
+
+    // Non-onboarding chat handling
+    console.log('=== REGULAR CHAT MODE ===');
+    console.log('isAuthenticated:', isAuthenticated);
+    console.log('isOnboarding:', isOnboarding);
+    
+    if (isAuthenticated && !isOnboarding) {
       // Handle authenticated user chat
       const token = authHeader!.replace('Bearer ', '');
       
@@ -220,18 +343,9 @@ export async function POST(request: NextRequest) {
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY environment variable is not set');
     }
-    const openai = new OpenAI({
-      apiKey: OPENAI_API_KEY,
-    });
 
-    if (!message) {
-      return NextResponse.json(
-        { error: 'Message is required' },
-        { status: 400 }
-      );
-    }
+    const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-    // Prepare conversation history for context
     const messages = [
       { role: 'system' as const, content: systemPrompt },
       ...conversationHistory.map((msg: any) => ({
@@ -241,73 +355,52 @@ export async function POST(request: NextRequest) {
       { role: 'user' as const, content: message }
     ];
 
-    // Check if client supports streaming
-    const acceptHeader = request.headers.get('accept');
-    const supportsStreaming = acceptHeader?.includes('text/plain') || acceptHeader?.includes('text/event-stream');
+    console.log('Calling OpenAI with messages:', messages.length);
 
-    if (supportsStreaming) {
-      // Create streaming response
-      const stream = new ReadableStream({
-        async start(controller) {
-          try {
-            console.log('Creating OpenAI completion for unauthenticated user...');
-            const completion = await openai.chat.completions.create({
-              model: 'gpt-4',
-              messages,
-              max_tokens: 1800,
-              temperature: 0.7,
-              presence_penalty: 0.6,
-              frequency_penalty: 0.3,
-              stream: true,
-            });
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages,
+      max_tokens: 1500,
+      temperature: 0.7,
+      stream: true,
+    });
 
-            for await (const chunk of completion) {
-              const content = chunk.choices[0]?.delta?.content;
-              if (content) {
-                controller.enqueue(new TextEncoder().encode(content));
-              }
+    // Stream the response
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of completion) {
+            const text = chunk.choices[0]?.delta?.content || '';
+            if (text) {
+              controller.enqueue(encoder.encode(text));
             }
-            controller.close();
-          } catch (error) {
-            console.error('Streaming error:', error);
-            controller.error(error);
           }
-        },
-      });
+        } catch (error) {
+          console.error('Streaming error:', error);
+          controller.error(error);
+        } finally {
+          controller.close();
+        }
+      },
+    });
 
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
-      });
-    } else {
-      // Fallback to regular response
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
-        messages,
-        max_tokens: 1800,
-        temperature: 0.7,
-        presence_penalty: 0.6,
-        frequency_penalty: 0.3,
-      });
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
+      },
+    });
 
-      const response = completion.choices[0]?.message?.content;
-
-      if (!response) {
-        return NextResponse.json(
-          { error: 'Failed to generate response' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({ response });
-    }
   } catch (error) {
-    console.error('Chat API error:', error);
+    console.error('Chat API Error:', error);
+    
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'An error occurred processing your request', 
+        details: error instanceof Error ? error.message : 'Unknown error' 
+      },
       { status: 500 }
     );
   }

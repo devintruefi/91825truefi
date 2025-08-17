@@ -1,3 +1,5 @@
+"use client"
+
 import { GlobalHeader } from "@/components/global-header"
 import { AppleChatInterface } from "@/components/apple-chat-interface"
 

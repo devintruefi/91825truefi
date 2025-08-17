@@ -98,7 +98,7 @@ export function HeroSection() {
                 size="lg"
                 className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white text-xl px-10 sm:px-12 py-6 sm:py-8 w-full sm:w-auto min-h-[60px] shadow-lg hover:shadow-xl transition-all duration-300 rounded-full"
               >
-                <Link href="/get-started" className="flex items-center justify-center gap-3">
+                <Link href="/auth" className="flex items-center justify-center gap-3">
                   Get Started
                   <ArrowRight className="w-7 h-7" />
                 </Link>

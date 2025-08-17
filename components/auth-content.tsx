@@ -79,8 +79,8 @@ export function AuthContent() {
       newUrl.searchParams.delete('provider');
       window.history.replaceState({}, '', newUrl.toString());
       
-      // Redirect to dashboard - the user context should pick up the token
-      window.location.href = '/dashboard';
+      // Redirect to Penny chat for onboarding - the user context should pick up the token
+      window.location.href = '/chat?onboarding=true';
     }
   }, []);
 

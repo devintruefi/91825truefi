@@ -365,40 +365,40 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <Card className="bg-gradient-to-r from-blue-500 via-teal-500 to-green-500 text-white border-0 shadow-xl">
+      <Card className="bg-gradient-to-br from-navy-900 via-navy-800 to-blue-900 text-white border border-navy-700 shadow-2xl" style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #1a2f4e 50%, #152238 100%)' }}>
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
-                <Briefcase className="h-6 w-6" />
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-br from-blue-600/20 to-blue-500/20 rounded-lg backdrop-blur-sm border border-blue-500/30">
+                <Briefcase className="h-6 w-6 text-blue-400" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold">Investment Portfolio</h2>
-                <p className="text-white/80 text-sm">Track and manage all your investments</p>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">Investment Portfolio</h2>
+                <p className="text-slate-400 text-sm mt-1">Track and manage all your investments</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => setShowSettings(!showSettings)}
-                className="bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-all"
+                className="bg-blue-900/30 text-blue-100 border-blue-600/50 hover:bg-blue-800/40 hover:text-white hover:border-blue-500 transition-all"
               >
                 <Settings className="h-4 w-4" />
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={exportData}
-                className="bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-all"
+                className="bg-blue-900/30 text-blue-100 border-blue-600/50 hover:bg-blue-800/40 hover:text-white hover:border-blue-500 transition-all"
               >
                 <Download className="h-4 w-4" />
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={fetchInvestmentData}
-                className="bg-white text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-all"
+                className="bg-blue-900/30 text-blue-100 border-blue-600/50 hover:bg-blue-800/40 hover:text-white hover:border-blue-500 transition-all"
               >
                 <RefreshCw className="h-4 w-4" />
               </Button>
@@ -407,26 +407,26 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
 
           {/* Key Metrics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
-              <p className="text-xs text-white/70 mb-1">Total Value</p>
-              <p className="text-xl font-bold">{formatCompact(metrics.totalValue)}</p>
+            <div className="bg-blue-800/20 backdrop-blur-sm rounded-lg p-3 border border-blue-600/30">
+              <p className="text-xs text-blue-200/80 mb-1 font-medium uppercase tracking-wider">Total Value</p>
+              <p className="text-xl font-bold text-white">{formatCompact(metrics.totalValue)}</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
-              <p className="text-xs text-white/70 mb-1">Total Return</p>
+            <div className="bg-blue-800/20 backdrop-blur-sm rounded-lg p-3 border border-blue-600/30">
+              <p className="text-xs text-blue-200/80 mb-1 font-medium uppercase tracking-wider">Total Return</p>
               <p className={cn(
                 "text-xl font-bold",
-                metrics.totalGainLoss >= 0 ? "text-green-300" : "text-red-300"
+                metrics.totalGainLoss >= 0 ? "text-emerald-400" : "text-rose-400"
               )}>
                 {formatPercent(metrics.totalGainLossPercent)}
               </p>
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
-              <p className="text-xs text-white/70 mb-1">Dividends</p>
-              <p className="text-xl font-bold">{formatCompact(metrics.totalDividends)}</p>
+            <div className="bg-blue-800/20 backdrop-blur-sm rounded-lg p-3 border border-blue-600/30">
+              <p className="text-xs text-blue-200/80 mb-1 font-medium uppercase tracking-wider">Dividends</p>
+              <p className="text-xl font-bold text-white">{formatCompact(metrics.totalDividends)}</p>
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
-              <p className="text-xs text-white/70 mb-1">Holdings</p>
-              <p className="text-xl font-bold">{metrics.investmentCount}</p>
+            <div className="bg-blue-800/20 backdrop-blur-sm rounded-lg p-3 border border-blue-600/30">
+              <p className="text-xs text-blue-200/80 mb-1 font-medium uppercase tracking-wider">Holdings</p>
+              <p className="text-xl font-bold text-white">{metrics.investmentCount}</p>
             </div>
           </div>
         </CardContent>

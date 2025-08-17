@@ -230,36 +230,48 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
       }
     });
     if (!budget) {
-      const smartBudget = await generateSmartBudget(userId);
-      const newBudget = await prisma.budgets.create({
-        data: {
-          id: crypto.randomUUID(),
-          user_id: userId,
-          name: 'Smart Monthly Budget',
-          description: 'AI-generated budget based on your spending patterns',
-          amount: smartBudget.totalBudget,
-          period: 'monthly',
-          start_date: new Date(),
-          is_active: true,
-          created_at: new Date(),
-          updated_at: new Date(),
-          budget_categories: {
-            create: smartBudget.categories.map(category => ({
-              id: crypto.randomUUID(),
-              category: category.category,
-              amount: category.amount,
-              created_at: new Date(),
-              updated_at: new Date()
-            }))
-          }
-        },
-        include: {
-          budget_categories: {
-            orderBy: { created_at: 'asc' }
-          }
-        }
+      // Don't auto-create budget for new users - they should go through onboarding
+      // Only create a smart budget if the user has transaction history
+      const hasTransactions = await prisma.transactions.findFirst({
+        where: { user_id: userId }
       });
-      return NextResponse.json(newBudget);
+      
+      if (hasTransactions) {
+        // User has transaction history, generate smart budget
+        const smartBudget = await generateSmartBudget(userId);
+        const newBudget = await prisma.budgets.create({
+          data: {
+            id: crypto.randomUUID(),
+            user_id: userId,
+            name: 'Smart Monthly Budget',
+            description: 'AI-generated budget based on your spending patterns',
+            amount: smartBudget.totalBudget,
+            period: 'monthly',
+            start_date: new Date(),
+            is_active: true,
+            created_at: new Date(),
+            updated_at: new Date(),
+            budget_categories: {
+              create: smartBudget.categories.map(category => ({
+                id: crypto.randomUUID(),
+                category: category.category,
+                amount: category.amount,
+                created_at: new Date(),
+                updated_at: new Date()
+              }))
+            }
+          },
+          include: {
+            budget_categories: {
+              orderBy: { created_at: 'asc' }
+            }
+          }
+        });
+        return NextResponse.json(newBudget);
+      }
+      
+      // Return null/empty budget for new users
+      return NextResponse.json(null);
     }
     const totalBudgetAmount = budget.budget_categories.reduce((sum, cat) => sum + Number(cat.amount), 0);
     if (totalBudgetAmount === 0) {

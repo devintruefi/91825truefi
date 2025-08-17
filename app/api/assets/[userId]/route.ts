@@ -4,10 +4,10 @@ import { prisma } from '@/lib/prisma'
 // GET - Fetch all assets for a user
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId } = params
+    const { userId } = await params
 
     const assets = await prisma.manual_assets.findMany({
       where: { user_id: userId },
@@ -36,10 +36,10 @@ export async function GET(
   // POST - Create a new asset
   export async function POST(
     request: NextRequest,
-    { params }: { params: { userId: string } }
+    { params }: { params: Promise<{ userId: string }> }
   ) {
     try {
-      const { userId } = params
+      const { userId } = await params
       console.log('Creating asset for user:', userId)
       
       const body = await request.json()
@@ -69,10 +69,10 @@ export async function GET(
 // PUT - Update an asset
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId } = params
+    const { userId } = await params
     const body = await request.json()
 
     const asset = await prisma.manual_assets.update({

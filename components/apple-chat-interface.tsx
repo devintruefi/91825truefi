@@ -1,10 +1,23 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, Suspense } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useUser } from '@/contexts/user-context'
+import { useSearchParams } from 'next/navigation'
 import { Textarea } from "@/components/ui/textarea"
+import { Card } from "@/components/ui/card"
+import { 
+  ButtonSelection, 
+  CheckboxGroup, 
+  CardSelection, 
+  SliderInput, 
+  PieChartBuilder,
+  QuickAdd
+} from '@/components/chat/onboarding-components'
+import { PlaidConnect } from '@/components/plaid-connect'
+import { DashboardPreview } from '@/components/chat/dashboard-preview'
+import { OnboardingProgress } from '@/components/chat/onboarding-progress'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown, Edit2, Check, X } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
@@ -27,6 +40,10 @@ interface Message {
   sender: "user" | "penny"
   timestamp: Date
   feedback?: "positive" | "negative" | null
+  component?: {
+    type: 'buttons' | 'slider' | 'checkboxes' | 'cards' | 'plaid' | 'pieChart' | 'quickAdd'
+    data: any
+  }
 }
 
 interface ChatSession {
@@ -464,16 +481,40 @@ function renderInline(text: string): React.ReactNode {
 // Use a counter for stable IDs instead of Date.now()
 let messageIdCounter = 1000
 
-export function AppleChatInterface() {
+function AppleChatInterfaceInner() {
   const { user } = useUser()
   const { theme } = useTheme()
+  const searchParams = useSearchParams()
+  const isOnboarding = searchParams.get('onboarding') === 'true'
   
-  // Conditionally set initial messages based on authentication
+  // Conditionally set initial messages based on authentication and onboarding
   const getInitialMessages = (): Message[] => {
     // Use a fixed timestamp to avoid hydration mismatch
     const fixedTimestamp = new Date('2024-01-01T12:00:00')
     
-    if (user) {
+    if (user && isOnboarding) {
+      // For onboarding users, show friendly welcome asking about their main goal
+      return [{
+        id: "1",
+        content: `Hi ${user.first_name}! Welcome to TrueFi! 🌟\n\nI'm Penny, your AI financial assistant. Let's build your financial future together. What brought you to TrueFi today? What's your main financial goal right now?`,
+        sender: "penny",
+        timestamp: fixedTimestamp,
+        component: {
+          type: 'buttons',
+          data: {
+            options: [
+              { id: 'debt', label: 'Pay off debt', value: 'debt_payoff', icon: '🎯' },
+              { id: 'emergency', label: 'Save for emergencies', value: 'emergency_fund', icon: '🛡️' },
+              { id: 'home', label: 'Save for a home', value: 'home_purchase', icon: '🏠' },
+              { id: 'retirement', label: 'Plan for retirement', value: 'retirement', icon: '🏖️' },
+              { id: 'travel', label: 'Save for travel', value: 'travel', icon: '✈️' },
+              { id: 'wealth', label: 'Build wealth', value: 'investments', icon: '📈' },
+              { id: 'other', label: 'Something else', value: 'other', icon: '💭' }
+            ]
+          }
+        }
+      }]
+    } else if (user) {
       // For authenticated users, show a personalized welcome message
       return [{
         id: "1",
@@ -505,6 +546,14 @@ export function AppleChatInterface() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState<string>("")
+  const [onboardingPhase, setOnboardingPhase] = useState<string>('welcome')
+  const [onboardingProgress, setOnboardingProgress] = useState<Record<string, any>>({
+    currentStep: isOnboarding ? 'MAIN_GOAL' : null,
+    mode: 'standard', // quick, standard, or complete
+    responses: {},
+    dashboardReady: false
+  })
+  const [isOnboardingMode, setIsOnboardingMode] = useState(isOnboarding)
   
   // Add suggestions visibility state - initialize to true for SSR consistency
   const [suggestionsVisible, setSuggestionsVisible] = useState(true)
@@ -584,6 +633,17 @@ export function AppleChatInterface() {
     if (!isTyping || !streamingMessageId) return;
     // This effect is no longer needed as streaming is handled by setMessages
   }, [isTyping, streamingMessageId]);
+
+  // Set initial onboarding mode from URL params - only run this when user first loads
+  const [hasSetInitialOnboarding, setHasSetInitialOnboarding] = useState(false);
+  
+  useEffect(() => {
+    if (user && !hasSetInitialOnboarding) {
+      console.log('Setting initial onboarding mode from URL:', isOnboarding);
+      setIsOnboardingMode(isOnboarding);
+      setHasSetInitialOnboarding(true);
+    }
+  }, [user, isOnboarding, hasSetInitialOnboarding]);
 
   // Update messages when user changes (login/logout)
   useEffect(() => {
@@ -836,23 +896,479 @@ export function AppleChatInterface() {
     }
   }
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return
-    const userMessage = inputValue.trim()
-    setInputValue("")
-    setIsLoading(true)
-    setIsTyping(true)
+  // Helper function to trigger Plaid auto-analysis
+  const triggerAutoAnalysis = async (plaidData: any) => {
+    if (!user) return
     
-    const newUserMessage: Message = {
-      id: Date.now().toString(),
-      content: userMessage,
+    const token = localStorage.getItem('auth_token')
+    if (!token) return
+    
+    try {
+      const response = await fetch('/api/onboarding/analyze-plaid', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          publicToken: plaidData.publicToken,
+          metadata: plaidData.metadata,
+          accounts: plaidData.accounts
+        })
+      })
+      
+      if (response.ok) {
+        const analysis = await response.json()
+        // Store the detected data
+        setOnboardingProgress(prev => ({
+          ...prev,
+          detectedIncome: analysis.monthlyIncome,
+          detectedExpenses: analysis.expenses,
+          detectedDebts: analysis.debts,
+          accountsCount: analysis.accountsCount
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to analyze Plaid data:', error)
+    }
+  }
+
+  // Function to handle interactive component responses
+  const handleComponentResponse = async (messageId: string, value: any, componentType: string) => {
+    // Import the comprehensive onboarding flow
+    const { OnboardingManager } = await import('@/lib/onboarding/comprehensive-onboarding')
+    const ONBOARDING_STEPS = {
+      WELCOME: 'welcome',
+      MAIN_GOAL: 'main_goal',
+      LIFE_STAGE: 'life_stage',
+      PLAID_CONNECTION: 'plaid_connection',
+      AUTO_ANALYSIS: 'auto_analysis',
+      INCOME_CONFIRMATION: 'income_confirmation',
+      DETECTED_EXPENSES: 'detected_expenses',
+      MANUAL_INCOME: 'manual_income',
+      MANUAL_EXPENSES: 'manual_expenses',
+      QUICK_ACCOUNTS: 'quick_accounts',
+      RISK_TOLERANCE: 'risk_tolerance',
+      GOALS_SELECTION: 'goals_selection',
+      DASHBOARD_PREVIEW: 'dashboard_preview',
+      COMPLETE: 'complete'
+    }
+    
+    // Log every answer to user_onboarding_responses
+    if (user && value !== 'skipped') {
+      const token = localStorage.getItem('auth_token')
+      if (token) {
+        // Determine the question based on current step
+        let question = onboardingProgress.currentStep || ONBOARDING_STEPS.MAIN_GOAL
+        
+        // Log to database
+        await fetch('/api/onboarding/log-response', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ question, answer: value })
+        })
+      }
+    }
+    
+    // Update onboarding progress
+    const updatedProgress = { ...onboardingProgress }
+    const currentStep = onboardingProgress.currentStep || ONBOARDING_STEPS.MAIN_GOAL
+    
+    // Store the response based on component type and current step
+    switch (componentType) {
+      case 'buttons':
+        // Store based on current step context
+        if (currentStep === ONBOARDING_STEPS.MAIN_GOAL) {
+          updatedProgress.mainGoal = value
+        } else if (currentStep === ONBOARDING_STEPS.LIFE_STAGE) {
+          updatedProgress.lifeStage = value
+        } else if (currentStep === ONBOARDING_STEPS.INCOME_CONFIRMATION) {
+          updatedProgress.incomeConfirmed = value === 'confirmed'
+        } else {
+          updatedProgress[`response_${currentStep}`] = value
+        }
+        break
+        
+      case 'cards':
+        if (currentStep === ONBOARDING_STEPS.LIFE_STAGE) {
+          updatedProgress.lifeStage = value
+        } else {
+          updatedProgress.selectedCard = value
+        }
+        break
+        
+      case 'slider':
+        if (currentStep === ONBOARDING_STEPS.RISK_TOLERANCE) {
+          updatedProgress.riskTolerance = value
+        } else if (currentStep === ONBOARDING_STEPS.MANUAL_INCOME) {
+          updatedProgress.monthlyIncome = value
+        } else if (currentStep === ONBOARDING_STEPS.MANUAL_EXPENSES) {
+          updatedProgress.monthlyExpenses = value
+        }
+        break
+        
+      case 'checkboxes':
+        if (currentStep === ONBOARDING_STEPS.GOALS_SELECTION) {
+          updatedProgress.selectedGoals = value.selected || value
+        }
+        break
+        
+      case 'plaid':
+        if (value === 'skipped' || value === 'skip') {
+          updatedProgress.plaidSkipped = true
+        } else {
+          updatedProgress.plaidConnection = value
+          updatedProgress.hasConnectedAccounts = true
+          // Trigger auto-analysis
+          if (value.publicToken) {
+            await triggerAutoAnalysis(value)
+          }
+        }
+        break
+        
+      case 'pieChart':
+        updatedProgress.expenseCategories = value
+        break
+        
+      case 'quickAdd':
+        updatedProgress.manualAccounts = value
+        break
+        
+      case 'dashboardPreview':
+        updatedProgress.dashboardViewed = true
+        break
+    }
+    
+    // Determine next step using the comprehensive flow
+    const nextStep = OnboardingManager.getNextStep(currentStep, value)
+    if (nextStep) {
+      updatedProgress.currentStep = nextStep
+    }
+    
+    setOnboardingProgress(updatedProgress)
+    
+    // Send the response as a user message with natural language
+    let userDisplayMessage = ''
+    
+    // Convert component responses to natural language
+    if (componentType === 'buttons') {
+      const buttonLabels: Record<string, string> = {
+        // Main goals
+        'debt_payoff': 'Pay off debt',
+        'emergency_fund': 'Save for emergencies',
+        'home_purchase': 'Save for a home',
+        'retirement': 'Plan for retirement',
+        'travel': 'Save for travel',
+        'investments': 'Build wealth',
+        'other': 'Something else',
+        // Life stages
+        'student': 'Student',
+        'working_professional': 'Working Professional',
+        'married_partnered': 'Married/Partnered',
+        'parent': 'Parent',
+        'retired': 'Retired',
+        // Income confirmation
+        'confirmed': 'Yes, that\'s right',
+        'adjust': 'Let me adjust it',
+        // Generic
+        'skipped': 'Skip this for now'
+      }
+      userDisplayMessage = buttonLabels[value] || value
+    } else if (componentType === 'cards') {
+      // For card selections (life stage)
+      const cardLabels: Record<string, string> = {
+        'student': 'Student',
+        'working_professional': 'Working Professional',
+        'married_partnered': 'Married/Partnered',
+        'parent': 'Parent',
+        'retired': 'Retired'
+      }
+      userDisplayMessage = cardLabels[value] || value
+    } else if (componentType === 'slider') {
+      // Better formatting for different slider types
+      if (currentStep === 'RISK_TOLERANCE') {
+        const riskLevel = value <= 3 ? 'Conservative' : value <= 7 ? 'Moderate' : 'Aggressive';
+        userDisplayMessage = `${riskLevel} (${value}/10)`
+      } else if (currentStep === 'MANUAL_INCOME') {
+        userDisplayMessage = `$${value.toLocaleString()}/month income`
+      } else if (currentStep === 'MANUAL_EXPENSES') {
+        userDisplayMessage = `$${value.toLocaleString()}/month expenses`
+      } else {
+        userDisplayMessage = `${value}`
+      }
+    } else if (componentType === 'plaid') {
+      userDisplayMessage = value === 'skipped' || value === 'skip' ? 'I\'ll connect my accounts later' : 'Connected my bank accounts'
+    } else if (componentType === 'checkboxes') {
+      // Format selected goals nicely
+      if (value.selected && value.selected.length > 0) {
+        const goalLabels: Record<string, string> = {
+          'emergency_fund': 'Emergency Fund',
+          'debt_payoff': 'Pay Off Debt',
+          'home_purchase': 'Buy a Home',
+          'retirement': 'Retirement',
+          'investments': 'Build Wealth',
+          'travel': 'Travel Fund',
+          'education': 'Education',
+          'business': 'Start Business'
+        }
+        const formattedGoals = value.selected.map((g: string) => goalLabels[g] || g)
+        userDisplayMessage = formattedGoals.join(', ')
+      } else {
+        userDisplayMessage = 'No goals selected'
+      }
+    } else if (componentType === 'quickAdd') {
+      if (value === 'skipped' || value === 'skip') {
+        userDisplayMessage = 'Skip manual account entry'
+      } else if (typeof value === 'object') {
+        // Show summary of accounts added
+        const total = Object.values(value).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0)
+        userDisplayMessage = `Added accounts (Total: $${total.toLocaleString()})`
+      } else {
+        userDisplayMessage = 'Added account information'
+      }
+    } else if (componentType === 'pieChart') {
+      userDisplayMessage = 'Updated budget allocation'
+    } else if (componentType === 'dashboardPreview') {
+      userDisplayMessage = 'Viewed dashboard preview'
+    } else {
+      userDisplayMessage = typeof value === 'object' ? 'Made selection' : value
+    }
+    
+    const userResponseMessage: Message = {
+      id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      content: userDisplayMessage,
       sender: "user",
       timestamp: new Date(),
     }
-    setMessages((prev) => [...prev, newUserMessage])
+    setMessages(prev => [...prev, userResponseMessage])
+    
+    // Ensure we're in onboarding mode if user has selected a main goal
+    if (user && !isOnboardingMode && onboardingProgress.currentStep && onboardingProgress.currentStep !== 'complete') {
+      console.log('Re-enabling onboarding mode - user is in progress');
+      setIsOnboardingMode(true)
+    }
+    
+    // Trigger Penny's next response
+    const responseMessage = typeof value === 'object' ? JSON.stringify(value) : value
+    await handleSendMessage(`[Component Response: ${componentType}] ${responseMessage}`, true)
+  }
+
+  // Function to render interactive components
+  const renderInteractiveComponent = (component: any, messageId: string) => {
+    const handleComplete = (value: any) => {
+      handleComponentResponse(messageId, value, component.type)
+    }
+    
+    const handleSkip = () => {
+      handleComponentResponse(messageId, 'skipped', component.type)
+    }
+    
+    switch (component.type) {
+      case 'buttons':
+        return (
+          <ButtonSelection 
+            data={component.data}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+          />
+        )
+      case 'slider':
+        return (
+          <SliderInput
+            data={component.data}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+          />
+        )
+      case 'checkboxes':
+        return (
+          <CheckboxGroup
+            data={component.data}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+          />
+        )
+      case 'cards':
+        return (
+          <CardSelection
+            data={component.data}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+          />
+        )
+      case 'plaid':
+        return (
+          <div className="space-y-4">
+            {/* Title and benefits */}
+            {component.data && (
+              <div className="space-y-3">
+                {component.data.title && (
+                  <h3 className="text-lg font-semibold text-center">
+                    {component.data.title}
+                  </h3>
+                )}
+                {component.data.subtitle && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+                    {component.data.subtitle}
+                  </p>
+                )}
+                {component.data.benefits && (
+                  <Card className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
+                    <div className="space-y-2">
+                      {component.data.benefits.map((benefit: string, index: number) => (
+                        <div key={index} className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
+                          <span>{benefit}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+              </div>
+            )}
+            
+            <PlaidConnect 
+              onSuccess={(publicToken: string, metadata: any) => {
+                handleComplete({ publicToken, metadata })
+              }}
+              onError={() => {
+                handleSkip()
+              }}
+            />
+            <Button variant="ghost" className="w-full" onClick={handleSkip}>
+              I'll connect my accounts later
+            </Button>
+          </div>
+        )
+      case 'pieChart':
+        return (
+          <PieChartBuilder
+            data={component.data}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+          />
+        )
+      case 'quickAdd':
+        return (
+          <QuickAdd
+            data={component.data}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+          />
+        )
+      case 'dashboardPreview':
+        return (
+          <DashboardPreview
+            data={component.data}
+            onContinue={() => handleComplete('continue')}
+            onViewDashboard={() => {
+              handleComplete('view-dashboard')
+              setTimeout(() => {
+                window.location.href = '/dashboard'
+              }, 1000)
+            }}
+          />
+        )
+      default:
+        return null
+    }
+  }
+
+  // Function to save onboarding data to database
+  const saveOnboardingData = async (showPreview = false) => {
+    if (!user) return
+    
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) return
+      
+      console.log('Saving onboarding data:', onboardingProgress)
+      
+      // Save comprehensive progress to all database tables
+      const response = await fetch('/api/onboarding/save-progress', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          progress: onboardingProgress,
+          phase: showPreview ? 'preview' : onboardingPhase
+        })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Onboarding data saved successfully', data)
+        
+        // If showing preview or complete, also generate dashboard
+        if (data.dashboardReady) {
+          const dashboardResponse = await fetch('/api/onboarding/generate-dashboard', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              userId: user.id,
+              onboardingData: onboardingProgress
+            })
+          })
+          
+          if (dashboardResponse.ok) {
+            console.log('Dashboard generated successfully')
+          }
+        }
+        
+        return data.dashboardReady
+      }
+    } catch (error) {
+      console.error('Failed to save onboarding data:', error)
+    }
+    
+    return false
+  }
+
+  const handleSendMessage = async (customMessage?: string, isAutomated?: boolean) => {
+    const userMessage = customMessage || inputValue.trim()
+    if (!userMessage || isLoading) return
+    
+    // During onboarding, if it's not an automated component response, show a helpful message
+    if (isOnboardingMode && !isAutomated && !customMessage?.includes('[Component Response:')) {
+      // Add a gentle reminder message
+      const reminderMessage: Message = {
+        id: `penny_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        content: "I see you're eager to share more! Let me guide you through these questions first - just click the options above to continue. Once we're done with the setup, we can chat about anything you'd like! 😊",
+        sender: "penny",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, reminderMessage])
+      setInputValue("")
+      return // Don't send the message to the API
+    }
+    
+    if (!isAutomated) {
+      setInputValue("")
+    }
+    setIsLoading(true)
+    setIsTyping(true)
+    
+    // Don't add the component response message to the chat - we already added a nice formatted one
+    if (!userMessage.includes('[Component Response:')) {
+      const newUserMessage: Message = {
+        id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        content: userMessage,
+        sender: "user",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, newUserMessage])
+    }
     
     // Create streaming message with empty content
-    const streamingId = (Date.now() + 1).toString()
+    const streamingId = `penny_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     const streamingMessage: Message = {
       id: streamingId,
       content: "",
@@ -932,7 +1448,14 @@ export function AppleChatInterface() {
     }
     
     try {
-      const conversationHistory = messages.map(msg => ({ sender: msg.sender, content: msg.content }))
+      // Limit conversation history to prevent context length errors
+      // For onboarding, only keep last 10 messages; for regular chat, keep last 20
+      const maxMessages = isOnboardingMode ? 10 : 20;
+      const recentMessages = messages.slice(-maxMessages);
+      const conversationHistory = recentMessages.map(msg => ({ 
+        sender: msg.sender, 
+        content: msg.content ? msg.content.substring(0, 500) : '' // Also limit content length
+      }))
       
       // Prepare headers based on authentication
       const headers: Record<string, string> = { 
@@ -948,14 +1471,26 @@ export function AppleChatInterface() {
         }
       }
       
+      // Add onboarding context if in onboarding mode
+      const requestBody: any = { 
+        message: userMessage, 
+        conversationHistory,
+        sessionId: activeSessionId || sessionId
+      }
+      
+      if (isOnboardingMode) {
+        requestBody.isOnboarding = true
+        requestBody.onboardingPhase = onboardingPhase
+        requestBody.onboardingProgress = onboardingProgress
+        console.log('=== SENDING ONBOARDING REQUEST ===');
+        console.log('isOnboardingMode:', isOnboardingMode);
+        console.log('onboardingProgress:', onboardingProgress);
+      }
+      
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ 
-          message: userMessage, 
-          conversationHistory,
-          sessionId: activeSessionId || sessionId
-        }),
+        body: JSON.stringify(requestBody),
       })
       
       console.log('Response status:', response.status);
@@ -1000,13 +1535,46 @@ export function AppleChatInterface() {
           if (!activeSessionId) activeSessionId = data.session_id
         }
         
+        // Handle onboarding-specific responses
+        if (data.onboardingUpdate) {
+          console.log('=== ONBOARDING UPDATE RECEIVED ===');
+          console.log('data.onboardingUpdate:', data.onboardingUpdate);
+          console.log('Current isOnboardingMode:', isOnboardingMode);
+          
+          setOnboardingPhase(data.onboardingUpdate.phase || onboardingPhase)
+          setOnboardingProgress(data.onboardingUpdate.progress || onboardingProgress)
+          
+          // Check if onboarding is complete
+          if (data.onboardingUpdate.complete) {
+            setIsOnboardingMode(false)
+            localStorage.setItem('onboarding_complete', 'true')
+            // Save all collected data to database
+            await saveOnboardingData()
+            // Redirect to dashboard after completion
+            setTimeout(() => {
+              window.location.href = '/dashboard'
+            }, 3000)
+          }
+        }
+        
         aiResponseContent = data.message || data.response
         
-        // Update the streaming message with full content
+        // Add component to the message if present
+        let messageComponent = undefined
+        if (data.component) {
+          console.log('=== COMPONENT RECEIVED ===');
+          console.log('data.component:', data.component);
+          messageComponent = data.component
+        } else {
+          console.log('=== NO COMPONENT IN RESPONSE ===');
+          console.log('data keys:', Object.keys(data));
+        }
+        
+        // Update the streaming message with full content and component
         setMessages((prev) => 
           prev.map(msg => 
             msg.id === streamingId 
-              ? { ...msg, content: aiResponseContent }
+              ? { ...msg, content: aiResponseContent, component: messageComponent }
               : msg
           )
         )
@@ -1112,7 +1680,7 @@ export function AppleChatInterface() {
         
         // Add a summary message to the chat
         const summaryMessage: Message = {
-          id: Date.now().toString(),
+          id: `summary_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           content: `📊 **Session Summary**\n\n${analysis.summary}\n\n**Key Insights:**\n${analysis.insights?.map((insight: any) => `• ${insight.title}: ${insight.description}`).join('\n') || 'No insights generated.'}`,
           sender: "penny",
           timestamp: new Date(),
@@ -1447,10 +2015,26 @@ export function AppleChatInterface() {
                           whileHover={{ scale: 1.01 }}
                           className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-2xl px-6 py-4 text-sm lg:text-base shadow-lg border border-gray-200 dark:border-gray-700"
                         >
+                          {/* Show onboarding progress if in onboarding mode */}
+                          {isOnboardingMode && onboardingProgress.currentStep && (
+                            <div className="mb-4">
+                              <OnboardingProgress
+                                currentStep={onboardingProgress.currentStep}
+                                completedSteps={onboardingProgress.completedSteps || []}
+                              />
+                            </div>
+                          )}
                               {message.id === streamingMessageId && isTyping
         ? renderPennyMessage(message.content || '', theme)
         : renderPennyMessage(message.content || '', theme)
       }
+                              
+                          {/* Render interactive component if present */}
+                          {message.component && (
+                            <div className="mt-4">
+                              {renderInteractiveComponent(message.component, message.id)}
+                            </div>
+                          )}
                               
                           <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                             <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -1620,9 +2204,9 @@ export function AppleChatInterface() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask Penny anything about your finances... 💬"
-                className="pr-20 text-sm sm:text-base py-2 sm:py-4 rounded-xl border-2 focus:border-cyan-500 focus:ring-cyan-500/20 transition-all duration-200 resize-none min-h-[50px] sm:min-h-[60px] max-h-[200px] overflow-y-auto whitespace-pre-wrap"
-                disabled={isLoading}
+                placeholder={isOnboardingMode ? "Please use the buttons above to continue the setup... 👆" : "Ask Penny anything about your finances... 💬"}
+                className={`pr-20 text-sm sm:text-base py-2 sm:py-4 rounded-xl border-2 focus:border-cyan-500 focus:ring-cyan-500/20 transition-all duration-200 resize-none min-h-[50px] sm:min-h-[60px] max-h-[200px] overflow-y-auto whitespace-pre-wrap ${isOnboardingMode ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={isLoading || isOnboardingMode}
                 rows={1}
                 style={{
                   minHeight: '50px',
@@ -1651,8 +2235,8 @@ export function AppleChatInterface() {
             </div>
             
               <Button
-                onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isLoading}
+                onClick={() => handleSendMessage()}
+                disabled={!inputValue.trim() || isLoading || isOnboardingMode}
               className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold rounded-full transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               <Send className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -1662,5 +2246,18 @@ export function AppleChatInterface() {
       </motion.div>
       </div>
     </div>
+  )
+}
+
+// Export wrapper component with Suspense boundary
+export function AppleChatInterface() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-gray-500">Loading chat...</div>
+      </div>
+    }>
+      <AppleChatInterfaceInner />
+    </Suspense>
   )
 }

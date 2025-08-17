@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import type { ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -33,6 +34,7 @@ import { usePaginatedTransactions } from "@/hooks/use-transactions"
 import { useBudget } from "@/hooks/use-budget"
 import { useDashboardSpending } from "@/hooks/use-dashboard-spending"
 import { CATEGORY_META } from "@/utils/category-meta"
+import { Account, Transaction } from "@/lib/api-client"
 
 // Utility functions
 const formatCurrency = (amount: number): string => {
@@ -123,7 +125,7 @@ export function UltimateDashboard() {
   // Calculate derived data
   const accounts = data?.accounts || []
   const goals = data?.goals || []
-  const totalBalance = accounts.reduce((sum, acc) => sum + parseFloat(acc.current_balance?.toString() || "0"), 0)
+  const totalBalance = accounts.reduce((sum: number, acc: Account) => sum + parseFloat(acc.current_balance?.toString() || "0"), 0)
   
   // Debug assets and liabilities state
   console.log('Current assetsLiabilities state:', assetsLiabilities)
@@ -131,19 +133,19 @@ export function UltimateDashboard() {
   console.log('Total liabilities from state:', assetsLiabilities?.total_liabilities)
   
   // Calculate monthly metrics
-  const monthlyTransactions = transactions.filter(t => {
+  const monthlyTransactions = transactions.filter((t: Transaction) => {
     const date = new Date(t.date)
     const daysAgo = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)
     return daysAgo <= parseInt(dateRange)
   })
 
   const monthlySpending = monthlyTransactions
-    .filter(t => t.amount < 0)
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+    .filter((t: Transaction) => t.amount < 0)
+    .reduce((sum: number, t: Transaction) => sum + Math.abs(t.amount), 0)
   
   const monthlyIncome = monthlyTransactions
-    .filter(t => t.amount > 0)
-    .reduce((sum, t) => sum + t.amount, 0)
+    .filter((t: Transaction) => t.amount > 0)
+    .reduce((sum: number, t: Transaction) => sum + t.amount, 0)
 
   const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlySpending) / monthlyIncome) * 100 : 0
   const cashFlow = monthlyIncome - monthlySpending
@@ -246,8 +248,8 @@ export function UltimateDashboard() {
 
     // Adjust based on actual spending patterns
     const essentialsSpending = monthlyTransactions
-      .filter(t => t.amount < 0 && ["Food", "Transportation", "Healthcare", "Insurance"].includes(t.category || ""))
-      .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+      .filter((t: Transaction) => t.amount < 0 && ["Food", "Transportation", "Healthcare", "Insurance"].includes(t.category || ""))
+      .reduce((sum: number, t: Transaction) => sum + Math.abs(t.amount), 0)
 
     if (essentialsSpending > recommendedBudget.essentials) {
       // If spending more on essentials, adjust the budget
@@ -278,21 +280,21 @@ export function UltimateDashboard() {
 
   // Category spending breakdown
   const categoryBreakdown = monthlyTransactions
-    .filter(t => t.amount < 0)
-    .reduce((acc, t) => {
+    .filter((t: Transaction) => t.amount < 0)
+    .reduce((acc: Record<string, number>, t: Transaction) => {
       const category = t.category || "Other"
       acc[category] = (acc[category] || 0) + Math.abs(t.amount)
       return acc
     }, {} as Record<string, number>)
 
   const topCategories = Object.entries(categoryBreakdown)
-    .sort(([,a], [,b]) => b - a)
+    .sort(([,a], [,b]) => (b as number) - (a as number))
     .slice(0, 5)
 
   // Filter transactions
   const filteredTransactions = selectedCategory === "all" 
     ? monthlyTransactions 
-    : monthlyTransactions.filter(t => t.category === selectedCategory)
+    : monthlyTransactions.filter((t: Transaction) => t.category === selectedCategory)
 
   // Add this function to handle navigation
   const handleManageAccounts = () => {
@@ -325,7 +327,7 @@ export function UltimateDashboard() {
       
       if (response.ok) {
         // Update local state
-        const updatedTransactions = transactions.map(t => 
+        const updatedTransactions = transactions.map((t: Transaction) => 
           t.id === transactionId 
             ? { ...t, category: editingCategory }
             : t
@@ -439,9 +441,9 @@ export function UltimateDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
                 <DollarSign className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
                   +12%
-                </Badge>
+                </span>
               </div>
               <p className="text-3xl font-bold text-gray-900 dark:text-white">
                 {formatCurrency(totalBalance)}
@@ -454,9 +456,9 @@ export function UltimateDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
                 <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
-                <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
                   +8%
-                </Badge>
+                </span>
               </div>
               <p className="text-3xl font-bold text-gray-900 dark:text-white">
                 {formatCurrency(monthlyIncome)}
@@ -469,9 +471,9 @@ export function UltimateDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
                 <TrendingDown className="h-8 w-8 text-orange-600 dark:text-orange-400" />
-                <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">
                   -5%
-                </Badge>
+                </span>
               </div>
               <p className="text-3xl font-bold text-gray-900 dark:text-white">
                 {formatCurrency(monthlySpending)}
@@ -484,9 +486,9 @@ export function UltimateDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
                 <PiggyBank className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-                <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
                   Good
-                </Badge>
+                </span>
               </div>
               <p className="text-3xl font-bold text-gray-900 dark:text-white">
                 {formatPercent(savingsRate)}
@@ -499,9 +501,9 @@ export function UltimateDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
                 <Activity className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-                <Badge className={assetsLiabilities?.net_worth >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${assetsLiabilities?.net_worth >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                   {assetsLiabilities?.net_worth >= 0 ? "+" : "-"}
-                </Badge>
+                </span>
               </div>
               <p className="text-3xl font-bold text-gray-900 dark:text-white">
                 {formatCurrency(assetsLiabilities?.net_worth || 0)}
@@ -539,7 +541,7 @@ export function UltimateDashboard() {
                             Scroll to see all {accounts.length} accounts
                           </div>
                         )}
-                        {accounts.map((account) => (
+                        {accounts.map((account: Account) => (
                           <div key={account.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                             <div className="flex items-center space-x-4">
                               <div className="p-3 bg-white dark:bg-gray-900 rounded-full">
@@ -587,7 +589,7 @@ export function UltimateDashboard() {
                   <CardContent>
                     <div className="space-y-4">
                       {topCategories.map(([category, amount], index) => {
-                        const percentage = (amount / monthlySpending) * 100
+                        const percentage = ((amount as number) / monthlySpending) * 100
                         const meta = CATEGORY_META[category] || { icon: "", color: "gray" }
                         
                         return (
@@ -598,7 +600,7 @@ export function UltimateDashboard() {
                                 <span className="font-medium">{category}</span>
                               </div>
                               <div className="text-right">
-                                <p className="font-bold">{formatCurrency(amount)}</p>
+                                <p className="font-bold">{formatCurrency(amount as number)}</p>
                                 <p className="text-xs text-gray-500">{formatPercent(percentage)}</p>
                               </div>
                             </div>
@@ -621,13 +623,15 @@ export function UltimateDashboard() {
                         <Bell className="h-5 w-5" />
                         <span>Notifications</span>
                       </CardTitle>
-                      <Badge variant="secondary">{notifications.length}</Badge>
+                      <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 text-xs font-semibold rounded-full bg-secondary text-secondary-foreground">
+                        {notifications.length}
+                      </span>
                     </div>
                   </CardHeader>
                   <CardContent>
                     {notifications.length > 0 ? (
                       <div className="space-y-2">
-                        {notifications.slice(0, 5).map((notif, index) => (
+                        {notifications.slice(0, 5).map((notif: any, index: number) => (
                           <div key={`notif-${notif.id || index}`} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                             <div className="flex items-start space-x-2">
                               <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5" />
@@ -696,7 +700,7 @@ export function UltimateDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {transactions.slice(0, 5).map((transaction) => {
+                      {transactions.slice(0, 5).map((transaction: Transaction) => {
                         const meta = CATEGORY_META[transaction.category || "Other"] || { icon: "💵" }
                         return (
                           <div key={transaction.id} className="flex items-center justify-between">
@@ -732,7 +736,7 @@ export function UltimateDashboard() {
                       <Input
                         placeholder="Search transactions..."
                         value={searchQuery}
-                        onChange={(e) => handleSearch(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearch(e.target.value)}
                         className="pl-10 w-64"
                       />
                     </div>
@@ -763,7 +767,7 @@ export function UltimateDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredTransactions.map((transaction) => {
+                      {filteredTransactions.map((transaction: Transaction) => {
                         const meta = CATEGORY_META[transaction.category || "Other"] || { icon: "💵" }
                         return (
                           <TableRow key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
@@ -887,9 +891,9 @@ export function UltimateDashboard() {
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-2">
                       <Target className="h-8 w-8 text-blue-600" />
-                      <Badge className={assetsLiabilities?.net_worth >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${assetsLiabilities?.net_worth >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                         {assetsLiabilities?.net_worth >= 0 ? "Positive" : "Negative"}
-                      </Badge>
+                      </span>
                     </div>
                     <p className="text-3xl font-bold">{formatCurrency(assetsLiabilities?.net_worth || 0)}</p>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Net Worth</p>
@@ -1107,15 +1111,19 @@ export function UltimateDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {(goals || []).map((goal, index) => {
-                      const progress = ((goal.current_amount || 0) / goal.target_amount) * 100
+                    {(goals || []).map((goal: any, index: number) => {
+                      const progress = goal.target_amount && goal.target_amount > 0 
+                        ? ((goal.current_amount || 0) / goal.target_amount) * 100 
+                        : 0
                       return (
                         <Card key={`goal-${goal.id || index}`} className="hover:shadow-lg transition-shadow group">
                           <CardContent className="p-6">
                             <div className="flex items-center justify-between mb-4">
                               <Target className="h-6 w-6 text-purple-600" />
                               <div className="flex items-center space-x-2">
-                                <Badge>{formatPercent(progress)} Complete</Badge>
+                                <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors">
+                                  {formatPercent(progress)} Complete
+                                </span>
                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
                                   <Button
                                     variant="ghost"
@@ -1211,7 +1219,7 @@ export function UltimateDashboard() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editingAsset !== null} onOpenChange={(open) => !open && setEditingAsset(null)}>
+      <Dialog open={editingAsset !== null} onOpenChange={(open: boolean) => !open && setEditingAsset(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Asset</DialogTitle>
@@ -1242,7 +1250,7 @@ export function UltimateDashboard() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editingLiability !== null} onOpenChange={(open) => !open && setEditingLiability(null)}>
+      <Dialog open={editingLiability !== null} onOpenChange={(open: boolean) => !open && setEditingLiability(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Liability</DialogTitle>
@@ -1269,7 +1277,7 @@ export function UltimateDashboard() {
                 <Label>Goal Name</Label>
                 <Input
                   value={editingGoal?.name || ""}
-                  onChange={(e) => setEditingGoal({...editingGoal, name: e.target.value})}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingGoal({...editingGoal, name: e.target.value})}
                   placeholder="e.g., Emergency Fund"
                 />
               </div>
@@ -1278,7 +1286,7 @@ export function UltimateDashboard() {
                 <Input
                   type="number"
                   value={editingGoal?.target_amount || ""}
-                  onChange={(e) => setEditingGoal({...editingGoal, target_amount: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingGoal({...editingGoal, target_amount: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
                   placeholder="0.00"
                   step="0.01"
                 />
@@ -1289,7 +1297,7 @@ export function UltimateDashboard() {
               <Input
                 type="number"
                 value={editingGoal?.current_amount || ""}
-                onChange={(e) => setEditingGoal({...editingGoal, current_amount: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingGoal({...editingGoal, current_amount: e.target.value === '' ? '' : parseFloat(e.target.value) || 0})}
                 placeholder="0.00"
                 step="0.01"
               />
@@ -1299,7 +1307,7 @@ export function UltimateDashboard() {
               <Input
                 type="date"
                 value={editingGoal?.target_date ? new Date(editingGoal.target_date).toISOString().split('T')[0] : ""}
-                onChange={(e) => setEditingGoal({...editingGoal, target_date: e.target.value})}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingGoal({...editingGoal, target_date: e.target.value})}
               />
             </div>
             <div className="flex justify-end space-x-2">

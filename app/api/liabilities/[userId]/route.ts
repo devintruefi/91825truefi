@@ -4,10 +4,10 @@ import { prisma } from '@/lib/prisma'
 // GET - Fetch all liabilities for a user
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId } = params
+    const { userId } = await params
 
     const liabilities = await prisma.manual_liabilities.findMany({
       where: { user_id: userId },
@@ -27,10 +27,10 @@ export async function GET(
   // POST - Create a new liability
   export async function POST(
     request: NextRequest,
-    { params }: { params: { userId: string } }
+    { params }: { params: Promise<{ userId: string }> }
   ) {
     try {
-      const { userId } = params
+      const { userId } = await params
       console.log('Creating liability for user:', userId)
       
       const body = await request.json()
@@ -61,10 +61,10 @@ export async function GET(
 // PUT - Update a liability
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId } = params
+    const { userId } = await params
     const body = await request.json()
 
     const liability = await prisma.manual_liabilities.update({

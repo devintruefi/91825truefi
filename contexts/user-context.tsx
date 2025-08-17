@@ -218,8 +218,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const isOnAuthPage = window.location.pathname.startsWith('/auth') || window.location.pathname === '/auth'
         console.log('Is on auth page:', isOnAuthPage)
         if (isOnAuthPage) {
-          console.log('Redirecting to /welcome')
-          window.location.href = '/welcome'
+          console.log('Redirecting to /chat for onboarding')
+          // Check if user has completed onboarding
+          const hasCompletedOnboarding = user.has_completed_onboarding || localStorage.getItem('onboarding_complete') === 'true'
+          if (!hasCompletedOnboarding) {
+            window.location.href = '/chat?onboarding=true'
+          } else {
+            window.location.href = '/dashboard'
+          }
         }
       }
     }

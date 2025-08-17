@@ -15,12 +15,13 @@ declare global {
 }
 
 interface PlaidConnectProps {
-  onSuccess?: () => void
+  onSuccess?: (publicToken?: string, metadata?: any) => void
+  onError?: () => void
   variant?: "default" | "compact" | "icon"
   className?: string
 }
 
-export function PlaidConnect({ onSuccess, variant = "default", className = "" }: PlaidConnectProps) {
+export function PlaidConnect({ onSuccess, onError, variant = "default", className = "" }: PlaidConnectProps) {
   const { user } = useUser()
   const [loading, setLoading] = useState(false)
   const [linkToken, setLinkToken] = useState<string | null>(null)
@@ -43,7 +44,7 @@ export function PlaidConnect({ onSuccess, variant = "default", className = "" }:
   const createLinkToken = async () => {
     if (!user?.id) {
       setError('User not found')
-      return
+      return null
     }
 
     setLoading(true)
@@ -53,8 +54,10 @@ export function PlaidConnect({ onSuccess, variant = "default", className = "" }:
     try {
       const response = await apiClient.createLinkToken(user.id, user.email)
       setLinkToken(response.link_token)
+      return response.link_token
     } catch (err) {
       setError('Failed to create link token')
+      return null
     } finally {
       setLoading(false)
     }
@@ -83,18 +86,24 @@ export function PlaidConnect({ onSuccess, variant = "default", className = "" }:
           if (result.success) {
             setSuccess(`Successfully connected ${result.accounts_count} accounts!`)
             setLinkToken(null)
-            // Call onSuccess callback if provided
+            // Call onSuccess callback if provided, passing the data
             if (onSuccess) {
-              setTimeout(() => onSuccess(), 1000)
+              setTimeout(() => onSuccess(public_token, metadata), 1000)
             } else {
               // Refresh the page to show new data
               setTimeout(() => window.location.reload(), 2000)
             }
           } else {
             setError('Failed to link account')
+            if (onError) {
+              onError()
+            }
           }
         } catch (err) {
           setError('Failed to link account')
+          if (onError) {
+            onError()
+          }
         } finally {
           setLoading(false)
         }
@@ -102,6 +111,9 @@ export function PlaidConnect({ onSuccess, variant = "default", className = "" }:
       onExit: (err: any, metadata: any) => {
         if (err) {
           setError('Plaid connection failed')
+          if (onError) {
+            onError()
+          }
         }
         setLinkToken(null)
         setLoading(false)
@@ -121,10 +133,79 @@ export function PlaidConnect({ onSuccess, variant = "default", className = "" }:
     }
 
     if (!linkToken) {
-      await createLinkToken()
+      const token = await createLinkToken()
+      if (token) {
+        // Use the token directly to open Plaid immediately
+        setTimeout(() => {
+          openPlaidLinkWithToken(token)
+        }, 100)
+      }
     } else {
       openPlaidLink()
     }
+  }
+  
+  const openPlaidLinkWithToken = (token: string) => {
+    if (!window.Plaid) {
+      setError('Plaid not ready')
+      return
+    }
+
+    const handler = window.Plaid.create({
+      token: token,
+      onSuccess: async (public_token: string, metadata: any) => {
+        try {
+          setLoading(true)
+          setError(null)
+          
+          // Link the account
+          const result = await apiClient.linkPlaidAccount({
+            user_id: user!.id,
+            public_token,
+            institution_id: metadata.institution.institution_id
+          })
+
+          if (result.success) {
+            setSuccess(`Successfully connected ${result.accounts_count} accounts!`)
+            setLinkToken(null)
+            // Call onSuccess callback if provided, passing the data
+            if (onSuccess) {
+              setTimeout(() => onSuccess(public_token, metadata), 1000)
+            } else {
+              // Refresh the page to show new data
+              setTimeout(() => window.location.reload(), 2000)
+            }
+          } else {
+            setError('Failed to link account')
+            if (onError) {
+              onError()
+            }
+          }
+        } catch (err) {
+          setError('Failed to link account')
+          if (onError) {
+            onError()
+          }
+        } finally {
+          setLoading(false)
+        }
+      },
+      onExit: (err: any, metadata: any) => {
+        if (err) {
+          setError('Plaid connection failed')
+          if (onError) {
+            onError()
+          }
+        }
+        setLinkToken(null)
+        setLoading(false)
+      },
+      onEvent: (eventName: string, metadata: any) => {
+        console.log('Plaid event:', eventName, metadata)
+      }
+    })
+
+    handler.open()
   }
 
   // Compact variant for header/inline use
