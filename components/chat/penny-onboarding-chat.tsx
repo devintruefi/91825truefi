@@ -10,6 +10,7 @@ import { useUser } from '@/contexts/user-context';
 import { OnboardingComponents } from './onboarding-components';
 import { onboardingFlow, quickStartTemplates } from '@/lib/onboarding/onboarding-flow';
 import { OnboardingPhase, OnboardingMessage, OnboardingProgress } from '@/lib/onboarding/types';
+import { OnboardingProgressSidebar } from './onboarding-progress-sidebar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, 
@@ -54,9 +55,12 @@ export function PennyOnboardingChat() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize onboarding on mount
+  // Initialize onboarding on mount - always start fresh
   useEffect(() => {
     if (user) {
+      // Clear any existing onboarding data from localStorage to ensure fresh start
+      localStorage.removeItem('onboarding_progress');
+      localStorage.removeItem('onboarding_complete');
       startOnboarding();
     }
   }, [user]);
@@ -67,6 +71,22 @@ export function PennyOnboardingChat() {
   }, [messages]);
 
   const startOnboarding = async () => {
+    // Reset state to ensure fresh start
+    setMessages([]);
+    setCurrentPhase('welcome');
+    setCurrentQuestionIndex(0);
+    setProgress({
+      userId: user?.id || '',
+      currentPhase: 'welcome',
+      completedPhases: [],
+      answers: {},
+      startedAt: new Date(),
+      lastUpdated: new Date(),
+      completionPercentage: 0,
+      points: 0,
+      achievements: []
+    });
+    
     // Add welcome message
     const welcomeMessage: ChatMessage = {
       id: 'welcome-1',
@@ -327,57 +347,68 @@ export function PennyOnboardingChat() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-900 shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <span className="text-white text-lg">🪙</span>
+    <div className="flex h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800">
+      {/* Progress Sidebar */}
+      <OnboardingProgressSidebar
+        progress={progress}
+        currentPhase={currentPhase}
+        currentQuestionIndex={currentQuestionIndex}
+        totalQuestionsInPhase={onboardingFlow.phases[currentPhase].questions.length}
+      />
+      
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="bg-white dark:bg-gray-900 shadow-sm border-b">
+          <div className="px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                    <span className="text-white text-lg">🪙</span>
+                  </div>
+                  {isTyping && (
+                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                  )}
                 </div>
-                {isTyping && (
-                  <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                )}
-              </div>
-              <div>
-                <h2 className="font-semibold">Penny</h2>
-                <p className="text-xs text-gray-500">Your AI Financial Assistant</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              {/* Progress */}
-              <div className="flex items-center gap-2">
-                <Progress value={progress.completionPercentage} className="w-24 h-2" />
-                <span className="text-sm text-gray-500">{Math.round(progress.completionPercentage)}%</span>
+                <div>
+                  <h2 className="font-semibold">Penny - Your AI Financial Assistant</h2>
+                  <p className="text-xs text-gray-500">
+                    {currentPhase === 'welcome' ? 'Let\'s get to know each other!' :
+                     currentPhase === 'quick-wins' ? 'Understanding your situation...' :
+                     currentPhase === 'financial-snapshot' ? 'Getting your financial overview...' :
+                     currentPhase === 'personalization' ? 'Personalizing your experience...' :
+                     currentPhase === 'goals-dreams' ? 'Setting up your goals...' :
+                     'Almost done!'}
+                  </p>
+                </div>
               </div>
               
-              {/* Points */}
-              <Badge variant="secondary" className="gap-1">
-                <Star className="h-3 w-3" />
-                {progress.points} pts
-              </Badge>
-              
-              {/* Audio Toggle */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setAudioEnabled(!audioEnabled)}
-              >
-                {audioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-              </Button>
+              <div className="flex items-center gap-4">
+                {/* Points */}
+                <Badge variant="secondary" className="gap-1">
+                  <Star className="h-3 w-3" />
+                  {progress.points} pts
+                </Badge>
+                
+                {/* Audio Toggle */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setAudioEnabled(!audioEnabled)}
+                >
+                  {audioEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-          <AnimatePresence>
-            {messages.map((message) => (
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto px-6 py-6 space-y-4">
+            <AnimatePresence>
+              {messages.map((message, messageIndex) => (
               <motion.div
                 key={message.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -399,9 +430,16 @@ export function PennyOnboardingChat() {
                   )}
                 >
                   {message.content && (
-                    <p className={message.role === 'system' ? 'font-semibold' : ''}>
-                      {message.content}
-                    </p>
+                    <div>
+                      {message.role === 'assistant' && messageIndex === messages.length - 1 && (
+                        <div className="text-xs text-gray-500 mb-2">
+                          Step {currentQuestionIndex + 1} of {onboardingFlow.phases[currentPhase].questions.length}
+                        </div>
+                      )}
+                      <p className={message.role === 'system' ? 'font-semibold' : ''}>
+                        {message.content}
+                      </p>
+                    </div>
                   )}
                   {message.component && message.role === 'assistant' && (
                     <div className="mt-4">
@@ -411,7 +449,7 @@ export function PennyOnboardingChat() {
                 </div>
               </motion.div>
             ))}
-          </AnimatePresence>
+            </AnimatePresence>
           
           {isTyping && (
             <motion.div
@@ -429,29 +467,30 @@ export function PennyOnboardingChat() {
             </motion.div>
           )}
           
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
+          </div>
         </div>
-      </div>
 
-      {/* Input (for text questions) */}
-      {onboardingFlow.phases[currentPhase].questions[currentQuestionIndex]?.type === 'text' && (
-        <div className="bg-white dark:bg-gray-900 border-t">
-          <form onSubmit={handleTextSubmit} className="max-w-2xl mx-auto px-4 py-4">
-            <div className="flex gap-2">
-              <Input
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Type your answer..."
-                className="flex-1"
-                autoFocus
-              />
-              <Button type="submit" disabled={!textInput.trim()}>
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
+        {/* Input (for text questions) */}
+        {onboardingFlow.phases[currentPhase].questions[currentQuestionIndex]?.type === 'text' && (
+          <div className="bg-white dark:bg-gray-900 border-t">
+            <form onSubmit={handleTextSubmit} className="max-w-2xl mx-auto px-6 py-4">
+              <div className="flex gap-2">
+                <Input
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder="Type your answer here and press Enter..."
+                  className="flex-1"
+                  autoFocus
+                />
+                <Button type="submit" disabled={!textInput.trim()}>
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -106,16 +106,34 @@ export const onboardingFlow: OnboardingFlow = {
       description: "I'm Penny, your AI financial assistant 🪙",
       questions: [
         {
+          id: 'welcome-security',
+          type: 'info-card',
+          content: "Welcome to TrueFi! Before we begin, I want you to know that your financial information is completely secure here. We use bank-level encryption, never sell your data, and you're always in control of what you share. Let's build your personalized financial dashboard together! 🔒",
+          data: {
+            icon: '🔒',
+            title: 'Your Privacy Matters',
+            points: [
+              '256-bit encryption protects your data',
+              'We never sell or share your information',
+              'You can skip any question you\'re not comfortable with',
+              'Delete your data anytime from settings'
+            ],
+            buttonText: 'Got it, let\'s start!'
+          },
+          saveKey: 'acknowledgedPrivacy',
+          required: false
+        },
+        {
           id: 'welcome-1',
           type: 'text',
-          content: "Hi there! I'm Penny, and I'm here to help you take control of your finances. What should I call you?",
+          content: "Hi! I'm Penny, your AI financial assistant 🪙 I'll help you take control of your finances through a personalized dashboard. Let's start simple - what's your first name?",
           saveKey: 'firstName',
           required: true
         },
         {
           id: 'welcome-2',
           type: 'buttons',
-          content: "Nice to meet you! How much time do you have right now?",
+          content: "Nice to meet you! The more you share, the better I can personalize your experience. How much time do you have right now?",
           data: {
             options: [
               { id: 'quick', label: '⚡ 3 minutes - Quick Setup', value: 'quick' },
@@ -137,7 +155,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'quick-template',
           type: 'cards',
-          content: "Which best describes your current situation?",
+          content: "Let's understand your situation. Which of these resonates most with you right now? (This helps me prioritize the right strategies for you)",
           data: {
             templates: quickStartTemplates,
             allowCustom: true
@@ -148,7 +166,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'life-stage',
           type: 'image-choice',
-          content: "What stage of life are you in?",
+          content: "What stage of life are you in? (I'll tailor advice based on typical financial needs for your life stage)",
           data: {
             options: [
               { id: 'student', label: 'Student', image: '🎓' },
@@ -165,7 +183,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'primary-goals',
           type: 'checkbox-group',
-          content: "What are your top financial goals? (Select all that apply)",
+          content: "What are your top financial goals? Select up to 5 that matter most to you. I'll help create action plans for each one:",
           data: {
             options: [
               { id: 'emergency-fund', label: '🛡️ Build Emergency Fund', value: 'emergency_fund' },
@@ -196,7 +214,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'income-range',
           type: 'slider',
-          content: "What's your approximate annual income?",
+          content: "What's your approximate annual income? (Don't worry about being exact - this helps me suggest realistic budget percentages)",
           data: {
             min: 0,
             max: 500000,
@@ -216,7 +234,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'monthly-expenses',
           type: 'slider',
-          content: "Roughly how much do you spend each month?",
+          content: "Roughly how much do you spend each month? (I'll use this to identify potential savings opportunities)",
           data: {
             min: 0,
             max: 20000,
@@ -230,7 +248,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'connect-accounts',
           type: 'plaid-connect',
-          content: "Connect your bank accounts for automatic tracking and personalized insights",
+          content: "Would you like to connect your bank accounts? This enables automatic expense tracking and real-time insights:",
           data: {
             benefits: [
               'Automatic transaction categorization',
@@ -246,7 +264,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'manual-accounts',
           type: 'quick-add',
-          content: "Or quickly add your account balances manually",
+          content: "Or quickly add your account balances manually (you can always connect accounts later):",
           data: {
             fields: [
               { id: 'checking', label: 'Checking Account', type: 'currency', icon: '🏦' },
@@ -261,7 +279,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'existing-debt',
           type: 'checkbox-group',
-          content: "Do you have any of these debts?",
+          content: "Do you have any of these debts? (I'll help create a strategic payoff plan to save you money on interest)",
           data: {
             options: [
               { id: 'student-loans', label: '🎓 Student Loans', hasAmount: true },
@@ -286,7 +304,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'money-personality',
           type: 'image-choice',
-          content: "You find $100 unexpectedly. What do you do?",
+          content: "Quick personality check: You find $100 unexpectedly. What's your first instinct? (This helps me understand your natural money habits)",
           data: {
             options: [
               { id: 'save-all', label: 'Save it all', image: '🏦', value: { spenderSaver: 1 } },
@@ -302,7 +320,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'risk-tolerance',
           type: 'cards',
-          content: "How do you feel about financial risk?",
+          content: "How do you feel about financial risk? (This shapes investment recommendations and emergency fund targets)",
           data: {
             options: [
               { 
@@ -333,7 +351,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'budget-categories',
           type: 'pie-chart',
-          content: "How would you like to allocate your budget?",
+          content: "Let's set up your ideal budget allocation. Adjust these percentages to match your priorities (I've pre-filled typical amounts based on your income):",
           data: {
             smartDefaults: true, // AI will suggest based on income/lifestyle
             categories: [
@@ -352,7 +370,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'life-events',
           type: 'checkbox-group',
-          content: "Any major life events coming up?",
+          content: "Any major life events coming up? (I'll help you prepare financially for these milestones)",
           data: {
             options: commonLifeEvents.map(event => ({
               id: event.id,
@@ -367,7 +385,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'notification-preferences',
           type: 'buttons',
-          content: "How often would you like financial insights?",
+          content: "How often would you like to receive financial insights and progress updates?",
           data: {
             options: [
               { id: 'daily', label: '📅 Daily', value: 'daily' },
@@ -390,7 +408,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'goal-prioritization',
           type: 'drag-sort',
-          content: "Drag to prioritize your goals (most important on top)",
+          content: "Great! Now let's prioritize. Drag your goals to order them by importance (most urgent at the top). I'll focus resources on your top priorities:",
           data: {
             items: 'userSelectedGoals', // Will be populated from previous answers
             showEstimates: true
@@ -400,7 +418,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'goal-timeline',
           type: 'timeline',
-          content: "When would you like to achieve these goals?",
+          content: "When would you like to achieve each goal? Set realistic timelines and I'll calculate monthly savings needed:",
           data: {
             goals: 'prioritizedGoals',
             minYear: 'currentYear',
@@ -411,7 +429,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'motivation',
           type: 'buttons',
-          content: "What motivates you most about managing money?",
+          content: "What's your biggest motivation for getting your finances in order? (This helps me frame advice in ways that resonate with you)",
           data: {
             options: [
               { id: 'security', label: '🛡️ Security & Peace of Mind', value: 'security' },
@@ -426,7 +444,7 @@ export const onboardingFlow: OnboardingFlow = {
         {
           id: 'subscriptions',
           type: 'checkbox-group',
-          content: "Quick check - which subscriptions do you have?",
+          content: "Let's do a quick subscription audit. Check all that you currently pay for (I'll show you the total and suggest ways to optimize):",
           data: {
             options: [
               { id: 'netflix', label: '📺 Netflix (~$15)', value: 15 },

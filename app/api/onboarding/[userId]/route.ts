@@ -36,7 +36,17 @@ export async function GET(
       return acc;
     }, {} as Record<string, string>);
 
-    return NextResponse.json({ responses: responseData });
+    // Check if user has completed basic onboarding (has at least firstName and primaryGoals)
+    const hasCompletedOnboarding = !!(
+      responseData.firstName && 
+      (responseData.primaryGoals || responseData.main_goal || responseData.MAIN_GOAL)
+    );
+
+    return NextResponse.json({ 
+      responses: responseData,
+      hasCompletedOnboarding,
+      responseCount: responses.length
+    });
 
   } catch (error) {
     console.error('Error fetching onboarding responses:', error);

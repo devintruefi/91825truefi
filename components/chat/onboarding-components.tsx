@@ -17,7 +17,9 @@ import {
   Trophy,
   Star,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Shield,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -26,6 +28,55 @@ interface BaseComponentProps {
   onComplete: (value: any) => void;
   onSkip?: () => void;
   disabled?: boolean;
+}
+
+// Info Card Component - for privacy/security messages
+export function InfoCard({ data, onComplete }: BaseComponentProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="w-full"
+    >
+      <Card className="border-2 border-blue-100 dark:border-blue-900 bg-gradient-to-br from-blue-50 to-white dark:from-blue-950 dark:to-gray-900">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                {data.icon === '🔒' ? (
+                  <Lock className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                ) : (
+                  <Shield className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                )}
+              </div>
+            </div>
+            <div className="flex-1 space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  {data.title}
+                </h3>
+                <div className="space-y-2">
+                  {data.points.map((point: string, index: number) => (
+                    <div key={index} className="flex items-start gap-2">
+                      <Check className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">{point}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <Button 
+                onClick={() => onComplete(true)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {data.buttonText || 'Continue'}
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
 }
 
 // Button Selection Component
@@ -632,6 +683,7 @@ function PlaidConnectWrapper({ data, onComplete, onSkip }: BaseComponentProps) {
 
 // Export all components
 export const OnboardingComponents = {
+  'info-card': InfoCard,
   buttons: ButtonSelection,
   'checkbox-group': CheckboxGroup,
   cards: CardSelection,

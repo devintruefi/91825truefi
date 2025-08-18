@@ -220,6 +220,8 @@ export function AuthContent() {
         password: registerPassword,
         is_advisor: false // Always set to false for regular users
       })
+      // Wait a moment for the user context to update, then redirect to onboarding
+      // The user context will handle the redirect automatically in its useEffect
     } catch (err) {
       console.error("Registration failed:", err)
       setLocalError("Registration failed. Please try again.")

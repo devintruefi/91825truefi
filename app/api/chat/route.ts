@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     
     // Check authentication
     const authHeader = request.headers.get('authorization');
-    const isAuthenticated = authHeader?.startsWith('Bearer ');
+    const isAuthenticated = !!(authHeader && authHeader.startsWith('Bearer '));
     
     const { 
       message, 
@@ -195,6 +195,7 @@ export async function POST(request: NextRequest) {
     // Handle onboarding mode for authenticated users
     if (isAuthenticated && isOnboarding) {
       console.log('=== ONBOARDING MODE ACTIVE ===');
+      console.log('Full request body:', { message, isOnboarding, onboardingProgress });
       console.log('Message:', message);
       console.log('Current step:', onboardingProgress.currentStep);
       console.log('Progress:', onboardingProgress);
@@ -241,6 +242,15 @@ export async function POST(request: NextRequest) {
         // User selected something, move to next step
         nextStep = OnboardingManager.getNextStep(currentStep, componentValue);
         responseMessage = OnboardingManager.getFollowUp(currentStep, componentValue, userFirstName);
+        
+        // If getNextStep returns null or undefined, try to determine next step
+        if (!nextStep) {
+          console.log('WARNING: getNextStep returned null, determining next step manually');
+          // Fallback logic for main goal selection
+          if (currentStep === 'MAIN_GOAL') {
+            nextStep = 'LIFE_STAGE';
+          }
+        }
       } else {
         // User typed something - just acknowledge and show the current step again
         responseMessage = "I see you're eager to move forward! Let me guide you through the process step by step. 😊";
@@ -250,11 +260,18 @@ export async function POST(request: NextRequest) {
       
       // Get the flow step configuration
       const flowStep = ONBOARDING_FLOW[nextStep as keyof typeof ONBOARDING_FLOW];
-      const componentToShow = flowStep?.component;
+      let componentToShow = flowStep?.component;
+      
+      // If we're still on the same step and not a component response, show the current step's component
+      if (!isComponentResponse && currentStep === nextStep) {
+        const currentFlowStep = ONBOARDING_FLOW[currentStep as keyof typeof ONBOARDING_FLOW];
+        componentToShow = currentFlowStep?.component;
+      }
       
       console.log('=== COMPONENT DEBUG ===');
       console.log('Current step:', currentStep);
       console.log('Next step:', nextStep);
+      console.log('Flow step:', flowStep);
       console.log('Component to show:', componentToShow);
       console.log('Is component response:', isComponentResponse);
       
@@ -297,8 +314,8 @@ export async function POST(request: NextRequest) {
 
     // Non-onboarding chat handling
     console.log('=== REGULAR CHAT MODE ===');
-    console.log('isAuthenticated:', isAuthenticated);
-    console.log('isOnboarding:', isOnboarding);
+    console.log('Why not onboarding? isAuthenticated:', isAuthenticated, 'isOnboarding:', isOnboarding);
+    console.log('Full request:', { message, isOnboarding, onboardingProgress });
     
     if (isAuthenticated && !isOnboarding) {
       // Handle authenticated user chat

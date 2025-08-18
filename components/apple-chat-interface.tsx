@@ -496,7 +496,7 @@ function AppleChatInterfaceInner() {
       // For onboarding users, show friendly welcome asking about their main goal
       return [{
         id: "1",
-        content: `Hi ${user.first_name}! Welcome to TrueFi! 🌟\n\nI'm Penny, your AI financial assistant. Let's build your financial future together. What brought you to TrueFi today? What's your main financial goal right now?`,
+        content: `Hi ${user.first_name}! Welcome to TrueFi! 🌟\n\nI'm Penny, your AI financial assistant. I'm here to help you build a personalized financial plan that actually works for your life.\n\n🔒 **Your Privacy & Security:**\n• All your data is encrypted and secure\n• We never sell or share your personal information\n• You control what you share and when\n• Bank connections are read-only - I can't move your money\n\nLet's start building your financial future! What brought you to TrueFi today?`,
         sender: "penny",
         timestamp: fixedTimestamp,
         component: {
@@ -507,8 +507,7 @@ function AppleChatInterfaceInner() {
               { id: 'emergency', label: 'Save for emergencies', value: 'emergency_fund', icon: '🛡️' },
               { id: 'home', label: 'Save for a home', value: 'home_purchase', icon: '🏠' },
               { id: 'retirement', label: 'Plan for retirement', value: 'retirement', icon: '🏖️' },
-              { id: 'travel', label: 'Save for travel', value: 'travel', icon: '✈️' },
-              { id: 'wealth', label: 'Build wealth', value: 'investments', icon: '📈' },
+              { id: 'wealth', label: 'Build wealth & invest', value: 'investments', icon: '📈' },
               { id: 'other', label: 'Something else', value: 'other', icon: '💭' }
             ]
           }
@@ -551,6 +550,7 @@ function AppleChatInterfaceInner() {
     currentStep: isOnboarding ? 'MAIN_GOAL' : null,
     mode: 'standard', // quick, standard, or complete
     responses: {},
+    completedSteps: [],
     dashboardReady: false
   })
   const [isOnboardingMode, setIsOnboardingMode] = useState(isOnboarding)
@@ -641,6 +641,10 @@ function AppleChatInterfaceInner() {
     if (user && !hasSetInitialOnboarding) {
       console.log('Setting initial onboarding mode from URL:', isOnboarding);
       setIsOnboardingMode(isOnboarding);
+      if (isOnboarding && !onboardingProgress.currentStep) {
+        console.log('Initializing onboarding progress with MAIN_GOAL step');
+        setOnboardingProgress(prev => ({ ...prev, currentStep: 'MAIN_GOAL' }));
+      }
       setHasSetInitialOnboarding(true);
     }
   }, [user, isOnboarding, hasSetInitialOnboarding]);
@@ -935,6 +939,12 @@ function AppleChatInterfaceInner() {
 
   // Function to handle interactive component responses
   const handleComponentResponse = async (messageId: string, value: any, componentType: string) => {
+    // ALWAYS ensure onboarding mode is active when handling component responses during onboarding
+    if (onboardingProgress.currentStep && onboardingProgress.currentStep !== 'complete') {
+      console.log('Component response during onboarding - ensuring onboarding mode is ON');
+      setIsOnboardingMode(true);
+    }
+    
     // Import the comprehensive onboarding flow
     const { OnboardingManager } = await import('@/lib/onboarding/comprehensive-onboarding')
     const ONBOARDING_STEPS = {
@@ -1045,10 +1055,22 @@ function AppleChatInterfaceInner() {
     // Determine next step using the comprehensive flow
     const nextStep = OnboardingManager.getNextStep(currentStep, value)
     if (nextStep) {
+      // Mark current step as completed before moving to next
+      const completedSteps = updatedProgress.completedSteps || []
+      if (!completedSteps.includes(currentStep)) {
+        completedSteps.push(currentStep)
+      }
+      updatedProgress.completedSteps = completedSteps
       updatedProgress.currentStep = nextStep
     }
     
     setOnboardingProgress(updatedProgress)
+    
+    // CRITICAL: Ensure onboarding mode stays active
+    if (updatedProgress.currentStep && updatedProgress.currentStep !== 'complete') {
+      console.log('Keeping onboarding mode ACTIVE after updating progress');
+      setIsOnboardingMode(true);
+    }
     
     // Send the response as a user message with natural language
     let userDisplayMessage = ''
@@ -1153,7 +1175,15 @@ function AppleChatInterfaceInner() {
     
     // Trigger Penny's next response
     const responseMessage = typeof value === 'object' ? JSON.stringify(value) : value
-    await handleSendMessage(`[Component Response: ${componentType}] ${responseMessage}`, true)
+    console.log('=== SENDING COMPONENT RESPONSE ===');
+    console.log('Component type:', componentType);
+    console.log('Value:', value);
+    console.log('Response message:', responseMessage);
+    console.log('Current isOnboardingMode before send:', isOnboardingMode);
+    console.log('Updated progress before send:', updatedProgress);
+    
+    // Force onboarding mode for the next request
+    await handleSendMessage(`[Component Response: ${componentType}] ${responseMessage}`, true, updatedProgress)
   }
 
   // Function to render interactive components
@@ -1332,7 +1362,7 @@ function AppleChatInterfaceInner() {
     return false
   }
 
-  const handleSendMessage = async (customMessage?: string, isAutomated?: boolean) => {
+  const handleSendMessage = async (customMessage?: string, isAutomated?: boolean, forceProgress?: any) => {
     const userMessage = customMessage || inputValue.trim()
     if (!userMessage || isLoading) return
     
@@ -1478,13 +1508,22 @@ function AppleChatInterfaceInner() {
         sessionId: activeSessionId || sessionId
       }
       
-      if (isOnboardingMode) {
+      // Use forced progress if provided (from component responses), otherwise use current state
+      const progressToSend = forceProgress || onboardingProgress;
+      const shouldBeOnboarding = isOnboardingMode || (progressToSend.currentStep && progressToSend.currentStep !== 'complete');
+      
+      if (shouldBeOnboarding) {
         requestBody.isOnboarding = true
         requestBody.onboardingPhase = onboardingPhase
-        requestBody.onboardingProgress = onboardingProgress
+        requestBody.onboardingProgress = progressToSend
         console.log('=== SENDING ONBOARDING REQUEST ===');
         console.log('isOnboardingMode:', isOnboardingMode);
-        console.log('onboardingProgress:', onboardingProgress);
+        console.log('shouldBeOnboarding:', shouldBeOnboarding);
+        console.log('onboardingProgress being sent:', progressToSend);
+      } else {
+        console.log('=== NOT SENDING AS ONBOARDING ===');
+        console.log('isOnboardingMode:', isOnboardingMode);
+        console.log('progressToSend:', progressToSend);
       }
       
       const response = await fetch('/api/chat', {
@@ -1543,6 +1582,12 @@ function AppleChatInterfaceInner() {
           
           setOnboardingPhase(data.onboardingUpdate.phase || onboardingPhase)
           setOnboardingProgress(data.onboardingUpdate.progress || onboardingProgress)
+          
+          // Keep onboarding mode active unless explicitly complete
+          if (!data.onboardingUpdate.complete && !isOnboardingMode) {
+            console.log('Keeping onboarding mode active');
+            setIsOnboardingMode(true)
+          }
           
           // Check if onboarding is complete
           if (data.onboardingUpdate.complete) {
@@ -2088,9 +2133,9 @@ function AppleChatInterfaceInner() {
         className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 p-2 sm:p-4"
       >
         <div className="max-w-[1600px] mx-auto">
-          {/* Enhanced Quick Suggestions with Toggle */}
+          {/* Enhanced Quick Suggestions with Toggle - Hide during onboarding */}
           <AnimatePresence mode="wait">
-            {suggestionsVisible ? (
+            {!isOnboardingMode && suggestionsVisible ? (
               <motion.div
                 key="expanded"
                 initial={{ height: 0, opacity: 0 }}
@@ -2174,8 +2219,8 @@ function AppleChatInterfaceInner() {
                   )}
                 </div>
               </motion.div>
-            ) : (
-              // Minimal show suggestions button when hidden
+            ) : !isOnboardingMode ? (
+              // Minimal show suggestions button when hidden - not shown during onboarding
               <motion.div
                 key="collapsed"
                 initial={{ opacity: 0 }}
@@ -2193,8 +2238,24 @@ function AppleChatInterfaceInner() {
                   <ChevronUp className="w-3 h-3" />
                 </Button>
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
+          
+          {/* Onboarding Guidance */}
+          {isOnboardingMode && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+            >
+              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                ✨ Building Your Financial Profile
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                Please answer using the buttons above to create your personalized experience
+              </p>
+            </motion.div>
+          )}
           
           {/* Enhanced Input Field */}
           <div className="flex items-end space-x-3 max-w-4xl mx-auto">

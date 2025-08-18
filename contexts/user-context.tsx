@@ -131,7 +131,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         // Check for existing user data (but not demo users)
         const currentUserData = localStorage.getItem('current_user_data')
-        if (currentUserData) {
+        const currentUserId = localStorage.getItem('current_user_id')
+        if (currentUserData && currentUserId) {
           try {
             const user = JSON.parse(currentUserData)
             
@@ -146,26 +147,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
               return
             }
             
-            // Only set user if it's not a demo user
-            if (user.email !== 'demo@truefi.ai') {
-              console.log('Setting existing user from localStorage:', user);
-              setUser(user)
-              setLoading(false)
-              return
-            } else {
-              console.log('Clearing demo user data from localStorage');
-              localStorage.removeItem('current_user_data')
-              localStorage.removeItem('current_user_id')
-            }
+            // Always set the user if we have valid user data and ID
+            // regardless of whether it's demo or not - this ensures newly created users are loaded
+            console.log('Setting existing user from localStorage:', user);
+            setUser(user)
+            setLoading(false)
+            return
           } catch (err) {
             console.error('Failed to parse current user data:', err)
             localStorage.removeItem('current_user_data')
+            localStorage.removeItem('current_user_id')
           }
         }
 
-        // Only check for demo user if no OAuth token and no real user data
+        // Only check for demo user if explicitly requested (never as a fallback for new users)
         const demoUserId = localStorage.getItem('demo_user_id')
-        if (demoUserId && !authToken) {
+        if (demoUserId && !authToken && window.location.pathname === '/demo') {
           // Check if demo user ID is the old format and clear it
           if (demoUserId === 'demo-user-id') {
             console.log('Clearing old demo user session')
@@ -175,7 +172,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             return
           }
           
-          console.log('Setting demo user as fallback');
+          console.log('Setting demo user for demo page');
           const demoUser = {
             id: '123e4567-e89b-12d3-a456-426614174000', // Fixed demo UUID
             email: 'demo@truefi.ai',
@@ -220,11 +217,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (isOnAuthPage) {
           console.log('Redirecting to /chat for onboarding')
           // Check if user has completed onboarding
-          const hasCompletedOnboarding = user.has_completed_onboarding || localStorage.getItem('onboarding_complete') === 'true'
-          if (!hasCompletedOnboarding) {
-            window.location.href = '/chat?onboarding=true'
-          } else {
+          // Skip onboarding check for demo users
+          if (user.email === 'demo@truefi.ai') {
             window.location.href = '/dashboard'
+          } else {
+            const hasCompletedOnboarding = user.has_completed_onboarding || localStorage.getItem('onboarding_complete') === 'true'
+            if (!hasCompletedOnboarding) {
+              window.location.href = '/chat?onboarding=true'
+            } else {
+              window.location.href = '/dashboard'
+            }
           }
         }
       }
@@ -357,6 +359,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
           setUser(newUser);
           localStorage.setItem('current_user_id', newUser.id);
           localStorage.setItem('current_user_data', JSON.stringify(newUser));
+          // Store auth token if returned
+          if (newUser.token) {
+            localStorage.setItem('auth_token', newUser.token);
+            console.log('Stored auth token from user creation');
+          }
+          // Redirect to onboarding after successful user creation
+          setTimeout(() => {
+            window.location.href = '/chat?onboarding=true';
+          }, 100);
           return;
         } else {
           const errorData = await response.json();
@@ -389,7 +400,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         localUsers.push(newUser);
         localStorage.setItem('local_users', JSON.stringify(localUsers));
         
+        // Generate a simple token for local users
+        const localToken = btoa(`local:${newUser.id}:${Date.now()}`);
+        localStorage.setItem('auth_token', localToken);
+        
         console.log('Created local user:', newUser);
+        console.log('Generated local auth token');
         setUser({
           id: newUser.id,
           email: newUser.email,
@@ -400,6 +416,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         });
         localStorage.setItem('current_user_id', newUser.id);
         localStorage.setItem('current_user_data', JSON.stringify(newUser));
+        // Redirect to onboarding after successful local user creation
+        setTimeout(() => {
+          window.location.href = '/chat?onboarding=true';
+        }, 100);
       }
     } catch (err) {
       console.error('Create user error:', err);

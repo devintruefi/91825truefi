@@ -7,7 +7,7 @@ import uuid
 import logging
 import json
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List
 from dotenv import load_dotenv
 import os
@@ -1982,6 +1982,7 @@ async def validate_token(request: Request):
         # Decode and validate token
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            # Primary key is now userId for consistency
             user_id = payload.get("userId")
             
             if not user_id:
@@ -2060,6 +2061,16 @@ async def create_user(user_data: UserCreate):
         result = cur.fetchone()
         conn.commit()
         
+        # Generate JWT token for the new user
+        token_data = {
+            "userId": result[0],  # user_id - using userId for consistency with login endpoint
+            "email": result[1],
+            "first_name": result[2],
+            "last_name": result[3],
+            "exp": datetime.utcnow() + timedelta(days=7)
+        }
+        token = jwt.encode(token_data, JWT_SECRET, algorithm="HS256")
+        
         return {
             "id": result[0],
             "email": result[1],
@@ -2067,7 +2078,8 @@ async def create_user(user_data: UserCreate):
             "last_name": result[3],
             "is_active": result[4],
             "is_advisor": result[5],
-            "created_at": result[6].isoformat() if result[6] else None
+            "created_at": result[6].isoformat() if result[6] else None,
+            "token": token  # Include the token in the response
         }
         
     except HTTPException:
