@@ -233,7 +233,22 @@ export async function POST(request: NextRequest) {
       }
       
       // Determine current and next steps
-      const currentStep = onboardingProgress.currentStep || 'MAIN_GOAL';
+      // If currentStep is null and we have completed steps, check if onboarding is done
+      let currentStep = onboardingProgress.currentStep;
+      if (!currentStep && onboardingProgress.completedSteps?.includes('GOALS_SELECTION')) {
+        // Onboarding is already complete
+        return NextResponse.json({
+          message: `Welcome back, ${userFirstName}! Your onboarding is complete. How can I help you today?`,
+          onboardingUpdate: {
+            phase: null,
+            progress: { ...onboardingProgress, currentStep: null },
+            complete: true
+          },
+          session_id: sessionId
+        });
+      }
+      currentStep = currentStep || 'MAIN_GOAL';
+      
       let nextStep = currentStep;
       let responseMessage = '';
       
@@ -287,8 +302,14 @@ export async function POST(request: NextRequest) {
       // Update progress with the next step
       const updatedProgress = {
         ...onboardingProgress,
-        currentStep: nextStep
+        currentStep: nextStep === 'COMPLETE' ? null : nextStep
       };
+      
+      // If we've reached COMPLETE, set the onboarding as finished
+      if (nextStep === 'COMPLETE' || nextStep === ONBOARDING_STEPS.COMPLETE) {
+        responseMessage = `🎉 Congratulations ${userFirstName}! You've completed your financial profile setup!\n\nYour personalized dashboard is ready. I'll now be able to give you tailored financial advice based on your unique situation.\n\nReady to explore your financial future? Let's head to your dashboard!`;
+        componentToShow = null;
+      }
       
       console.log('=== RETURNING ONBOARDING RESPONSE ===');
       console.log('Next step:', nextStep);
@@ -299,9 +320,9 @@ export async function POST(request: NextRequest) {
         message: responseMessage,
         component: componentToShow,  // Always include the component
         onboardingUpdate: {
-          phase: nextStep,
+          phase: nextStep === 'COMPLETE' ? null : nextStep,
           progress: updatedProgress,
-          complete: nextStep === ONBOARDING_STEPS.COMPLETE
+          complete: nextStep === 'COMPLETE' || nextStep === ONBOARDING_STEPS.COMPLETE
         },
         session_id: sessionId
       };

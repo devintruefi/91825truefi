@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
+import { getUserFromRequest } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await authenticateRequest(request);
+    const user = await getUserFromRequest(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

@@ -46,7 +46,7 @@ This sets default credentials for the proxy.
 Open a dedicated terminal (keep it open).
 Run:
 
-$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101$@127.0.0.1:5433/truefi_app_data?sslmode=disable'
+$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101%24@127.0.0.1:5433/truefi_app_data?sslmode=disable'
 cloud-sql-proxy truefi:us-central1:true-fi-db --port=5433
 
 Confirm it says "Ready for new connections." Don't close this terminal.
@@ -55,7 +55,7 @@ Confirm it says "Ready for new connections." Don't close this terminal.
 In your main project terminal:
 Run:
 
-$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101$@127.0.0.1:5433/truefi_app_data?sslmode=disable'
+$env:DATABASE_URL = 'postgresql://truefi_user:truefi.ai101%24@127.0.0.1:5433/truefi_app_data?sslmode=disable'
 
 then turn on prisma:
 

@@ -58,7 +58,6 @@ export async function POST(request: NextRequest) {
     // Log the response to user_onboarding_responses
     await prisma.user_onboarding_responses.create({
       data: {
-        id: crypto.randomUUID(),
         user_id: userId,
         question,
         answer: typeof answer === 'object' ? JSON.stringify(answer) : String(answer),

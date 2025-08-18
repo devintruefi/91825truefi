@@ -29,9 +29,21 @@ export const STEP_NAMES: Record<OnboardingStep, string> = {
 };
 
 // Calculate progress percentage
-export function getProgressPercentage(currentStep: OnboardingStep): number {
-  const steps = Object.values(ONBOARDING_STEPS);
-  const currentIndex = steps.indexOf(currentStep);
+export function getProgressPercentage(currentStep: OnboardingStep | string | null): number {
+  if (!currentStep) return 0;
+  
+  const steps = Object.values(ONBOARDING_STEPS).filter(s => s !== 'complete');
+  const currentIndex = steps.indexOf(currentStep as OnboardingStep);
+  
+  // If step not found or is 'complete', return 100%
+  if (currentStep === 'COMPLETE' || currentStep === ONBOARDING_STEPS.COMPLETE) {
+    return 100;
+  }
+  
+  // If step not found, return 0
+  if (currentIndex === -1) return 0;
+  
+  // Calculate percentage based on position in flow
   return Math.round(((currentIndex + 1) / steps.length) * 100);
 }
 

@@ -28,12 +28,12 @@ interface OnboardingProgressProps {
 export function OnboardingProgress({ currentStep, completedSteps }: OnboardingProgressProps) {
   const progress = getProgressPercentage(currentStep as any);
   const steps = Object.values(ONBOARDING_STEPS).filter(s => s !== 'complete');
-  const currentStepIndex = steps.indexOf(currentStep);
+  const currentStepIndex = Math.max(0, steps.indexOf(currentStep)); // Ensure minimum 0
   const totalSteps = steps.length;
   
-  // Calculate what information has been collected
+  // Calculate what information has been collected based on actual completed steps
   const collectedInfo = completedSteps.length;
-  const remainingInfo = totalSteps - collectedInfo - 1; // -1 for current step
+  const remainingInfo = Math.max(0, totalSteps - collectedInfo - 1); // -1 for current step, ensure min 0
   
   return (
     <div className="w-full p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-lg mb-4">
