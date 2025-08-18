@@ -101,6 +101,11 @@ text
 
 
 pnpm dev
+
+
+    - Username: user_good
+    - Password: pass_good
+
 Opens at http://localhost:3000. Log in, test dashboard/chat/Plaid. Keep open.
 Everything should now be connected: Proxy for DB, Prisma Studio for viewing, backend for chatbot, frontend for UI. If issues (e.g., connection refused), check if proxy is running or auth succeeded. Test by visiting /dashboard after login—data should pull from DB. Let me know if working!
 ## Overview

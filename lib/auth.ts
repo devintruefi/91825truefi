@@ -29,6 +29,22 @@ export async function getUserFromRequest(request: Request): Promise<{ id: string
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.split(' ')[1];
+  
+  // Handle local user tokens (base64 encoded)
+  if (token.startsWith('local:')) {
+    try {
+      const decoded = Buffer.from(token, 'base64').toString();
+      const parts = decoded.split(':');
+      if (parts[0] === 'local' && parts[1]) {
+        // For local users, just return the user ID without database lookup
+        return { id: parts[1] };
+      }
+    } catch (e) {
+      console.error('Failed to decode local token:', e);
+    }
+  }
+  
+  // Handle JWT tokens
   const decoded = verifyToken(token);
   if (!decoded) return null;
   const user = await prisma.users.findUnique({ where: { id: decoded.userId } }); // Assumes your users table is 'users'

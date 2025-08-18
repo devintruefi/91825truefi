@@ -145,7 +145,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      accounts_count: accounts.length,
+      message: `Successfully linked ${accounts.length} accounts`
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to exchange token or fetch data' }, { status: 500 });

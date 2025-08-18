@@ -162,10 +162,34 @@ class ApiClient {
     public_token: string;
     institution_id: string;
   }): Promise<{ success: boolean; message: string; accounts_count: number }> {
-    return this.request('/plaid/link', {
+    // Get auth token from localStorage
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    
+    // First exchange the public token for an access token via the backend
+    const response = await fetch('/api/plaid/exchange', {
       method: 'POST',
-      body: JSON.stringify(data),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        user_id: data.user_id,
+        public_token: data.public_token,
+      }),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to exchange Plaid token:', errorText);
+      throw new Error('Failed to link Plaid account');
+    }
+
+    const result = await response.json();
+    return {
+      success: true,
+      message: 'Account linked successfully',
+      accounts_count: result.accounts_count || 0
+    };
   }
 
   // Financial Data
