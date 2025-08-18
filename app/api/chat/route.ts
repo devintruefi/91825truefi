@@ -258,6 +258,37 @@ export async function POST(request: NextRequest) {
         nextStep = OnboardingManager.getNextStep(currentStep, componentValue);
         responseMessage = OnboardingManager.getFollowUp(currentStep, componentValue, userFirstName);
         
+        // If user just connected Plaid, analyze their income
+        if (currentStep === 'PLAID_CONNECTION' && componentValue?.publicToken) {
+          try {
+            // Analyze transactions to detect income
+            const analysisResponse = await fetch('http://localhost:3000/api/onboarding/analyze-plaid', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                publicToken: componentValue.publicToken,
+                metadata: componentValue.metadata,
+                accounts: componentValue.metadata?.accounts || []
+              })
+            });
+            
+            if (analysisResponse.ok) {
+              const analysis = await analysisResponse.json();
+              onboardingProgress.detectedIncome = analysis.monthlyIncome || 0;
+              onboardingProgress.detectedExpenses = analysis.expenses || {};
+              console.log('Income analysis:', analysis);
+            }
+          } catch (error) {
+            console.error('Error analyzing Plaid data:', error);
+          }
+          
+          // Move to AUTO_ANALYSIS step
+          nextStep = 'AUTO_ANALYSIS';
+        }
+        
         // If getNextStep returns null or undefined, try to determine next step
         if (!nextStep) {
           console.log('WARNING: getNextStep returned null, determining next step manually');
@@ -276,6 +307,37 @@ export async function POST(request: NextRequest) {
       // Get the flow step configuration
       const flowStep = ONBOARDING_FLOW[nextStep as keyof typeof ONBOARDING_FLOW];
       let componentToShow = flowStep?.component;
+      
+      // If we're showing dashboard preview, populate it with actual data
+      if (nextStep === 'DASHBOARD_PREVIEW' && componentToShow?.type === 'dashboardPreview') {
+        // Try to get account data if user has connected Plaid
+        let accountData = { netWorth: 0, monthlyIncome: 0, monthlyExpenses: 0 };
+        
+        if (onboardingProgress.hasConnectedAccounts && userId) {
+          try {
+            // Fetch user's account data
+            const accountsResponse = await fetch(`http://localhost:3000/api/financial-data/${userId}?limit=1`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (accountsResponse.ok) {
+              const data = await accountsResponse.json();
+              accountData = {
+                netWorth: data.summary?.total_balance || 0,
+                monthlyIncome: onboardingProgress.monthlyIncome || 0,
+                monthlyExpenses: onboardingProgress.monthlyExpenses || 0
+              };
+            }
+          } catch (error) {
+            console.error('Error fetching account data for preview:', error);
+          }
+        }
+        
+        componentToShow = {
+          type: 'dashboardPreview',
+          data: accountData
+        };
+      }
       
       // If we're still on the same step and not a component response, show the current step's component
       if (!isComponentResponse && currentStep === nextStep) {
@@ -307,8 +369,22 @@ export async function POST(request: NextRequest) {
       
       // If we've reached COMPLETE, set the onboarding as finished
       if (nextStep === 'COMPLETE' || nextStep === ONBOARDING_STEPS.COMPLETE) {
-        responseMessage = `🎉 Congratulations ${userFirstName}! You've completed your financial profile setup!\n\nYour personalized dashboard is ready. I'll now be able to give you tailored financial advice based on your unique situation.\n\nReady to explore your financial future? Let's head to your dashboard!`;
+        responseMessage = `🎉 Congratulations ${userFirstName}! You've completed your financial profile setup!\n\nYour personalized dashboard is ready with:\n• ${onboardingProgress.completedSteps?.length || 0} accounts connected\n• Financial goals set\n• Budget created\n• Risk profile established\n\nI'm now ready to give you tailored financial advice. You can:\n• View your full dashboard for detailed insights\n• Continue chatting with me for financial guidance\n• Update your profile anytime\n\nWhat would you like to explore first?`;
         componentToShow = null;
+        
+        // Mark onboarding as complete in the database
+        try {
+          await fetch('http://localhost:3000/api/onboarding/complete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ userId, completedAt: new Date() })
+          });
+        } catch (error) {
+          console.error('Error marking onboarding complete:', error);
+        }
       }
       
       console.log('=== RETURNING ONBOARDING RESPONSE ===');
