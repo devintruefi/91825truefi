@@ -367,10 +367,11 @@ export async function POST(request: NextRequest) {
         currentStep: nextStep === 'COMPLETE' ? null : nextStep
       };
       
-      // If we've reached COMPLETE, set the onboarding as finished
-      if (nextStep === 'COMPLETE' || nextStep === ONBOARDING_STEPS.COMPLETE) {
-        responseMessage = `🎉 Congratulations ${userFirstName}! You've completed your financial profile setup!\n\nYour personalized dashboard is ready with:\n• ${onboardingProgress.completedSteps?.length || 0} accounts connected\n• Financial goals set\n• Budget created\n• Risk profile established\n\nI'm now ready to give you tailored financial advice. You can:\n• View your full dashboard for detailed insights\n• Continue chatting with me for financial guidance\n• Update your profile anytime\n\nWhat would you like to explore first?`;
+      // Handle completion state - check if we just reached COMPLETE
+      if ((nextStep === 'COMPLETE' || nextStep === ONBOARDING_STEPS.COMPLETE) && isComponentResponse) {
+        responseMessage = `🎉 Congratulations ${userFirstName}! You've completed your financial profile setup!\n\nYour personalized dashboard is ready with:\n• ${onboardingProgress.hasConnectedAccounts ? '✅' : '⏳'} Bank accounts connected\n• ✅ Risk profile established\n• ✅ Financial goals identified\n• ${onboardingProgress.monthlyIncome ? '✅' : '⏳'} Income verified\n\nI'm now ready to give you tailored financial advice. You can:\n• 📊 View your full dashboard for detailed insights\n• 💬 Continue chatting with me for financial guidance\n• ⚙️ Update your profile anytime\n\nWhat would you like to explore first?`;
         componentToShow = null;
+        nextStep = null; // Clear the next step to prevent looping
         
         // Mark onboarding as complete in the database
         try {
@@ -385,6 +386,19 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           console.error('Error marking onboarding complete:', error);
         }
+      }
+      
+      // If current step is COMPLETE but no component response, we're already done
+      if (currentStep === 'COMPLETE' && !isComponentResponse) {
+        return NextResponse.json({
+          message: `Welcome back, ${userFirstName}! Your onboarding is complete. How can I help you with your financial goals today?`,
+          onboardingUpdate: {
+            phase: null,
+            progress: { ...onboardingProgress, currentStep: null },
+            complete: true
+          },
+          session_id: sessionId
+        });
       }
       
       console.log('=== RETURNING ONBOARDING RESPONSE ===');
