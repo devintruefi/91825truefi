@@ -31,7 +31,8 @@ export function DashboardPreview({ data, onContinue, onViewDashboard }: Dashboar
   const netWorth = data.netWorth || 0;
   const monthlyIncome = data.monthlyIncome || 0;
   const monthlyExpenses = data.monthlyExpenses || monthlyIncome * 0.7;
-  const savingsRate = data.savingsRate || ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100;
+  const savingsRate = data.savingsRate !== undefined ? data.savingsRate : 
+                      (monthlyIncome > 0 ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : 0);
 
   return (
     <div className="space-y-4">

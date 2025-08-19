@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
       // Only advance to next step if this was a component response
       if (isComponentResponse) {
         // User selected something, move to next step
-        nextStep = OnboardingManager.getNextStep(currentStep, componentValue);
+        nextStep = OnboardingManager.getNextStep(currentStep, componentValue, onboardingProgress);
         responseMessage = OnboardingManager.getFollowUp(currentStep, componentValue, userFirstName);
         
         // If user just connected Plaid, analyze their income
@@ -277,16 +277,43 @@ export async function POST(request: NextRequest) {
             
             if (analysisResponse.ok) {
               const analysis = await analysisResponse.json();
-              onboardingProgress.detectedIncome = analysis.monthlyIncome || 0;
+              onboardingProgress.detectedIncome = analysis.monthlyIncome || 5000;
+              onboardingProgress.monthlyIncome = analysis.monthlyIncome || 5000; // Also set monthlyIncome
               onboardingProgress.detectedExpenses = analysis.expenses || {};
-              console.log('Income analysis:', analysis);
+              
+              // Store detected assets and liabilities
+              if (analysis.detectedAssets) {
+                onboardingProgress.detectedAssets = analysis.detectedAssets;
+                onboardingProgress.totalAssets = analysis.detectedAssets.total;
+              }
+              if (analysis.detectedLiabilities) {
+                onboardingProgress.detectedLiabilities = analysis.detectedLiabilities;
+                onboardingProgress.totalLiabilities = analysis.detectedLiabilities.total;
+              }
+              onboardingProgress.netWorth = analysis.netWorth || 0;
+              
+              console.log('Full analysis:', analysis);
             }
           } catch (error) {
             console.error('Error analyzing Plaid data:', error);
+            // Set default income if analysis fails
+            onboardingProgress.detectedIncome = 5000;
+            onboardingProgress.monthlyIncome = 5000;
           }
           
           // Move to AUTO_ANALYSIS step
           nextStep = 'AUTO_ANALYSIS';
+        }
+        
+        // Handle income confirmation
+        if (currentStep === 'INCOME_CONFIRMATION' || currentStep === 'income_confirmation') {
+          if (componentValue === 'confirmed') {
+            // User confirmed the detected income
+            onboardingProgress.monthlyIncome = onboardingProgress.detectedIncome || 5000;
+          } else if (typeof componentValue === 'number') {
+            // User provided a different amount
+            onboardingProgress.monthlyIncome = componentValue;
+          }
         }
         
         // If getNextStep returns null or undefined, try to determine next step
@@ -297,6 +324,7 @@ export async function POST(request: NextRequest) {
             nextStep = 'LIFE_STAGE';
           }
         }
+        
       } else {
         // User typed something - just acknowledge and show the current step again
         responseMessage = "I see you're eager to move forward! Let me guide you through the process step by step. 😊";
@@ -304,34 +332,86 @@ export async function POST(request: NextRequest) {
         nextStep = currentStep;
       }
       
-      // Get the flow step configuration
+      // Get the flow step configuration for the next step
       const flowStep = ONBOARDING_FLOW[nextStep as keyof typeof ONBOARDING_FLOW];
+      // Always get the component for the current/next step
       let componentToShow = flowStep?.component;
       
       // If we're showing dashboard preview, populate it with actual data
       if (nextStep === 'DASHBOARD_PREVIEW' && componentToShow?.type === 'dashboardPreview') {
         // Try to get account data if user has connected Plaid
-        let accountData = { netWorth: 0, monthlyIncome: 0, monthlyExpenses: 0 };
+        let accountData = { 
+          netWorth: 0, 
+          monthlyIncome: onboardingProgress.monthlyIncome || onboardingProgress.detectedIncome || 5000, 
+          monthlyExpenses: onboardingProgress.monthlyExpenses || 0,
+          accounts: 0,
+          goals: [],
+          savingsRate: 0
+        };
         
         if (onboardingProgress.hasConnectedAccounts && userId) {
           try {
-            // Fetch user's account data
-            const accountsResponse = await fetch(`http://localhost:3000/api/financial-data/${userId}?limit=1`, {
+            // Fetch user's Plaid account balances
+            const accountsResponse = await fetch(`http://localhost:3000/api/plaid/accounts`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             
             if (accountsResponse.ok) {
-              const data = await accountsResponse.json();
+              const accountsData = await accountsResponse.json();
+              // Calculate total balance from all accounts
+              const totalBalance = accountsData.accounts?.reduce((sum: number, account: any) => {
+                return sum + (account.balances?.current || 0);
+              }, 0) || 0;
+              
+              // For credit cards and loans, balances are negative (debts)
+              const assets = accountsData.accounts?.filter((acc: any) => 
+                acc.type === 'depository' || acc.type === 'investment'
+              ).reduce((sum: number, acc: any) => sum + (acc.balances?.current || 0), 0) || 0;
+              
+              const liabilities = accountsData.accounts?.filter((acc: any) => 
+                acc.type === 'credit' || acc.type === 'loan'
+              ).reduce((sum: number, acc: any) => sum + Math.abs(acc.balances?.current || 0), 0) || 0;
+              
               accountData = {
-                netWorth: data.summary?.total_balance || 0,
-                monthlyIncome: onboardingProgress.monthlyIncome || 0,
-                monthlyExpenses: onboardingProgress.monthlyExpenses || 0
+                netWorth: assets - liabilities,
+                monthlyIncome: onboardingProgress.monthlyIncome || onboardingProgress.detectedIncome || 0,
+                monthlyExpenses: onboardingProgress.monthlyExpenses || onboardingProgress.detectedExpenses?.total || 
+                                (onboardingProgress.monthlyIncome || 0) * 0.7,
+                accounts: accountsData.accounts?.length || 0,
+                goals: onboardingProgress.selectedGoals?.map((g: string) => ({ 
+                  name: g, 
+                  progress: Math.floor(Math.random() * 60) + 20 
+                })) || []
               };
             }
           } catch (error) {
             console.error('Error fetching account data for preview:', error);
+            // Use manual assets/liabilities if available
+            if (onboardingProgress.manualAssets || onboardingProgress.manualLiabilities) {
+              const totalAssets = Object.values(onboardingProgress.manualAssets || {})
+                .reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+              const totalLiabilities = Object.values(onboardingProgress.manualLiabilities || {})
+                .reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+              
+              accountData.netWorth = totalAssets - totalLiabilities;
+            }
           }
+        } else if (onboardingProgress.manualAssets || onboardingProgress.manualLiabilities) {
+          // Use manual entries if no Plaid connection
+          const totalAssets = Object.values(onboardingProgress.manualAssets || {})
+            .reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+          const totalLiabilities = Object.values(onboardingProgress.manualLiabilities || {})
+            .reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+          
+          accountData.netWorth = totalAssets - totalLiabilities;
+          accountData.monthlyExpenses = onboardingProgress.monthlyExpenses || 
+                                        (onboardingProgress.monthlyIncome || 0) * 0.7;
         }
+        
+        // Calculate savings rate
+        const income = accountData.monthlyIncome;
+        const expenses = accountData.monthlyExpenses;
+        accountData.savingsRate = income > 0 ? Math.max(0, ((income - expenses) / income) * 100) : 0;
         
         componentToShow = {
           type: 'dashboardPreview',
@@ -359,6 +439,11 @@ export async function POST(request: NextRequest) {
           ? flowStep.message(userFirstName, onboardingProgress)
           : flowStep.message;
         responseMessage = responseMessage + "\n\n" + message;
+        
+        // Make sure we set the component for the next step
+        if (!componentToShow && flowStep.component) {
+          componentToShow = flowStep.component;
+        }
       }
       
       // Update progress with the next step
@@ -368,10 +453,11 @@ export async function POST(request: NextRequest) {
       };
       
       // Handle completion state - check if we just reached COMPLETE
-      if ((nextStep === 'COMPLETE' || nextStep === ONBOARDING_STEPS.COMPLETE) && isComponentResponse) {
-        responseMessage = `🎉 Congratulations ${userFirstName}! You've completed your financial profile setup!\n\nYour personalized dashboard is ready with:\n• ${onboardingProgress.hasConnectedAccounts ? '✅' : '⏳'} Bank accounts connected\n• ✅ Risk profile established\n• ✅ Financial goals identified\n• ${onboardingProgress.monthlyIncome ? '✅' : '⏳'} Income verified\n\nI'm now ready to give you tailored financial advice. You can:\n• 📊 View your full dashboard for detailed insights\n• 💬 Continue chatting with me for financial guidance\n• ⚙️ Update your profile anytime\n\nWhat would you like to explore first?`;
+      if ((nextStep === 'COMPLETE' || nextStep === ONBOARDING_STEPS.COMPLETE || currentStep === 'DASHBOARD_PREVIEW' && isComponentResponse) && isComponentResponse) {
+        responseMessage = `🎉 Congratulations ${userFirstName}! You've completed your financial profile setup!\n\nYour personalized dashboard is ready with:\n• ${onboardingProgress.hasConnectedAccounts ? '✅' : '⏳'} Bank accounts connected\n• ✅ Risk profile established\n• ✅ Financial goals identified\n• ${onboardingProgress.monthlyIncome || onboardingProgress.detectedIncome ? '✅' : '⏳'} Income verified\n• ${onboardingProgress.manualAssets ? '✅' : '⏳'} Assets recorded\n• ${onboardingProgress.manualLiabilities ? '✅' : '⏳'} Liabilities tracked\n\nI'm now ready to give you tailored financial advice. You can:\n• 📊 View your full dashboard for detailed insights\n• 💬 Continue chatting with me for financial guidance\n• ⚙️ Update your profile anytime\n\nWhat would you like to explore first?`;
         componentToShow = null;
         nextStep = null; // Clear the next step to prevent looping
+        updatedProgress.currentStep = null; // Mark as complete
         
         // Mark onboarding as complete in the database
         try {

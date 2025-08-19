@@ -18,6 +18,8 @@ import {
 import { PlaidConnect } from '@/components/plaid-connect'
 import { DashboardPreview } from '@/components/chat/dashboard-preview'
 import { OnboardingProgress } from '@/components/chat/onboarding-progress'
+import { AssetsInput } from '@/components/chat/assets-input'
+import { LiabilitiesInput } from '@/components/chat/liabilities-input'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown, Edit2, Check, X } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
@@ -1021,8 +1023,38 @@ function AppleChatInterfaceInner() {
         break
         
       case 'checkboxes':
-        if (currentStep === ONBOARDING_STEPS.GOALS_SELECTION) {
+        if (currentStep === ONBOARDING_STEPS.GOALS_SELECTION || currentStep === 'goals_selection') {
           updatedProgress.selectedGoals = value.selected || value
+          // Save goals to database
+          if (value.selected || value) {
+            const goals = (value.selected || value).map((goalId: string) => {
+              const goalInfo = component?.data?.options?.find((opt: any) => opt.id === goalId || opt.value === goalId)
+              return {
+                name: goalInfo?.label || goalId,
+                description: goalInfo?.description || '',
+                target_amount: 10000, // Default, will be calculated based on income later
+                priority: goalInfo?.recommended ? 'high' : 'medium'
+              }
+            })
+            
+            try {
+              const token = localStorage.getItem('auth_token')
+              if (token) {
+                fetch('/api/goals', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({ goals })
+                }).then(res => res.json())
+                  .then(data => console.log('Goals saved:', data))
+                  .catch(err => console.error('Error saving goals:', err))
+              }
+            } catch (error) {
+              console.error('Error saving goals:', error)
+            }
+          }
         }
         break
         
@@ -1049,6 +1081,54 @@ function AppleChatInterfaceInner() {
         
       case 'dashboardPreview':
         updatedProgress.dashboardViewed = true
+        break
+        
+      case 'assetsInput':
+        updatedProgress.manualAssets = value
+        // Save assets to database
+        if (value && Object.keys(value).length > 0) {
+          try {
+            const token = localStorage.getItem('auth_token')
+            if (token) {
+              fetch('/api/assets', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ assets: value })
+              }).then(res => res.json())
+                .then(data => console.log('Assets saved:', data))
+                .catch(err => console.error('Error saving assets:', err))
+            }
+          } catch (error) {
+            console.error('Error saving assets:', error)
+          }
+        }
+        break
+        
+      case 'liabilitiesInput':
+        updatedProgress.manualLiabilities = value
+        // Save liabilities to database
+        if (value && Object.keys(value).length > 0) {
+          try {
+            const token = localStorage.getItem('auth_token')
+            if (token) {
+              fetch('/api/liabilities', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ liabilities: value })
+              }).then(res => res.json())
+                .then(data => console.log('Liabilities saved:', data))
+                .catch(err => console.error('Error saving liabilities:', err))
+            }
+          } catch (error) {
+            console.error('Error saving liabilities:', error)
+          }
+        }
         break
     }
     
@@ -1300,6 +1380,20 @@ function AppleChatInterfaceInner() {
                 window.location.href = '/dashboard'
               }, 1000)
             }}
+          />
+        )
+      case 'assetsInput':
+        return (
+          <AssetsInput
+            onSubmit={(assets) => handleComplete(assets)}
+            onSkip={handleSkip}
+          />
+        )
+      case 'liabilitiesInput':
+        return (
+          <LiabilitiesInput
+            onSubmit={(liabilities) => handleComplete(liabilities)}
+            onSkip={handleSkip}
           />
         )
       default:

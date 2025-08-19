@@ -276,6 +276,42 @@ export const ONBOARDING_FLOW = {
       }
     },
     saveKey: 'selectedGoals',
+    next: (response: any, progress: any) => {
+      // Skip manual asset/liability input if we already have them from Plaid
+      if (progress?.detectedAssets || progress?.hasConnectedAccounts) {
+        return 'DASHBOARD_PREVIEW';
+      }
+      return 'ASSETS_INPUT';
+    }
+  },
+
+  // New: Assets Input
+  ASSETS_INPUT: {
+    id: 'assets_input',
+    message: () => "Great goals! Now let's quickly add any assets you own (you can skip this):",
+    component: {
+      type: 'assetsInput',
+      data: {
+        skipOption: true
+      }
+    },
+    saveKey: 'manualAssets',
+    skipOption: true,
+    next: 'LIABILITIES_INPUT'
+  },
+
+  // New: Liabilities Input
+  LIABILITIES_INPUT: {
+    id: 'liabilities_input',
+    message: () => "And what about any debts or loans? (you can skip this too):",
+    component: {
+      type: 'liabilitiesInput',
+      data: {
+        skipOption: true
+      }
+    },
+    saveKey: 'manualLiabilities',
+    skipOption: true,
     next: 'DASHBOARD_PREVIEW'
   },
 
@@ -301,12 +337,12 @@ export const ONBOARDING_FLOW = {
 };
 
 // Helper to get next step
-export function getNextOnboardingStep(currentStep: string, response: any): string | null {
+export function getNextOnboardingStep(currentStep: string, response: any, progress?: any): string | null {
   const step = ONBOARDING_FLOW[currentStep as keyof typeof ONBOARDING_FLOW];
   if (!step) return null;
   
   if (typeof step.next === 'function') {
-    return step.next(response);
+    return step.next(response, progress);
   }
   
   return step.next;

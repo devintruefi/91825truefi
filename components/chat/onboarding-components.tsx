@@ -682,6 +682,10 @@ function PlaidConnectWrapper({ data, onComplete, onSkip }: BaseComponentProps) {
 }
 
 // Export all components
+// Import the new components
+import { AssetsInput } from './assets-input';
+import { LiabilitiesInput } from './liabilities-input';
+
 export const OnboardingComponents = {
   'info-card': InfoCard,
   buttons: ButtonSelection,
@@ -693,4 +697,6 @@ export const OnboardingComponents = {
   'quick-add': QuickAdd,
   'plaid': PlaidConnectWrapper,
   'plaid-connect': PlaidConnectWrapper,
+  'assetsInput': AssetsInput,
+  'liabilitiesInput': LiabilitiesInput,
 };
