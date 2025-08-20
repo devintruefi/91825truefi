@@ -395,22 +395,12 @@ export function UltimateDashboard() {
               </Button>
               <FinancialReportPDF
                 data={{
-                  user: user,
                   accounts: accounts,
-                  assets: assetsLiabilities?.assets || [],
-                  liabilities: assetsLiabilities?.liabilities || [],
                   goals: goals,
-                  investments: [],
-                  budgetCategories: budget?.budget_categories || [],
-                  transactions: transactions,
                   netWorth: assetsLiabilities?.net_worth || 0,
-                  totalAssets: assetsLiabilities?.total_assets || 0,
-                  totalLiabilities: assetsLiabilities?.total_liabilities || 0,
-                  totalBalance: totalBalance,
                   monthlyIncome: (budget?.budget_categories || []).filter((c: any) => c.type === 'income').reduce((sum: number, c: any) => sum + (c.amount || 0), 0),
                   monthlyExpenses: (budget?.budget_categories || []).filter((c: any) => c.type === 'expense').reduce((sum: number, c: any) => sum + (c.amount || 0), 0)
                 }}
-                buttonClassName="inline-flex items-center justify-center gap-2 px-6 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 min-w-[140px]"
                 buttonText={
                   <>
                     <Download className="w-4 h-4" />

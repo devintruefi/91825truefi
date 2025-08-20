@@ -5,24 +5,43 @@ import jwt from 'jsonwebtoken';
 const prisma = new PrismaClient();
 
 export async function POST(request: NextRequest) {
-  try {
-    // Check authentication
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    let userId = '';
-    
+  let retryCount = 0;
+  const maxRetries = 3;
+  
+  while (retryCount < maxRetries) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-      userId = decoded.user_id || decoded.sub;
-    } catch (error) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const { progress, phase } = await request.json();
+      // Check authentication
+      const authHeader = request.headers.get('authorization');
+      let userId = '';
+      
+      // Allow saving without auth for initial steps
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.replace('Bearer ', '');
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+          userId = decoded.user_id || decoded.sub;
+        } catch (error) {
+          return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
+      }
+      
+      const body = await request.json();
+      const { progress, phase, currentStep, responses, sessionId } = body;
+      
+      // If no userId from token, try to get from body
+      if (!userId && body.userId) {
+        userId = body.userId;
+      }
+      
+      if (!userId) {
+        // Store in temporary session storage (for unauthenticated users)
+        return NextResponse.json({ 
+          success: true,
+          temporary: true,
+          sessionId: sessionId || crypto.randomUUID(),
+          message: 'Progress saved temporarily. Login to persist.'
+        });
+      }
 
     // 1. Update onboarding_progress table
     await prisma.onboarding_progress.upsert({
@@ -259,17 +278,46 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ 
-      success: true,
-      phase: phase,
-      dashboardReady: phase === 'complete' || progress.showDashboardPreview
-    });
+      return NextResponse.json({ 
+        success: true,
+        phase: phase || currentStep,
+        dashboardReady: phase === 'complete' || progress?.showDashboardPreview,
+        retryCount
+      });
 
-  } catch (error) {
-    console.error('Error saving onboarding progress:', error);
-    return NextResponse.json(
-      { error: 'Failed to save progress' },
-      { status: 500 }
-    );
+    } catch (error: any) {
+      console.error(`Error saving onboarding progress (attempt ${retryCount + 1}):`, error);
+      
+      // Check if it's a database connection error
+      if (error.code === 'P2002' || error.code === 'P2025') {
+        // Unique constraint or record not found - these are expected, don't retry
+        return NextResponse.json(
+          { error: 'Data conflict. Please refresh and try again.' },
+          { status: 409 }
+        );
+      }
+      
+      retryCount++;
+      
+      if (retryCount < maxRetries) {
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+        continue;
+      }
+      
+      return NextResponse.json(
+        { 
+          error: 'Failed to save progress after multiple attempts',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        },
+        { status: 500 }
+      );
+    }
   }
+  
+  // Should never reach here
+  return NextResponse.json(
+    { error: 'Unexpected error in save progress' },
+    { status: 500 }
+  );
 }

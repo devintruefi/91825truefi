@@ -1,5 +1,91 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+    
+    // Try to get userId from auth header if not in params
+    let actualUserId = userId;
+    const authHeader = request.headers.get('authorization');
+    if (!actualUserId && authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        actualUserId = decoded.user_id || decoded.sub;
+      } catch (error) {
+        console.error('Token verification failed:', error);
+      }
+    }
+    
+    if (!actualUserId) {
+      return NextResponse.json({ error: 'User ID required' }, { status: 400 });
+    }
+    
+    // Get onboarding progress
+    const progress = await prisma.onboarding_progress.findUnique({
+      where: { user_id: actualUserId }
+    });
+    
+    // Get user responses
+    const responses = await prisma.user_onboarding_responses.findMany({
+      where: { user_id: actualUserId },
+      orderBy: { created_at: 'desc' },
+      take: 1
+    });
+    
+    // Get user demographics
+    const demographics = await prisma.user_demographics.findUnique({
+      where: { user_id: actualUserId }
+    });
+    
+    // Get user preferences
+    const preferences = await prisma.user_preferences.findUnique({
+      where: { user_id: actualUserId }
+    });
+    
+    // Get goals
+    const goals = await prisma.goals.findMany({
+      where: { user_id: actualUserId, is_active: true }
+    });
+    
+    // Get budgets
+    const budgets = await prisma.budgets.findMany({
+      where: { user_id: actualUserId, is_active: true },
+      include: { budget_categories: true }
+    });
+    
+    return NextResponse.json({
+      progress: {
+        current_step: progress?.current_step || 'main_goal',
+        is_complete: progress?.is_complete || false,
+        hasConnectedAccounts: false, // Would need to check plaid_connections
+        lifeStage: demographics?.life_stage,
+        dependents: demographics?.dependents,
+        riskTolerance: preferences?.risk_tolerance,
+        selectedGoals: goals.map(g => g.name),
+        budgetAllocations: budgets[0]?.budget_categories?.reduce((acc, cat) => ({
+          ...acc,
+          [cat.category]: cat.amount
+        }), {})
+      },
+      responses: responses[0]?.answer || {},
+      demographics,
+      preferences,
+      goals,
+      budgets
+    });
+    
+  } catch (error) {
+    console.error('Error fetching onboarding progress:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch progress' },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {

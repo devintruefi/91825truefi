@@ -1,9 +1,3 @@
-declare global {
-  var process: {
-    env: { [key: string]: string | undefined }
-  }
-}
-
 import { NextResponse } from 'next/server'
 
 export async function GET() {

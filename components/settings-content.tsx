@@ -23,7 +23,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { User, Bell, Palette, Shield, Eye, EyeOff, Trash2, Download, Loader2 } from "lucide-react"
+import { User, Bell, Shield, Eye, EyeOff, Trash2, Download, Loader2 } from "lucide-react"
 
 export function SettingsContent() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
@@ -66,12 +66,6 @@ export function SettingsContent() {
     smsPaymentReminders: false
   })
   
-  const [themeSettings, setThemeSettings] = useState({
-    theme: 'system',
-    colorScheme: 'cyan',
-    fontSize: 'medium',
-    reducedMotion: false
-  })
   
   const [privacySettings, setPrivacySettings] = useState({
     dataAnalytics: true,
@@ -149,13 +143,6 @@ export function SettingsContent() {
         smsPaymentReminders: data.notifications.smsPaymentReminders
       })
       
-      // Update theme settings
-      setThemeSettings({
-        theme: data.preferences.theme || 'system',
-        colorScheme: data.preferences.colorScheme || 'cyan',
-        fontSize: data.preferences.fontSize || 'medium',
-        reducedMotion: data.preferences.reducedMotion || false
-      })
       
       // Update privacy settings
       setPrivacySettings({
@@ -233,9 +220,6 @@ export function SettingsContent() {
     saveSettings('notifications', notificationSettings)
   }
   
-  const handleSaveTheme = () => {
-    saveSettings('theme', themeSettings)
-  }
   
   const handleSavePassword = () => {
     if (securitySettings.newPassword !== securitySettings.confirmPassword) {
@@ -290,7 +274,7 @@ export function SettingsContent() {
         </div>
 
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="profile" className="flex items-center gap-2">
               <User className="w-4 h-4" />
               Profile
@@ -298,10 +282,6 @@ export function SettingsContent() {
             <TabsTrigger value="notifications" className="flex items-center gap-2">
               <Bell className="w-4 h-4" />
               Notifications
-            </TabsTrigger>
-            <TabsTrigger value="theme" className="flex items-center gap-2">
-              <Palette className="w-4 h-4" />
-              Theme
             </TabsTrigger>
             <TabsTrigger value="account" className="flex items-center gap-2">
               <Shield className="w-4 h-4" />
@@ -639,88 +619,6 @@ export function SettingsContent() {
             </div>
           </TabsContent>
 
-          {/* Theme Tab */}
-          <TabsContent value="theme" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Appearance</CardTitle>
-                <CardDescription>Customize how TrueFi looks and feels</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label>Theme</Label>
-                  <Select 
-                    value={themeSettings.theme}
-                    onValueChange={(value) => setThemeSettings(prev => ({ ...prev, theme: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="light">Light</SelectItem>
-                      <SelectItem value="dark">Dark</SelectItem>
-                      <SelectItem value="system">System</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-sm text-gray-500">Choose your preferred color scheme</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Color Scheme</Label>
-                  <div className="grid grid-cols-4 gap-2">
-                    <div className="w-full h-12 bg-cyan-500 rounded-lg border-2 border-cyan-600 cursor-pointer"></div>
-                    <div className="w-full h-12 bg-blue-500 rounded-lg border cursor-pointer hover:border-blue-600"></div>
-                    <div className="w-full h-12 bg-green-500 rounded-lg border cursor-pointer hover:border-green-600"></div>
-                    <div className="w-full h-12 bg-purple-500 rounded-lg border cursor-pointer hover:border-purple-600"></div>
-                  </div>
-                  <p className="text-sm text-gray-500">Select your preferred accent color</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Font Size</Label>
-                  <Select 
-                    value={themeSettings.fontSize}
-                    onValueChange={(value) => setThemeSettings(prev => ({ ...prev, fontSize: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="small">Small</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="large">Large</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-sm text-gray-500">Adjust text size for better readability</p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Reduced Motion</Label>
-                    <p className="text-sm text-gray-500">Minimize animations and transitions</p>
-                  </div>
-                  <Switch 
-                    checked={themeSettings.reducedMotion}
-                    onCheckedChange={(checked) => setThemeSettings(prev => ({ ...prev, reducedMotion: checked }))}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-            
-            <div className="flex justify-end">
-              <Button 
-                className="bg-cyan-600 hover:bg-cyan-700"
-                onClick={handleSaveTheme}
-                disabled={saving === 'theme'}
-              >
-                {saving === 'theme' ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Theme Settings'
-                )}
-              </Button>
-            </div>
-          </TabsContent>
 
           {/* Account Tab */}
           <TabsContent value="account" className="space-y-6">

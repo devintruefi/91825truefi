@@ -19,36 +19,47 @@ const plaidClient = new PlaidApi(configuration);
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getUserFromRequest(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const body = await request.json();
+    const { publicToken, metadata, accounts, access_token } = body;
+    
+    // If access_token is provided directly (from onboarding), use it
+    // Otherwise try to get user from request for authenticated calls
+    let user = null;
+    if (!access_token) {
+      user = await getUserFromRequest(request);
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
-
-    const { publicToken, metadata, accounts } = await request.json();
 
     // Try to get actual transaction data if we have a Plaid connection
     let monthlyIncome = 0;
     let expenses = {};
     
     try {
-      // Get the user's Plaid connection
-      const plaidConnection = await prisma.plaid_connections.findFirst({
-        where: {
-          user_id: user.id,
-          is_active: true
-        },
-        orderBy: {
-          created_at: 'desc'
-        }
-      });
+      // Get access token from either the request or the user's Plaid connection
+      let accessToken = access_token;
+      
+      if (!accessToken && user) {
+        const plaidConnection = await prisma.plaid_connections.findFirst({
+          where: {
+            user_id: user.id,
+            is_active: true
+          },
+          orderBy: {
+            created_at: 'desc'
+          }
+        });
+        accessToken = plaidConnection?.plaid_access_token;
+      }
 
-      if (plaidConnection?.plaid_access_token) {
+      if (accessToken) {
         // Fetch recent transactions to analyze income
         const now = new Date();
         const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
         
         const transactionsResponse = await plaidClient.transactionsGet({
-          access_token: plaidConnection.plaid_access_token,
+          access_token: accessToken,
           start_date: threeMonthsAgo.toISOString().split('T')[0],
           end_date: now.toISOString().split('T')[0],
         });

@@ -1,95 +1,116 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
+import { generateOnboardingSummary } from '@/lib/onboarding/unified-onboarding-flow';
+import jwt from 'jsonwebtoken';
+
+const prisma = new PrismaClient();
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, answers } = body;
+    const { userId, onboardingData } = body;
 
-    if (!userId) {
+    // Get userId from auth token if not provided
+    let finalUserId = userId;
+    const authHeader = request.headers.get('authorization');
+    if (!finalUserId && authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '');
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        finalUserId = decoded.user_id || decoded.sub;
+      } catch (error) {
+        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      }
+    }
+
+    if (!finalUserId) {
       return NextResponse.json({ error: 'User ID required' }, { status: 400 });
     }
 
+    // Don't generate dashboard for temporary users
+    if (finalUserId.startsWith('temp_')) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Cannot generate dashboard for temporary user' 
+      }, { status: 400 });
+    }
+
+    // Generate summary from unified onboarding state
+    const summary = generateOnboardingSummary(onboardingData);
+    const responses = onboardingData.responses || {};
+
     // Create default budget based on income and preferences
-    if (answers.annualIncome || answers.monthlyExpenses) {
-      const monthlyIncome = (answers.annualIncome || 60000) / 12;
-      const monthlyExpenses = answers.monthlyExpenses || monthlyIncome * 0.8;
+    if (responses.monthlyIncome || responses.monthlyExpenses) {
+      const monthlyIncome = responses.monthlyIncome || 5000;
+      const monthlyExpenses = responses.monthlyExpenses || monthlyIncome * 0.8;
 
       // Create main budget
       const budget = await prisma.budgets.create({
         data: {
-          user_id: userId,
+          id: crypto.randomUUID(),
+          user_id: finalUserId,
           name: 'Monthly Budget',
           description: 'Auto-generated budget based on your profile',
           amount: monthlyIncome,
           period: 'monthly',
           start_date: new Date(),
           end_date: new Date(new Date().setMonth(new Date().getMonth() + 1)),
-          is_active: true
+          is_active: true,
+          created_at: new Date(),
+          updated_at: new Date()
         }
       });
 
-      // Create budget categories based on allocation or defaults
-      const allocations = answers.budgetAllocation || getDefaultAllocations(answers.lifeStage);
+      // Create budget categories based on life stage
+      const allocations = getDefaultAllocations(responses.lifeStage);
       
       for (const [category, percentage] of Object.entries(allocations)) {
         if (typeof percentage === 'number') {
           await prisma.budget_categories.create({
             data: {
+              id: crypto.randomUUID(),
               budget_id: budget.id,
               category: category,
               amount: (monthlyIncome * percentage) / 100,
-              is_fixed: category === 'housing' || category === 'utilities'
+              is_fixed: category === 'housing' || category === 'utilities',
+              created_at: new Date(),
+              updated_at: new Date()
             }
           });
         }
       }
     }
 
-    // Create manual accounts if provided
-    if (answers.manualBalances) {
-      for (const [accountType, balance] of Object.entries(answers.manualBalances)) {
-        if (typeof balance === 'number' && balance !== 0) {
-          await prisma.accounts.create({
-            data: {
-              user_id: userId,
-              name: `${accountType.charAt(0).toUpperCase() + accountType.slice(1)} Account`,
-              type: getAccountType(accountType),
-              subtype: accountType,
-              balance: balance,
-              currency: 'USD',
-              is_active: true,
-              institution_name: 'Manual Entry'
-            }
-          });
-        }
-      }
-    }
+    // Skip manual account creation if Plaid accounts are connected
+    // Plaid accounts are already created during onboarding
 
     // Create initial financial insights
-    const insights = await generateInitialInsights(userId, answers);
+    const insights = await generateInitialInsights(finalUserId, responses, summary);
     
     for (const insight of insights) {
       await prisma.financial_insights.create({
         data: {
-          user_id: userId,
+          id: crypto.randomUUID(),
+          user_id: finalUserId,
           category: insight.category,
           insight: insight.text,
           confidence_score: 0.85,
           is_actionable: true,
-          priority: insight.priority
+          priority: insight.priority,
+          created_at: new Date(),
+          updated_at: new Date()
         }
       });
     }
 
     // Create initial dashboard state
-    const netWorth = calculateNetWorth(answers);
-    const monthlyIncome = (answers.annualIncome || 0) / 12;
-    const monthlyExpenses = answers.monthlyExpenses || 0;
+    const netWorth = await calculateNetWorth(finalUserId, responses);
+    const monthlyIncome = responses.monthlyIncome || 0;
+    const monthlyExpenses = responses.monthlyExpenses || 0;
     const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : 0;
 
     await prisma.user_dashboard_state.upsert({
-      where: { user_id: userId },
+      where: { user_id: finalUserId },
       update: {
         total_assets: netWorth.assets,
         total_liabilities: netWorth.liabilities,
@@ -103,7 +124,8 @@ export async function POST(request: NextRequest) {
         last_refreshed: new Date()
       },
       create: {
-        user_id: userId,
+        id: crypto.randomUUID(),
+        user_id: finalUserId,
         total_assets: netWorth.assets,
         total_liabilities: netWorth.liabilities,
         net_worth: netWorth.total,
@@ -117,26 +139,48 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Mark user as onboarded
-    await prisma.users.update({
-      where: { id: userId },
-      data: {
-        has_completed_onboarding: true,
-        onboarding_completed_at: new Date()
-      }
-    });
+    // Mark user as onboarded and update onboarding progress
+    await prisma.$transaction([
+      prisma.users.update({
+        where: { id: finalUserId },
+        data: {
+          has_completed_onboarding: true,
+          onboarding_completed_at: new Date(),
+          updated_at: new Date()
+        }
+      }),
+      prisma.onboarding_progress.update({
+        where: { user_id: finalUserId },
+        data: {
+          is_complete: true,
+          current_step: 'complete',
+          updated_at: new Date()
+        }
+      })
+    ]);
 
     return NextResponse.json({ 
       success: true,
-      dashboardGenerated: true
+      dashboardGenerated: true,
+      message: 'Dashboard created successfully',
+      summary: {
+        monthlyIncome,
+        monthlyExpenses,
+        savingsRate,
+        netWorth: netWorth.total,
+        budgetCreated: true,
+        insightsCount: insights.length
+      }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error generating dashboard:', error);
     return NextResponse.json(
-      { error: 'Failed to generate dashboard' },
+      { error: 'Failed to generate dashboard', details: error.message },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -151,7 +195,7 @@ function getDefaultAllocations(lifeStage?: string): Record<string, number> {
       savings: 10,
       other: 10
     },
-    'early-career': {
+    early_career: {
       housing: 30,
       food: 15,
       transport: 15,
@@ -160,7 +204,7 @@ function getDefaultAllocations(lifeStage?: string): Record<string, number> {
       savings: 15,
       other: 12
     },
-    'growing-family': {
+    family: {
       housing: 28,
       food: 18,
       transport: 12,
@@ -179,7 +223,7 @@ function getDefaultAllocations(lifeStage?: string): Record<string, number> {
       investments: 10,
       other: 5
     },
-    'pre-retirement': {
+    pre_retirement: {
       housing: 20,
       food: 10,
       transport: 8,
@@ -191,7 +235,7 @@ function getDefaultAllocations(lifeStage?: string): Record<string, number> {
     }
   };
 
-  return allocations[lifeStage || ''] || allocations['early-career'];
+  return allocations[lifeStage || ''] || allocations.early_career;
 }
 
 function getAccountType(accountType: string): string {
@@ -206,14 +250,19 @@ function getAccountType(accountType: string): string {
   return typeMap[accountType] || 'other';
 }
 
-function calculateNetWorth(answers: any): { assets: number; liabilities: number; total: number } {
-  const assets = (answers.manualBalances?.checking || 0) +
-                 (answers.manualBalances?.savings || 0) +
-                 (answers.manualBalances?.investments || 0);
+async function calculateNetWorth(userId: string, responses: any): Promise<{ assets: number; liabilities: number; total: number }> {
+  // Get accounts from database
+  const accounts = await prisma.accounts.findMany({
+    where: { user_id: userId, is_active: true }
+  });
   
-  const liabilities = Math.abs(answers.manualBalances?.['credit-cards'] || 0) +
-                      (answers.existingDebt?.reduce((sum: number, debt: any) => 
-                        sum + (debt.amount || 0), 0) || 0);
+  const assets = accounts
+    .filter(acc => acc.type === 'depository' || acc.type === 'investment')
+    .reduce((sum, acc) => sum + Number(acc.balance || 0), 0);
+  
+  const liabilities = accounts
+    .filter(acc => acc.type === 'credit' || acc.type === 'loan')
+    .reduce((sum, acc) => sum + Math.abs(Number(acc.balance || 0)), 0);
   
   return {
     assets,
@@ -222,20 +271,20 @@ function calculateNetWorth(answers: any): { assets: number; liabilities: number;
   };
 }
 
-async function generateInitialInsights(userId: string, answers: any): Promise<Array<{ category: string; text: string; priority: string }>> {
+async function generateInitialInsights(userId: string, responses: any, summary: any): Promise<Array<{ category: string; text: string; priority: string }>> {
   const insights = [];
 
   // Emergency fund insight
-  if (answers.primaryGoals?.includes('emergency_fund')) {
+  if (responses.mainGoal === 'emergency_fund') {
     insights.push({
       category: 'savings',
-      text: `Start building your emergency fund with $${Math.round((answers.annualIncome || 50000) / 12 * 0.1)} per month`,
+      text: `Start building your emergency fund with $${Math.round((responses.monthlyIncome || 4000) * 0.1)} per month`,
       priority: 'high'
     });
   }
 
-  // Debt payoff insight
-  if (answers.existingDebt?.length > 0) {
+  // Debt reduction insight
+  if (responses.mainGoal === 'reduce_debt') {
     insights.push({
       category: 'debt',
       text: 'Focus on paying off high-interest debt first using the avalanche method',
@@ -244,8 +293,8 @@ async function generateInitialInsights(userId: string, answers: any): Promise<Ar
   }
 
   // Savings rate insight
-  const monthlyIncome = (answers.annualIncome || 60000) / 12;
-  const monthlyExpenses = answers.monthlyExpenses || monthlyIncome * 0.8;
+  const monthlyIncome = responses.monthlyIncome || 5000;
+  const monthlyExpenses = responses.monthlyExpenses || monthlyIncome * 0.8;
   const savingsRate = ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100;
   
   if (savingsRate < 10) {
@@ -263,7 +312,7 @@ async function generateInitialInsights(userId: string, answers: any): Promise<Ar
   }
 
   // Investment insight
-  if (answers.primaryGoals?.includes('investments') && !answers.manualBalances?.investments) {
+  if (responses.mainGoal === 'build_wealth' && !responses.hasConnectedAccounts) {
     insights.push({
       category: 'investment',
       text: 'Consider opening an investment account to start building long-term wealth',
@@ -271,12 +320,30 @@ async function generateInitialInsights(userId: string, answers: any): Promise<Ar
     });
   }
 
-  // Life event preparation
-  if (answers.upcomingLifeEvents?.length > 0) {
-    const event = answers.upcomingLifeEvents[0];
+  // Life stage specific insights
+  if (responses.lifeStage === 'family' && responses.dependents > 0) {
     insights.push({
       category: 'goals',
-      text: `Start preparing for ${event} - you'll need to save approximately $X per month`,
+      text: `With ${responses.dependents} dependent(s), consider starting a 529 education savings plan`,
+      priority: 'medium'
+    });
+  }
+  
+  if (responses.lifeStage === 'pre_retirement') {
+    insights.push({
+      category: 'retirement',
+      text: 'Maximize retirement contributions to take advantage of catch-up contributions',
+      priority: 'high'
+    });
+  }
+  
+  // Home savings insight
+  if (responses.mainGoal === 'save_home') {
+    const targetDownPayment = monthlyIncome * 12 * 0.2; // 20% of annual income as rough estimate
+    const monthlyTarget = targetDownPayment / 36; // 3 year goal
+    insights.push({
+      category: 'goals',
+      text: `Save $${Math.round(monthlyTarget)} per month for your home down payment goal`,
       priority: 'high'
     });
   }

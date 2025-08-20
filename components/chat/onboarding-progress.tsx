@@ -2,7 +2,7 @@
 
 import { Progress } from '@/components/ui/progress';
 import { CheckCircle, Circle } from 'lucide-react';
-import { ONBOARDING_STEPS, STEP_NAMES, getProgressPercentage, getNextStep } from '@/lib/onboarding/onboarding-manager';
+import { ONBOARDING_STEPS, STEP_NAMES, getProgressPercentage, getNextStep, OnboardingStep } from '@/lib/onboarding/onboarding-manager';
 
 // Helper to get preview text for next step
 function getNextStepPreview(currentStep: string): string {
@@ -28,7 +28,7 @@ interface OnboardingProgressProps {
 export function OnboardingProgress({ currentStep, completedSteps }: OnboardingProgressProps) {
   const progress = getProgressPercentage(currentStep as any);
   const steps = Object.values(ONBOARDING_STEPS).filter(s => s !== 'complete');
-  const currentStepIndex = Math.max(0, steps.indexOf(currentStep)); // Ensure minimum 0
+  const currentStepIndex = Math.max(0, steps.indexOf(currentStep as any)); // Ensure minimum 0
   const totalSteps = steps.length;
   
   // Calculate what information has been collected based on actual completed steps
@@ -118,7 +118,7 @@ export function OnboardingProgress({ currentStep, completedSteps }: OnboardingPr
         {/* Current Step Details */}
         <div className="text-center space-y-1">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            📍 {STEP_NAMES[currentStep as any]}
+            📍 {STEP_NAMES[currentStep as OnboardingStep]}
           </p>
           {progress < 100 && (
             <p className="text-xs text-gray-500 dark:text-gray-400">

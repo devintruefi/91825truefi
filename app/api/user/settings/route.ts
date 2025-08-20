@@ -67,13 +67,9 @@ export async function GET(request: NextRequest) {
         primaryGoals: user.user_preferences?.financial_goals || '',
       },
       preferences: {
-        theme: user.user_preferences?.theme || 'system',
         currency: user.user_preferences?.currency || 'USD',
         timezone: user.user_preferences?.timezone || 'America/New_York',
         language: user.user_preferences?.language || 'en',
-        fontSize: 'medium', // This could be stored in user_preferences JSON
-        reducedMotion: false, // This could be stored in user_preferences JSON
-        colorScheme: 'cyan', // This could be stored in user_preferences JSON
         riskTolerance: user.user_preferences?.risk_tolerance || 'moderate',
         investmentHorizon: user.user_preferences?.investment_horizon || 'medium',
       },
@@ -230,29 +226,6 @@ export async function PUT(request: NextRequest) {
         });
         break;
 
-      case 'theme':
-        // Update theme preferences
-        await prisma.user_preferences.upsert({
-          where: { user_id: userId },
-          update: {
-            theme: data.theme,
-            updated_at: new Date(),
-          },
-          create: {
-            id: crypto.randomUUID(),
-            user_id: userId,
-            theme: data.theme,
-            notifications_enabled: true,
-            email_notifications: true,
-            push_notifications: true,
-            currency: 'USD',
-            timezone: 'America/New_York',
-            language: 'en',
-            created_at: new Date(),
-            updated_at: new Date(),
-          }
-        });
-        break;
 
       case 'security':
         // Handle password change
