@@ -25,6 +25,24 @@ import {
 } from "@/components/ui/alert-dialog"
 import { User, Bell, Shield, Eye, EyeOff, Trash2, Download, Loader2 } from "lucide-react"
 
+// Phone number formatting function
+const formatPhoneNumber = (value: string) => {
+  // Remove all non-digits
+  const digits = value.replace(/\D/g, '')
+  
+  // Format based on length
+  if (digits.length <= 3) {
+    return digits
+  } else if (digits.length <= 6) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+  } else if (digits.length <= 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+  } else {
+    // Handle country code (1 for US)
+    return `+${digits.slice(0, 1)} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 11)}`
+  }
+}
+
 export function SettingsContent() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -87,7 +105,7 @@ export function SettingsContent() {
   
   const fetchSettings = async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       if (!token) {
         toast({
           title: "Not authenticated",
@@ -97,7 +115,7 @@ export function SettingsContent() {
         return
       }
       
-      const response = await fetch('/api/user/settings', {
+      const response = await fetch('http://localhost:8080/api/user/settings', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -172,7 +190,7 @@ export function SettingsContent() {
   const saveSettings = async (section: string, data: any) => {
     setSaving(section)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       if (!token) {
         toast({
           title: "Not authenticated",
@@ -182,7 +200,7 @@ export function SettingsContent() {
         return
       }
       
-      const response = await fetch('/api/user/settings', {
+      const response = await fetch('http://localhost:8080/api/user/settings', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -330,7 +348,13 @@ export function SettingsContent() {
                     id="phone" 
                     type="tel" 
                     value={profileData.phone}
-                    onChange={(e) => setProfileData(prev => ({ ...prev, phone: e.target.value }))}
+                    onChange={(e) => {
+                      const formatted = formatPhoneNumber(e.target.value)
+                      if (formatted.length <= 18) { // Limit to prevent overflow
+                        setProfileData(prev => ({ ...prev, phone: formatted }))
+                      }
+                    }}
+                    placeholder="(555) 123-4567"
                   />
                 </div>
                 <Separator />

@@ -10,6 +10,7 @@ interface User {
   last_name: string
   is_advisor: boolean
   created_at: string
+  has_completed_onboarding?: boolean
 }
 
 interface UserContextType {
@@ -35,9 +36,36 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
 
-  // Check for existing user session on mount
+  // Ensure hydration safety
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  // Handle OAuth redirects after hydration
+  useEffect(() => {
+    if (!isClient) return;
+    
+    const handleOAuthRedirect = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('oauth_success') === 'true') {
+        console.log('OAuth success detected, clearing logged out flag');
+        localStorage.removeItem('user_logged_out');
+        // Clear the URL parameter
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.delete('oauth_success');
+        window.history.replaceState({}, '', newUrl.toString());
+      }
+    };
+    
+    handleOAuthRedirect();
+  }, [isClient]);
+
+  // Check for existing user session on mount (only after hydration)
+  useEffect(() => {
+    if (!isClient) return;
+    
     const checkUserSession = async () => {
       console.log('=== Starting user session check ===');
       try {
@@ -202,9 +230,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setLoading(false)
       }
     }
-
-    checkUserSession()
-  }, [])
+    
+    checkUserSession();
+  }, [isClient]);
 
   useEffect(() => {
     console.log('Redirect effect triggered:', { loading, user, pathname: window.location.pathname })

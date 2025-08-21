@@ -1,3 +1,4 @@
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -184,9 +185,11 @@ export function HowToUseContent() {
               Welcome to TrueFi.ai, where managing your money becomes simple, clear, and even enjoyable. Get
               personalized guidance, real-time insights, and the tools you need for confident financial planning.
             </p>
-            <Button size="lg" className="bg-cyan-600 hover:bg-cyan-700 text-white px-8 py-3 text-lg">
-              Get Started Now
-            </Button>
+            <Link href="/auth">
+              <Button size="lg" className="bg-cyan-600 hover:bg-cyan-700 text-white px-8 py-3 text-lg">
+                Get Started Now
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -531,16 +534,20 @@ export function HowToUseContent() {
               Join thousands of users who have already discovered the power of AI-driven financial guidance with TrueFi.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" variant="secondary" className="px-8 py-3 text-lg">
-                Start Chatting with Penny
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white text-white hover:bg-white hover:text-cyan-600 px-8 py-3 text-lg bg-transparent"
-              >
-                View Dashboard Demo
-              </Button>
+              <Link href="/auth">
+                <Button size="lg" variant="secondary" className="px-8 py-3 text-lg">
+                  Start Chatting with Penny
+                </Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-white text-white hover:bg-white hover:text-cyan-600 px-8 py-3 text-lg bg-transparent"
+                >
+                  View Dashboard Demo
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

@@ -262,34 +262,23 @@ export const onboardingFlow: OnboardingFlow = {
           skipOption: true
         },
         {
-          id: 'manual-accounts',
-          type: 'quick-add',
-          content: "Or quickly add your account balances manually (you can always connect accounts later):",
+          id: 'liabilities-input',
+          type: 'liabilitiesInput',
+          content: "Let's start with any debts or loans you have (I'll help create a strategic payoff plan to save you money on interest):",
           data: {
-            fields: [
-              { id: 'checking', label: 'Checking Account', type: 'currency', icon: '🏦' },
-              { id: 'savings', label: 'Savings Account', type: 'currency', icon: '💰' },
-              { id: 'credit-cards', label: 'Credit Card Debt', type: 'currency', icon: '💳' },
-              { id: 'investments', label: 'Investments', type: 'currency', icon: '📈' }
-            ]
+            skipOption: true
           },
-          saveKey: 'manualBalances',
+          saveKey: 'manualLiabilities',
           skipOption: true
         },
         {
-          id: 'existing-debt',
-          type: 'checkbox-group',
-          content: "Do you have any of these debts? (I'll help create a strategic payoff plan to save you money on interest)",
+          id: 'assets-input',
+          type: 'assetsInput',
+          content: "Now let's add what you own. Add your major assets (you can skip if you prefer):",
           data: {
-            options: [
-              { id: 'student-loans', label: '🎓 Student Loans', hasAmount: true },
-              { id: 'credit-cards', label: '💳 Credit Cards', hasAmount: true },
-              { id: 'auto-loan', label: '🚗 Auto Loan', hasAmount: true },
-              { id: 'mortgage', label: '🏠 Mortgage', hasAmount: true },
-              { id: 'personal-loan', label: '💵 Personal Loan', hasAmount: true }
-            ]
+            skipOption: true
           },
-          saveKey: 'existingDebt',
+          saveKey: 'manualAssets',
           skipOption: true
         }
       ],

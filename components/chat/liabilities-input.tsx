@@ -21,17 +21,18 @@ import {
 interface LiabilitiesInputProps {
   onSubmit: (liabilities: Record<string, number>) => void;
   onSkip?: () => void;
+  initialData?: Record<string, number>;
 }
 
-export function LiabilitiesInput({ onSubmit, onSkip }: LiabilitiesInputProps) {
+export function LiabilitiesInput({ onSubmit, onSkip, initialData }: LiabilitiesInputProps) {
   const [liabilities, setLiabilities] = useState<Record<string, number>>({
-    mortgage: 0,
-    auto_loan: 0,
-    student_loans: 0,
-    credit_cards: 0,
-    personal_loan: 0,
-    medical_debt: 0,
-    other: 0
+    mortgage: initialData?.mortgage || 0,
+    auto_loan: initialData?.auto_loan || 0,
+    student_loans: initialData?.student_loans || 0,
+    credit_cards: initialData?.credit_cards || 0,
+    personal_loan: initialData?.personal_loan || 0,
+    medical_debt: initialData?.medical_debt || 0,
+    other: initialData?.other || 0
   });
 
   const [customLiabilities, setCustomLiabilities] = useState<Array<{ name: string; value: number }>>([]);

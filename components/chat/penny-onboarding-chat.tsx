@@ -122,12 +122,25 @@ export function PennyOnboardingChat() {
     };
     setMessages(prev => [...prev, userMessage]);
 
+    // Calculate progress based on total questions answered
+    const phaseOrder: OnboardingPhase[] = [
+      'welcome', 'quick-wins', 'financial-snapshot', 
+      'personalization', 'goals-dreams', 'complete'
+    ];
+    const totalQuestions = phaseOrder.reduce((sum, phase) => {
+      if (phase === 'complete') return sum;
+      return sum + (onboardingFlow.phases[phase]?.questions?.length || 0);
+    }, 0);
+    const answeredQuestions = Object.keys(updatedAnswers).length;
+    const progressPercentage = Math.min(100, Math.round((answeredQuestions / totalQuestions) * 100));
+
     // Update progress
     const updatedProgress: OnboardingProgress = {
       ...progress,
       answers: updatedAnswers,
       lastUpdated: new Date(),
-      points: progress.points + 10
+      points: progress.points + 10,
+      completionPercentage: progressPercentage
     };
 
     // Check for celebration
@@ -179,10 +192,18 @@ export function PennyOnboardingChat() {
           await addAssistantMessage(onboardingFlow.phases[nextPhase].questions[0]);
           
           // Update progress
-          updatedProgress.completedPhases.push(currentPhase);
+          if (!updatedProgress.completedPhases.includes(currentPhase)) {
+            updatedProgress.completedPhases.push(currentPhase);
+          }
           updatedProgress.currentPhase = nextPhase;
-          updatedProgress.completionPercentage = 
-            ((currentIndex + 1) / phaseOrder.length) * 100;
+          
+          // Recalculate progress percentage based on questions answered
+          const totalQuestions = phaseOrder.reduce((sum, phase) => {
+            if (phase === 'complete') return sum;
+            return sum + (onboardingFlow.phases[phase]?.questions?.length || 0);
+          }, 0);
+          const answeredQuestions = Object.keys(updatedProgress.answers).length;
+          updatedProgress.completionPercentage = Math.min(100, Math.round((answeredQuestions / totalQuestions) * 100));
         }
       } else {
         // Onboarding complete!

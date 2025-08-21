@@ -35,6 +35,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Security
+http_bearer = HTTPBearer()
+
 # Plaid imports
 try:
     import plaid
@@ -1395,6 +1398,11 @@ async def login(input: LoginInput = Body(...)):
         except Exception as e:
             logger.error(f"Bcrypt error for user {email}: {str(e)}")
             raise HTTPException(status_code=401, detail="Invalid email or password")
+        # Check onboarding status
+        cur.execute("SELECT is_complete FROM onboarding_progress WHERE user_id = %s", (user_id,))
+        onboarding_result = cur.fetchone()
+        has_completed_onboarding = onboarding_result[0] if onboarding_result else True  # Default to true for existing users
+        
         # Create JWT
         token = jwt.encode({"userId": user_id}, JWT_SECRET, algorithm="HS256")
         return {
@@ -1404,6 +1412,7 @@ async def login(input: LoginInput = Body(...)):
             "last_name": last_name,
             "is_advisor": is_advisor,
             "created_at": created_at.isoformat() if created_at else None,
+            "has_completed_onboarding": has_completed_onboarding,
             "token": token
         }
     except Exception as e:
@@ -2009,13 +2018,19 @@ async def validate_token(request: Request):
             if not is_active:
                 raise HTTPException(status_code=403, detail="Account is deactivated")
             
+            # Check onboarding status
+            cur.execute("SELECT is_complete FROM onboarding_progress WHERE user_id = %s", (user_id,))
+            onboarding_result = cur.fetchone()
+            has_completed_onboarding = onboarding_result[0] if onboarding_result else True  # Default to true for existing users
+            
             return {
                 "id": user_id,
                 "email": email,
                 "first_name": first_name,
                 "last_name": last_name,
                 "is_advisor": is_advisor,
-                "created_at": created_at.isoformat() if created_at else None
+                "created_at": created_at.isoformat() if created_at else None,
+                "has_completed_onboarding": has_completed_onboarding
             }
             
         finally:
@@ -2027,6 +2042,244 @@ async def validate_token(request: Request):
     except Exception as e:
         logger.error(f"Token validation error: {str(e)}")
         raise HTTPException(status_code=500, detail="Token validation failed")
+
+# Helper function to get user_id from token
+def get_user_id_from_token(token: str) -> str:
+    """Extract user_id from JWT token"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        user_id = payload.get("userId")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user_id
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# Settings endpoints
+@app.get("/api/user/settings")
+async def get_user_settings(credentials: HTTPAuthorizationCredentials = Depends(http_bearer)):
+    """Get user settings"""
+    try:
+        user_id = get_user_id_from_token(credentials.credentials)
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        
+        # Get user profile
+        cur.execute("""
+            SELECT u.email, u.first_name, u.last_name, u.two_factor_auth_enabled,
+                   ui.phone_primary, ui.street, ui.city, ui.state, ui.postal_code,
+                   ud.household_income, ud.marital_status, ud.dependents,
+                   up.risk_tolerance, up.investment_horizon, up.financial_goals
+            FROM users u
+            LEFT JOIN user_identity ui ON u.id = ui.user_id
+            LEFT JOIN user_demographics ud ON u.id = ud.user_id
+            LEFT JOIN user_preferences up ON u.id = up.user_id
+            WHERE u.id = %s
+        """, (user_id,))
+        
+        profile_data = cur.fetchone()
+        
+        # Get notification preferences
+        cur.execute("""
+            SELECT notification_type, enabled, channel
+            FROM notification_preferences
+            WHERE user_id = %s
+        """, (user_id,))
+        
+        notifications_data = cur.fetchall()
+        
+        # Get privacy settings
+        cur.execute("""
+            SELECT allow_data_sharing, show_profile_publicly
+            FROM user_privacy_settings
+            WHERE user_id = %s
+        """, (user_id,))
+        
+        privacy_data = cur.fetchone()
+        
+        # Format response
+        settings = {
+            "profile": {
+                "email": profile_data[0] if profile_data else "",
+                "firstName": profile_data[1] if profile_data else "",
+                "lastName": profile_data[2] if profile_data else "",
+                "phone": profile_data[4] if profile_data and len(profile_data) > 4 else "",
+                "street": profile_data[5] if profile_data and len(profile_data) > 5 else "",
+                "city": profile_data[6] if profile_data and len(profile_data) > 6 else "",
+                "state": profile_data[7] if profile_data and len(profile_data) > 7 else "",
+                "postalCode": profile_data[8] if profile_data and len(profile_data) > 8 else "",
+                "incomeRange": str(profile_data[9]) if profile_data and len(profile_data) > 9 else "50k-75k",
+                "maritalStatus": profile_data[10] if profile_data and len(profile_data) > 10 else "",
+                "dependents": profile_data[11] if profile_data and len(profile_data) > 11 else 0,
+                "primaryGoals": profile_data[14] if profile_data and len(profile_data) > 14 else ""
+            },
+            "preferences": {
+                "riskTolerance": profile_data[12] if profile_data and len(profile_data) > 12 else "moderate",
+                "investmentHorizon": profile_data[13] if profile_data and len(profile_data) > 13 else "medium"
+            },
+            "notifications": {
+                "emailNotifications": True,
+                "pushNotifications": True,
+                "weeklyFinancialSummary": True,
+                "goalMilestones": True,
+                "budgetAlerts": True,
+                "marketUpdates": False,
+                "productUpdates": False,
+                "dailyReminders": True,
+                "pennyMessages": True,
+                "urgentAlerts": True,
+                "smsSecurityAlerts": True,
+                "smsPaymentReminders": False
+            },
+            "privacy": {
+                "dataAnalytics": privacy_data[0] if privacy_data else True,
+                "personalizedRecommendations": True,
+                "marketingCommunications": False
+            },
+            "security": {
+                "twoFactorEnabled": profile_data[3] if profile_data else False
+            }
+        }
+        
+        # Update notifications from database
+        for notif_type, enabled, channel in notifications_data:
+            if notif_type == "email":
+                settings["notifications"]["emailNotifications"] = enabled
+            elif notif_type == "push":
+                settings["notifications"]["pushNotifications"] = enabled
+            # Add more notification type mappings as needed
+        
+        return settings
+        
+    except Exception as e:
+        logger.error(f"Error getting user settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get settings")
+    finally:
+        if conn:
+            cur.close()
+            db_pool.putconn(conn)
+
+@app.put("/api/user/settings")
+async def update_user_settings(request: dict, credentials: HTTPAuthorizationCredentials = Depends(http_bearer)):
+    """Update user settings"""
+    try:
+        user_id = get_user_id_from_token(credentials.credentials)
+        section = request.get("section")
+        data = request.get("data")
+        
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        current_time = datetime.now(timezone.utc)
+        
+        if section == "profile":
+            # Update users table
+            cur.execute("""
+                UPDATE users 
+                SET first_name = %s, last_name = %s, updated_at = %s
+                WHERE id = %s
+            """, (data.get("firstName"), data.get("lastName"), current_time, user_id))
+            
+            # Update or insert user_identity
+            phone = data.get("phone", "")
+            # Format phone number professionally
+            if phone:
+                # Remove all non-digits
+                digits = ''.join(filter(str.isdigit, phone))
+                if len(digits) == 10:
+                    phone = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+                elif len(digits) == 11 and digits[0] == '1':
+                    phone = f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
+            
+            cur.execute("""
+                INSERT INTO user_identity (user_id, phone_primary, street, city, state, postal_code, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE
+                SET phone_primary = EXCLUDED.phone_primary,
+                    street = EXCLUDED.street,
+                    city = EXCLUDED.city,
+                    state = EXCLUDED.state,
+                    postal_code = EXCLUDED.postal_code,
+                    updated_at = EXCLUDED.updated_at
+            """, (user_id, phone, data.get("street"), data.get("city"), 
+                  data.get("state"), data.get("postalCode"), current_time, current_time))
+            
+            # Update or insert user_demographics
+            cur.execute("""
+                INSERT INTO user_demographics (user_id, household_income, marital_status, dependents, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE
+                SET household_income = EXCLUDED.household_income,
+                    marital_status = EXCLUDED.marital_status,
+                    dependents = EXCLUDED.dependents
+            """, (user_id, data.get("incomeRange"), data.get("maritalStatus"), 
+                  data.get("dependents", 0), current_time))
+            
+            # Update or insert user_preferences
+            cur.execute("""
+                INSERT INTO user_preferences (id, user_id, risk_tolerance, investment_horizon, financial_goals, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE
+                SET risk_tolerance = EXCLUDED.risk_tolerance,
+                    investment_horizon = EXCLUDED.investment_horizon,
+                    financial_goals = EXCLUDED.financial_goals,
+                    updated_at = EXCLUDED.updated_at
+            """, (str(uuid.uuid4()), user_id, data.get("riskTolerance"), 
+                  data.get("investmentHorizon"), json.dumps({"goals": data.get("primaryGoals", "")}), 
+                  current_time, current_time))
+            
+        elif section == "notifications":
+            # Update notification preferences
+            for notif_type, enabled in data.items():
+                cur.execute("""
+                    INSERT INTO notification_preferences (user_id, notification_type, enabled, channel, created_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id, notification_type) DO UPDATE
+                    SET enabled = EXCLUDED.enabled
+                """, (user_id, notif_type, enabled, "email" if "email" in notif_type.lower() else "push", current_time))
+            
+        elif section == "privacy":
+            # Update privacy settings
+            cur.execute("""
+                INSERT INTO user_privacy_settings (user_id, allow_data_sharing, show_profile_publicly, created_at)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE
+                SET allow_data_sharing = EXCLUDED.allow_data_sharing,
+                    show_profile_publicly = EXCLUDED.show_profile_publicly
+            """, (user_id, data.get("dataAnalytics", True), 
+                  data.get("personalizedRecommendations", True), current_time))
+            
+        elif section == "security":
+            # Update security settings
+            if data.get("newPassword"):
+                # Hash the new password
+                password_hash = bcrypt.hashpw(data["newPassword"].encode(), bcrypt.gensalt()).decode()
+                cur.execute("""
+                    UPDATE users 
+                    SET password_hash = %s, updated_at = %s
+                    WHERE id = %s
+                """, (password_hash, current_time, user_id))
+            
+            if "twoFactorEnabled" in data:
+                cur.execute("""
+                    UPDATE users 
+                    SET two_factor_auth_enabled = %s, updated_at = %s
+                    WHERE id = %s
+                """, (data["twoFactorEnabled"], current_time, user_id))
+        
+        conn.commit()
+        return {"success": True, "message": "Settings updated successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error updating user settings: {e}")
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update settings")
+    finally:
+        if conn:
+            cur.close()
+            db_pool.putconn(conn)
 
 # Add these endpoints after the existing ones
 
@@ -2059,6 +2312,14 @@ async def create_user(user_data: UserCreate):
         ))
         
         result = cur.fetchone()
+        
+        # Create onboarding_progress entry for new user
+        cur.execute("""
+            INSERT INTO onboarding_progress (user_id, current_step, is_complete, updated_at)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id) DO NOTHING
+        """, (user_id, 'welcome', False, current_time))
+        
         conn.commit()
         
         # Generate JWT token for the new user
@@ -2079,6 +2340,7 @@ async def create_user(user_data: UserCreate):
             "is_active": result[4],
             "is_advisor": result[5],
             "created_at": result[6].isoformat() if result[6] else None,
+            "has_completed_onboarding": False,  # New users haven't completed onboarding
             "token": token  # Include the token in the response
         }
         

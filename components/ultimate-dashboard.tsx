@@ -57,6 +57,22 @@ const formatPercent = (num: number): string => {
   return `${num.toFixed(1)}%`
 }
 
+// Hydration-safe date formatting
+const formatDate = (dateString: string | Date): string => {
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return "Invalid Date"
+    
+    // Use a consistent format that won't cause hydration mismatches
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${month}/${day}/${year}`
+  } catch {
+    return "Invalid Date"
+  }
+}
+
 // Asset and Liability types
 interface Asset {
   id: string
@@ -698,7 +714,7 @@ export function UltimateDashboard() {
                               <span className="text-xl">{meta.icon}</span>
                               <div>
                                 <p className="text-sm font-medium line-clamp-1">{transaction.name}</p>
-                                <p className="text-xs text-gray-500">{new Date(transaction.date).toLocaleDateString()}</p>
+                                <p className="text-xs text-gray-500">{formatDate(transaction.date)}</p>
                               </div>
                             </div>
                             <p className={`font-bold ${transaction.amount < 0 ? "text-red-600" : "text-green-600"}`}>
@@ -761,7 +777,7 @@ export function UltimateDashboard() {
                         const meta = CATEGORY_META[transaction.category || "Other"] || { icon: "💵" }
                         return (
                           <TableRow key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
+                            <TableCell>{formatDate(transaction.date)}</TableCell>
                             <TableCell>
                               <div className="flex items-center space-x-2">
                                 <span>{meta.icon}</span>
@@ -1159,7 +1175,7 @@ export function UltimateDashboard() {
                             </div>
                             {goal.target_date && (
                               <p className="text-xs text-gray-500 mt-2">
-                                Target: {new Date(goal.target_date).toLocaleDateString()}
+                                Target: {formatDate(goal.target_date)}
                               </p>
                             )}
                           </CardContent>

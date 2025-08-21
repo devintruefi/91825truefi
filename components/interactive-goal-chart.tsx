@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts"
 import { ChartContainer } from "@/components/ui/chart"
 
@@ -43,7 +43,13 @@ function CustomTooltip({ active, payload, coordinate }: CustomTooltipProps) {
 
 export function InteractiveGoalChart({ data, title, target, color }: GoalChartProps) {
   const [tooltipData, setTooltipData] = useState<{ x: number; y: number; value: number } | null>(null)
+  const [isClient, setIsClient] = useState(false)
   const chartRef = useRef<HTMLDivElement>(null)
+
+  // Ensure hydration safety
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   const handleMouseMove = useCallback((event: any) => {
     if (event && event.activePayload && event.activePayload.length > 0) {
@@ -66,6 +72,15 @@ export function InteractiveGoalChart({ data, title, target, color }: GoalChartPr
       label: "Projected Savings",
       color: `${color}80`,
     },
+  }
+
+  // Show loading state during hydration to prevent mismatch
+  if (!isClient) {
+    return (
+      <div className="relative h-[200px] w-full bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+        <div className="animate-pulse text-gray-500">Loading chart...</div>
+      </div>
+    )
   }
 
   return (

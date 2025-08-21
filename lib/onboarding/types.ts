@@ -20,7 +20,9 @@ export type MessageComponentType =
   | 'pie-chart'
   | 'timeline'
   | 'quick-add'
-  | 'voice-input';
+  | 'voice-input'
+  | 'assetsInput'
+  | 'liabilitiesInput';
 
 export interface OnboardingMessage {
   id: string;

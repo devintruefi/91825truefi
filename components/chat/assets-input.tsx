@@ -20,17 +20,18 @@ import {
 interface AssetsInputProps {
   onSubmit: (assets: Record<string, number>) => void;
   onSkip?: () => void;
+  initialData?: Record<string, number>;
 }
 
-export function AssetsInput({ onSubmit, onSkip }: AssetsInputProps) {
+export function AssetsInput({ onSubmit, onSkip, initialData }: AssetsInputProps) {
   const [assets, setAssets] = useState<Record<string, number>>({
-    home: 0,
-    vehicle: 0,
-    savings: 0,
-    investments: 0,
-    retirement: 0,
-    business: 0,
-    other: 0
+    home: initialData?.home || 0,
+    vehicle: initialData?.vehicle || 0,
+    savings: initialData?.savings || 0,
+    investments: initialData?.investments || 0,
+    retirement: initialData?.retirement || 0,
+    business: initialData?.business || 0,
+    other: initialData?.other || 0
   });
 
   const [customAssets, setCustomAssets] = useState<Array<{ name: string; value: number }>>([]);

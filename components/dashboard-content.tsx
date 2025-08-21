@@ -1,10 +1,22 @@
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { InteractiveGoalChart } from "@/components/interactive-goal-chart"
-import { TrendingUp, AlertTriangle, CheckCircle, TrendingDown, DollarSign, Target, PiggyBank, Home, CreditCard, Building2, Smartphone, Star, Pin, Eye, Zap } from "lucide-react"
-import { useState } from "react"
+import { 
+  TrendingUp, TrendingDown, DollarSign, Target, PiggyBank, CreditCard, 
+  Building2, ArrowUpRight, ArrowDownRight, Search, Filter, Calendar,
+  Bell, Settings, RefreshCw, Plus, Edit2, Trash2, Check, X, Loader2,
+  Home, Car, Briefcase, Heart, ShoppingBag, Utensils, Plane, Zap,
+  BarChart3, PieChart, Activity, Sparkles, ChevronRight, ChevronDown,
+  Eye, EyeOff, Download, Upload, MoreVertical, Info, AlertCircle,
+  AlertTriangle, CheckCircle, Smartphone, Star, Pin
+} from "lucide-react"
 
 // Enhanced styling classes for the premium dashboard experience
 const glassmorphismCard = "backdrop-blur-xl bg-white/70 dark:bg-gray-950/70 border border-gray-200/50 dark:border-gray-800/50 shadow-2xl shadow-gray-200/20 dark:shadow-gray-950/20 hover:shadow-3xl hover:shadow-gray-300/30 dark:hover:shadow-gray-900/40 transition-all duration-500 ease-out hover:scale-[1.01] hover:-translate-y-1 rounded-2xl"
@@ -13,6 +25,44 @@ const gradientText = "bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600
 
 const pulseGlow = "shadow-[0_0_30px_rgba(6,182,212,0.4)] dark:shadow-[0_0_30px_rgba(52,211,153,0.4)]"
 
+// Utility functions
+const formatCurrency = (amount: number): string => {
+  if (isNaN(amount) || !isFinite(amount)) return "$0"
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+const formatCompact = (num: number): string => {
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
+  return num.toString()
+}
+
+const formatPercent = (num: number): string => {
+  return `${num.toFixed(1)}%`
+}
+
+// Hydration-safe date formatting
+const formatDate = (dateString: string | Date): string => {
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return "Invalid Date"
+    
+    // Use a consistent format that won't cause hydration mismatches
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${month}/${day}/${year}`
+  } catch {
+    return "Invalid Date"
+  }
+}
+
+// Sample data for non-logged-in users
 const sampleAccounts = [
   { name: "Chase Total Checking", type: "Checking", balance: 8450.32, institution: "Chase Bank", icon: Building2, status: "healthy", color: "#0066CC" },
   { name: "Chase Sapphire Preferred", type: "Credit Card", balance: -2341.67, institution: "Chase Bank", icon: CreditCard, status: "caution", color: "#0066CC" },
@@ -23,561 +73,842 @@ const sampleAccounts = [
 ];
 
 const sampleTransactions = [
-  { id: 1, date: "2024-01-15", description: "Whole Foods Market", category: "Food & Dining", amount: -89.32, account: "Chase Checking", icon: "🍎", trend: "+12%" },
-  { id: 2, date: "2024-01-15", description: "Salary Deposit", category: "Income", amount: 3200.0, account: "Chase Checking", icon: "💰", trend: "on time" },
-  { id: 3, date: "2024-01-14", description: "Shell Gas Station", category: "Transportation", amount: -45.67, account: "Chase Credit Card", icon: "⛽", trend: "-5%" },
-  { id: 4, date: "2024-01-14", description: "Netflix Subscription", category: "Entertainment", amount: -15.99, account: "Chase Credit Card", icon: "📺", trend: "steady" },
-  { id: 5, date: "2024-01-13", description: "Target", category: "Shopping", amount: -127.84, account: "Chase Credit Card", icon: "🛒", trend: "+8%" },
-  { id: 6, date: "2024-01-13", description: "Electric Bill", category: "Utilities", amount: -98.45, account: "Chase Checking", icon: "💡", trend: "-2%" },
-  { id: 7, date: "2024-01-12", description: "Starbucks", category: "Food & Dining", amount: -12.75, account: "Chase Credit Card", icon: "☕", trend: "+15%" },
-  { id: 8, date: "2024-01-12", description: "Uber", category: "Transportation", amount: -23.5, account: "Chase Credit Card", icon: "🚗", trend: "+3%" },
-  { id: 9, date: "2024-01-11", description: "Amazon Purchase", category: "Shopping", amount: -67.99, account: "Chase Credit Card", icon: "📦", trend: "+6%" },
-  { id: 10, date: "2024-01-11", description: "Gym Membership", category: "Healthcare", amount: -49.99, account: "Chase Checking", icon: "💪", trend: "steady" },
+  // Income transactions
+  { id: 1, date: "2024-01-15", description: "Salary Deposit", category: "Income", amount: 5200.0, account: "Chase Checking", icon: "💰", trend: "on time" },
+  { id: 2, date: "2024-01-01", description: "Freelance Payment", category: "Income", amount: 1800.0, account: "Chase Checking", icon: "💼", trend: "+15%" },
+  
+  // Housing & Fixed Expenses
+  { id: 3, date: "2024-01-01", description: "Rent Payment", category: "Housing", amount: -1850.0, account: "Chase Checking", icon: "🏠", trend: "steady" },
+  { id: 4, date: "2024-01-13", description: "Electric Bill", category: "Utilities", amount: -135.45, account: "Chase Checking", icon: "💡", trend: "-2%" },
+  { id: 5, date: "2024-01-10", description: "Internet Bill", category: "Utilities", amount: -89.99, account: "Chase Credit Card", icon: "📶", trend: "steady" },
+  { id: 6, date: "2024-01-05", description: "Car Insurance", category: "Transportation", amount: -142.50, account: "Chase Checking", icon: "🚗", trend: "steady" },
+  
+  // Food & Dining
+  { id: 7, date: "2024-01-15", description: "Whole Foods Market", category: "Food & Dining", amount: -89.32, account: "Chase Checking", icon: "🍎", trend: "+12%" },
+  { id: 8, date: "2024-01-12", description: "Starbucks", category: "Food & Dining", amount: -12.75, account: "Chase Credit Card", icon: "☕", trend: "+15%" },
+  { id: 9, date: "2024-01-08", description: "Restaurant Dinner", category: "Food & Dining", amount: -78.50, account: "Chase Credit Card", icon: "🍽️", trend: "+10%" },
+  { id: 10, date: "2024-01-03", description: "Grocery Store", category: "Food & Dining", amount: -156.89, account: "Chase Checking", icon: "🛒", trend: "+8%" },
+  
+  // Transportation
+  { id: 11, date: "2024-01-14", description: "Shell Gas Station", category: "Transportation", amount: -65.67, account: "Chase Credit Card", icon: "⛽", trend: "-5%" },
+  { id: 12, date: "2024-01-12", description: "Uber", category: "Transportation", amount: -23.50, account: "Chase Credit Card", icon: "🚗", trend: "+3%" },
+  { id: 13, date: "2024-01-07", description: "Parking Fee", category: "Transportation", amount: -15.00, account: "Chase Credit Card", icon: "🅿️", trend: "steady" },
+  
+  // Shopping & Entertainment
+  { id: 14, date: "2024-01-13", description: "Target", category: "Shopping", amount: -127.84, account: "Chase Credit Card", icon: "🛒", trend: "+8%" },
+  { id: 15, date: "2024-01-11", description: "Amazon Purchase", category: "Shopping", amount: -67.99, account: "Chase Credit Card", icon: "📦", trend: "+6%" },
+  { id: 16, date: "2024-01-14", description: "Netflix Subscription", category: "Entertainment", amount: -15.99, account: "Chase Credit Card", icon: "📺", trend: "steady" },
+  { id: 17, date: "2024-01-09", description: "Movie Tickets", category: "Entertainment", amount: -28.50, account: "Chase Credit Card", icon: "🎬", trend: "+5%" },
+  
+  // Healthcare & Other
+  { id: 18, date: "2024-01-11", description: "Gym Membership", category: "Healthcare", amount: -49.99, account: "Chase Checking", icon: "💪", trend: "steady" },
+  { id: 19, date: "2024-01-06", description: "Pharmacy", category: "Healthcare", amount: -24.75, account: "Chase Credit Card", icon: "💊", trend: "steady" },
+  { id: 20, date: "2024-01-02", description: "Phone Bill", category: "Utilities", amount: -85.00, account: "Chase Credit Card", icon: "📱", trend: "steady" },
 ];
 
-const carGoalData = [
-  { month: "Jan", current: 12000, projected: 12000 },
-  { month: "Feb", current: 14500, projected: 14200 },
-  { month: "Mar", current: 16800, projected: 16400 },
-  { month: "Apr", current: 18200, projected: 18600 },
-  { month: "May", current: 20500, projected: 20800 },
-  { month: "Jun", current: 22800, projected: 23000 },
-  { month: "Jul", current: 25200, projected: 25200 },
-  { month: "Aug", current: 27500, projected: 27400 },
-  { month: "Sep", current: 29800, projected: 29600 },
-  { month: "Oct", current: 32000, projected: 31800 },
-  { month: "Nov", current: 34200, projected: 34000 },
-  { month: "Dec", current: 36500, projected: 36200 },
-];
-const homeGoalData = [
-  { month: "2020", current: 45000, projected: 45000 },
-  { month: "2021", current: 62000, projected: 60000 },
-  { month: "2022", current: 78000, projected: 75000 },
-  { month: "2023", current: 95000, projected: 90000 },
-  { month: "2024", current: 109000, projected: 105000 },
-];
-const retirementGoalData = [
-  { month: "Age 25", current: 15000, projected: 15000 },
-  { month: "Age 30", current: 85000, projected: 80000 },
-  { month: "Age 35", current: 180000, projected: 175000 },
-  { month: "Age 40", current: 320000, projected: 315000 },
-  { month: "Age 45", current: 520000, projected: 510000 },
-  { month: "Age 50", current: 780000, projected: 770000 },
-  { month: "Age 55", current: 1100000, projected: 1080000 },
-  { month: "Age 60", current: 1500000, projected: 1480000 },
+const sampleAssets = [
+  { id: 1, name: "Primary Home", type: "Real Estate", value: 450000, description: "3 bed, 2 bath in suburban area" },
+  { id: 2, name: "Investment Portfolio", type: "Stocks & ETFs", value: 125000, description: "Diversified portfolio with tech focus" },
+  { id: 3, name: "Emergency Fund", type: "Cash", value: 25000, description: "High-yield savings account" },
+  { id: 4, name: "Car", type: "Vehicle", value: 28000, description: "2020 Honda Accord" },
+  { id: 5, name: "Jewelry Collection", type: "Collectibles", value: 15000, description: "Family heirlooms and investments" },
 ];
 
-const sampleInvestmentPortfolio = {
-  totalValue: 187000,
-  performance: 12,
-  holdings: [
-    { name: "Company Stock", value: 92000, performance: 4.2 },
-    { name: "Stocks & ETFs", value: 30000, performance: 2.5 },
-    { name: "401(k)", value: 20000, performance: 1.5 },
-    { name: "Cash Savings", value: 25000, performance: 0.3 },
-  ],
-  individualStocks: [
-    { symbol: "AAPL", name: "Apple Inc.", shares: 25, price: 185.92, value: 4648, percentage: 15.5, change: 2.3, pinned: true, star: true },
-    { symbol: "MSFT", name: "Microsoft Corp.", shares: 18, price: 378.85, value: 6819.3, percentage: 22.7, change: 1.8, pinned: false, star: false },
-    { symbol: "GOOGL", name: "Alphabet Inc.", shares: 12, price: 142.56, value: 1710.72, percentage: 5.7, change: -0.9, pinned: false, star: false },
-    { symbol: "TSLA", name: "Tesla Inc.", shares: 8, price: 248.42, value: 1987.36, percentage: 6.6, change: 4.2, pinned: true, star: false },
-    { symbol: "AMZN", name: "Amazon.com Inc.", shares: 15, price: 155.89, value: 2338.35, percentage: 7.8, change: 0.7, pinned: false, star: false },
-    { symbol: "NVDA", name: "NVIDIA Corp.", shares: 6, price: 722.48, value: 4334.88, percentage: 14.4, change: 3.1, pinned: false, star: true },
-    { symbol: "SPY", name: "SPDR S&P 500 ETF", shares: 45, price: 478.23, value: 21520.35, percentage: 71.7, change: 1.2, pinned: false, star: false },
-    { symbol: "VTI", name: "Vanguard Total Stock", shares: 35, price: 245.67, value: 8598.45, percentage: 28.7, change: 0.8, pinned: false, star: false },
-  ],
+const sampleLiabilities = [
+  { id: 1, name: "Mortgage", type: "Real Estate", balance: 320000, interest_rate: 3.25, minimum_payment: 1850 },
+  { id: 2, name: "Car Loan", type: "Vehicle", balance: 18000, interest_rate: 4.5, minimum_payment: 450 },
+  { id: 3, name: "Student Loans", type: "Education", balance: 45000, interest_rate: 5.2, minimum_payment: 380 },
+  { id: 4, name: "Credit Card", type: "Revolving", balance: 8500, interest_rate: 18.99, minimum_payment: 250 },
+];
+
+const sampleGoals = [
+  { id: 1, name: "Emergency Fund", target_amount: 50000, current_amount: 25000, target_date: "2024-12-31" },
+  { id: 2, name: "Vacation Fund", target_amount: 8000, current_amount: 3200, target_date: "2024-06-30" },
+  { id: 3, name: "Home Renovation", target_amount: 25000, current_amount: 8500, target_date: "2025-03-31" },
+  { id: 4, name: "Retirement", target_amount: 2000000, current_amount: 125000, target_date: "2040-01-01" },
+];
+
+const sampleInvestments = [
+  { id: 1, name: "401(k) Plan", type: "Retirement", value: 125000, performance: 8.5, allocation: 40 },
+  { id: 2, name: "Individual Stocks", type: "Equities", value: 45000, performance: 12.3, allocation: 15 },
+  { id: 3, name: "Index Funds", type: "ETFs", value: 35000, performance: 6.8, allocation: 12 },
+  { id: 4, name: "Real Estate", type: "Property", value: 25000, performance: 4.2, allocation: 8 },
+  { id: 5, name: "Bonds", type: "Fixed Income", value: 20000, performance: 2.1, allocation: 7 },
+];
+
+const sampleBudget = {
+  total: 7500,
+  categories: [
+    { name: "Housing", amount: 2500, type: "expense", percentage: 33.3 },
+    { name: "Transportation", amount: 800, type: "expense", percentage: 10.7 },
+    { name: "Food", amount: 600, type: "expense", percentage: 8.0 },
+    { name: "Utilities", amount: 400, type: "expense", percentage: 5.3 },
+    { name: "Healthcare", amount: 300, type: "expense", percentage: 4.0 },
+    { name: "Entertainment", amount: 500, type: "expense", percentage: 6.7 },
+    { name: "Savings", amount: 1500, type: "savings", percentage: 20.0 },
+    { name: "Income", amount: 7500, type: "income", percentage: 100.0 },
+  ]
 };
 
+const sampleNotifications = [
+  { id: 1, title: "Budget Alert", message: "You're approaching your dining budget limit", type: "warning", timestamp: "2 hours ago" },
+  { id: 2, title: "Savings Goal", message: "Emergency fund goal is 50% complete!", type: "success", timestamp: "1 day ago" },
+  { id: 3, title: "Investment Update", message: "Your portfolio gained 2.3% this week", type: "info", timestamp: "3 days ago" },
+  { id: 4, title: "Bill Reminder", message: "Credit card payment due in 5 days", type: "reminder", timestamp: "5 days ago" },
+  { id: 5, title: "AI Insight", message: "New spending pattern detected", type: "insight", timestamp: "1 week ago" },
+];
+
+const sampleCategories = [
+  { name: "Housing", amount: 1850, percentage: 38, icon: "🏠", trend: "steady" },
+  { name: "Food & Dining", amount: 337, percentage: 7, icon: "🍽️", trend: "+12%" },
+  { name: "Utilities", amount: 310, percentage: 6, icon: "💡", trend: "-2%" },
+  { name: "Transportation", amount: 247, percentage: 5, icon: "🚗", trend: "-3%" },
+  { name: "Shopping", amount: 196, percentage: 4, icon: "🛒", trend: "+8%" },
+  { name: "Healthcare", amount: 75, percentage: 2, icon: "💊", trend: "steady" },
+  { name: "Entertainment", amount: 44, percentage: 1, icon: "🎬", trend: "+5%" },
+];
+
 export function DashboardContent() {
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("overview")
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null)
+
+  // Calculate derived data
+  const totalBalance = sampleAccounts.reduce((sum, acc) => sum + (acc.balance < 0 ? 0 : acc.balance), 0)
+  const totalAssets = sampleAssets.reduce((sum, asset) => sum + asset.value, 0)
+  const totalLiabilities = sampleLiabilities.reduce((sum, liability) => sum + liability.balance, 0)
+  const netWorth = totalAssets - totalLiabilities
+  
+  // Hardcoded sample monthly metrics for demo purposes
+  const monthlyIncome = 7200
+  const monthlySpending = 4850
+  const savingsRate = 32.6
+  const cashFlow = monthlyIncome - monthlySpending
+
+  // Category spending breakdown - using hardcoded sample data
+  const topCategories = [
+    { category: "Housing", amount: 1850, percentage: 38 },
+    { category: "Food & Dining", amount: 337, percentage: 7 },
+    { category: "Utilities", amount: 310, percentage: 6 },
+    { category: "Transportation", amount: 247, percentage: 5 },
+    { category: "Shopping", amount: 196, percentage: 4 }
+  ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6 space-y-8">
-      {/* Dynamic Greeting Header */}
-      <div className="text-center mb-8">
-        <h1 className={`text-4xl font-light ${gradientText} mb-2`}>
-          Hello Sample User!
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 text-lg font-light">
-          You're <span className="font-semibold text-green-600 dark:text-green-400">$2.4K ahead</span> of your quarterly savings goal 🎯
-        </p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      {/* Content starts immediately below the fixed header */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pt-10 pb-8">
+        {/* Navigation tabs */}
+        <div className="mb-4">
+          <nav className="flex space-x-2 sm:space-x-1 overflow-x-auto pb-2 scrollbar-hide">
+            {["overview", "transactions", "assets", "budget", "goals", "investments"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
+                  activeTab === tab
+                    ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/25"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-      {/* Budget Overview */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card className={`${glassmorphismCard} ${hoveredCard === 'budget' ? pulseGlow : ''}`}
-              onMouseEnter={() => setHoveredCard('budget')}
-              onMouseLeave={() => setHoveredCard(null)}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">Monthly Budget</CardTitle>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm">💰</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">$7,500</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Current month breakdown</p>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-green-600 dark:text-green-400">🔺 Dining +12%</span>
-              <span className="text-blue-600 dark:text-blue-400">🧠 3% under typical Essentials</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={`${glassmorphismCard} ${hoveredCard === 'essentials' ? pulseGlow : ''}`}
-              onMouseEnter={() => setHoveredCard('essentials')}
-              onMouseLeave={() => setHoveredCard(null)}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">Essentials</CardTitle>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm">🏠</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">$3,300</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Rent, utilities, groceries</p>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-green-600 dark:text-green-400">✅ On track</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={`${glassmorphismCard} ${hoveredCard === 'lifestyle' ? pulseGlow : ''}`}
-              onMouseEnter={() => setHoveredCard('lifestyle')}
-              onMouseLeave={() => setHoveredCard(null)}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">Lifestyle</CardTitle>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm">🎯</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">$1,250</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Entertainment, dining, travel</p>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-orange-600 dark:text-orange-400">⚠️ 8% over budget</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={`${glassmorphismCard} ${hoveredCard === 'savings' ? pulseGlow : ''}`}
-              onMouseEnter={() => setHoveredCard('savings')}
-              onMouseLeave={() => setHoveredCard(null)}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">Savings</CardTitle>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
-              <span className="text-white text-sm">💎</span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">$1,500</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Emergency fund & investments</p>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-green-600 dark:text-green-400">🚀 15% ahead of goal</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Goals Section */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <Card className={`${glassmorphismCard} relative overflow-hidden`}>
-          <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 dark:from-cyan-400/20 dark:to-blue-400/20"></div>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-gray-900 dark:text-white">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🚗</span>
-                Car Purchase
-              </div>
-              <Badge variant="secondary" className="bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300">55%</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 relative z-10">
+        {/* Welcome Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
             <div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">$30,000</div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Target amount</p>
-            </div>
-            
-            {/* Enhanced Progress Bar */}
-            <div className="relative">
-              <Progress value={55} className="w-full h-3 bg-gray-200 dark:bg-gray-700" />
-              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full h-3 transition-all duration-1000 ease-out" style={{ width: '55%' }}></div>
-              <div className="absolute -top-1 left-[55%] w-2 h-5 bg-white dark:bg-gray-800 rounded-full shadow-lg border-2 border-cyan-500"></div>
-            </div>
-            
-            <div className="hidden sm:block">
-              <InteractiveGoalChart data={carGoalData} title="Car Purchase Progress" target={30000} color="#06b6d4" />
-            </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400">55% toward goal, estimated completion in 11 months</p>
-            
-            {/* Milestone Markers */}
-            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
-              <span>Start</span>
-              <span>Halfway</span>
-              <span>Goal</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={`${glassmorphismCard} relative overflow-hidden`}>
-          <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-emerald-500/10 dark:from-green-400/20 dark:to-emerald-400/20"></div>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-gray-900 dark:text-white">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🏠</span>
-                Home Purchase
-              </div>
-              <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">100%</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 relative z-10">
-            <div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">$109,000</div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Target amount</p>
-            </div>
-            
-            {/* Success Animation */}
-            <div className="relative">
-              <Progress value={100} className="w-full h-3 bg-gray-200 dark:bg-gray-700" />
-              <div className="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full h-3 animate-pulse"></div>
-            </div>
-            
-            <div className="hidden sm:block">
-              <InteractiveGoalChart data={homeGoalData} title="Home Purchase Progress" target={109000} color="#10b981" />
-            </div>
-            <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-              <CheckCircle className="w-4 h-4 animate-bounce" />
-              <span className="font-medium">Goal met with successful purchase! 🎉</span>
-            </div>
-            
-            {/* Success Celebration */}
-            <div className="absolute top-2 right-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-ping"></div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className={`${glassmorphismCard} relative overflow-hidden`}>
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-pink-500/10 dark:from-purple-400/20 dark:to-pink-400/20"></div>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-gray-900 dark:text-white">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🌅</span>
-                Retirement
-              </div>
-              <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">75%</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 relative z-10">
-            <div>
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">$2M</div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Target amount</p>
-            </div>
-            
-            {/* Enhanced Progress Bar */}
-            <div className="relative">
-              <Progress value={75} className="w-full h-3 bg-gray-200 dark:bg-gray-700" />
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full h-3 transition-all duration-1000 ease-out" style={{ width: '75%' }}></div>
-              <div className="absolute -top-1 left-[75%] w-2 h-5 bg-white dark:bg-gray-800 rounded-full shadow-lg border-2 border-purple-500"></div>
-            </div>
-            
-            <div className="hidden sm:block">
-              <InteractiveGoalChart data={retirementGoalData} title="Retirement Progress" target={2000000} color="#8b5cf6" />
-            </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400">On track for retirement at 60 with 5-7% annual return</p>
-            
-            {/* AI Insight */}
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-2 mt-2">
-              <p className="text-xs text-purple-700 dark:text-purple-300">
-                🧠 AI Suggestion: Boost retirement $200/mo based on your cash flow
+              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+                Welcome to TrueFi.ai!
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                This is a sample dashboard showing what your personalized financial overview could look like.
+                <br />
+                Your net worth would be {formatCurrency(netWorth)} • 
+                Cash flow: <span className={cashFlow >= 0 ? "text-green-600" : "text-red-600"}>
+                  {formatCurrency(cashFlow)}
+                </span> this month
               </p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Investment Overview - Enhanced */}
-      <Card className={`${glassmorphismCard} hover:scale-[1.01] transition-all duration-300`}>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between text-gray-900 dark:text-white">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">📈</span>
-              Investment Overview
-            </div>
-            <Badge variant="outline" className="text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20">
-              <TrendingUp className="w-3 h-3 mr-1" />
-              +{sampleInvestmentPortfolio.performance}%
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="text-4xl font-bold text-gray-900 dark:text-white mb-1">${sampleInvestmentPortfolio.totalValue.toLocaleString()}</div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total portfolio value</p>
-            </div>
-            
-            {/* Enhanced Holdings Table */}
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-200 dark:border-gray-700">
-                    <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Holding</TableHead>
-                    <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Value</TableHead>
-                    <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Performance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sampleInvestmentPortfolio.holdings.map((holding, idx) => (
-                    <TableRow key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <TableCell className="font-medium text-xs sm:text-sm text-gray-900 dark:text-white">{holding.name}</TableCell>
-                      <TableCell className="text-right text-xs sm:text-sm text-gray-900 dark:text-white">${holding.value.toLocaleString()}</TableCell>
-                      <TableCell className={`text-right text-xs sm:text-sm font-medium flex items-center justify-end gap-1 ${holding.performance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {holding.performance >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                        {holding.performance >= 0 ? '+' : ''}{holding.performance}%
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            
-            {/* Enhanced Individual Stocks Table */}
-            <div className="pt-4">
-              <div className="font-semibold mb-4 text-sm text-gray-900 dark:text-white flex items-center gap-2">
-                <span>📊</span>
-                Individual Stocks & ETFs
+            <div className="flex items-center space-x-4">
+              <div className="text-center">
+                <div className="text-sm text-gray-500 dark:text-gray-400">Sample Data</div>
+                <div className="text-xs text-gray-400 dark:text-gray-500">Non-editable</div>
               </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-gray-200 dark:border-gray-700">
-                      <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Symbol</TableHead>
-                      <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Company</TableHead>
-                      <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Shares</TableHead>
-                      <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Price</TableHead>
-                      <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Value</TableHead>
-                      <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">% Portfolio</TableHead>
-                      <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Change</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sampleInvestmentPortfolio.individualStocks.map((stock, idx) => (
-                      <TableRow key={stock.symbol} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
-                        <TableCell className="font-medium text-xs sm:text-sm text-gray-900 dark:text-white">
-                          <div className="flex items-center gap-2">
-                            {stock.pinned && <Pin className="w-3 h-3 text-yellow-500" />}
-                            {stock.star && <Star className="w-3 h-3 text-yellow-400 animate-pulse" />}
-                            {stock.symbol}
+            </div>
+          </div>
+        </div>
+
+        {/* Sample Data Disclaimer Banner */}
+        <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                🎯 This is a Sample Dashboard
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-200 mt-1">
+                All data shown is for demonstration purposes. Sign up to connect your real accounts and get personalized insights!
+              </p>
+            </div>
+            <Link href="/auth" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200">
+              Get Started
+            </Link>
+          </div>
+        </div>
+
+        {/* Key Metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-2">
+                <DollarSign className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                  +12%
+                </span>
+              </div>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                {formatCurrency(totalBalance)}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Total Balance</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-2">
+                <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                  +8%
+                </span>
+              </div>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                {formatCurrency(monthlyIncome)}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Monthly Income</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-950/30 dark:to-red-950/30 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-2">
+                <TrendingDown className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300">
+                  -5%
+                </span>
+              </div>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                {formatCurrency(monthlySpending)}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Monthly Spending</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-2">
+                <PiggyBank className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                  Good
+                </span>
+              </div>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                {formatPercent(savingsRate)}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Savings Rate</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/30 dark:to-blue-950/30 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-2">
+                <Activity className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${netWorth >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                  {netWorth >= 0 ? "+" : "-"}
+                </span>
+              </div>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                {formatCurrency(netWorth)}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Net Worth</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="space-y-8">
+          {/* Overview Tab */}
+          {activeTab === "overview" && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Accounts Section */}
+              <div className="lg:col-span-2 space-y-6">
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="text-xl font-bold">Connected Accounts</CardTitle>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant="outline" className="text-xs">Sample Data</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3 max-h-80 overflow-y-auto pr-2 accounts-scrollbar">
+                      {sampleAccounts.map((account, index) => (
+                        <div key={index} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                          <div className="flex items-center space-x-4">
+                            <div className="p-3 bg-white dark:bg-gray-900 rounded-full">
+                              <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-gray-900 dark:text-white">{account.name}</p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400">{account.type}</p>
+                            </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm text-gray-900 dark:text-white">{stock.name}</TableCell>
-                        <TableCell className="text-right text-xs sm:text-sm text-gray-900 dark:text-white">{stock.shares}</TableCell>
-                        <TableCell className="text-right text-xs sm:text-sm text-gray-900 dark:text-white">${stock.price.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-medium text-xs sm:text-sm text-gray-900 dark:text-white">${stock.value.toLocaleString()}</TableCell>
-                        <TableCell className="text-right text-xs sm:text-sm text-gray-900 dark:text-white">{stock.percentage}%</TableCell>
-                        <TableCell className={`text-right font-medium text-xs sm:text-sm flex items-center justify-end gap-1 ${stock.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {stock.change >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                          {stock.change >= 0 ? '+' : ''}{stock.change}%
-                        </TableCell>
+                          <div className="text-right">
+                            <p className="text-xl font-bold text-gray-900 dark:text-white">
+                              {formatCurrency(account.balance < 0 ? 0 : account.balance)}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {account.institution}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Spending by Category */}
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-xl font-bold">Spending Insights</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {sampleCategories.map((category, index) => (
+                        <div key={`category-${category.name}-${index}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center space-x-3">
+                              <span className="text-2xl">{category.icon}</span>
+                              <span className="font-medium">{category.name}</span>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold">{formatCurrency(category.amount)}</p>
+                              <p className="text-xs text-gray-500">{category.percentage}%</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between mb-2">
+                            <Progress value={category.percentage} className="h-2 flex-1 mr-4" />
+                            <span className={`text-xs font-medium ${
+                              category.trend.includes('+') ? 'text-green-600' : 
+                              category.trend.includes('-') ? 'text-red-600' : 'text-gray-600'
+                            }`}>
+                              {category.trend}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Financial Insights & Alerts */}
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-xl font-bold flex items-center gap-2">
+                      <span>🧠</span>
+                      AI Financial Insights
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
+                      <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Spending Alert</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                          Food & Dining spending increased 15% this month. Consider setting a budget limit.
+                        </p>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-yellow-700 dark:text-yellow-300">🔥 AI Detected</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                      <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center flex-shrink-0">
+                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Savings Opportunity</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                          You could save an additional $200/month by optimizing your subscription services.
+                        </p>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-green-700 dark:text-green-300">✅ AI Suggestion</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+                        <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Investment Tip</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                          Consider increasing your 401(k) contribution by 2% to maximize employer matching.
+                        </p>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-blue-700 dark:text-blue-300">🧠 AI Recommendation</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Quick Stats Sidebar */}
+              <div className="space-y-6">
+                {/* Smart Budget Recommendations */}
+                <Card className="bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-950/30 dark:to-blue-950/30 border-0 shadow-xl">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg font-bold">Smart Budget</CardTitle>
+                      <Sparkles className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Essentials</span>
+                          <span className="font-bold">{formatCurrency(2500)}</span>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Lifestyle</span>
+                          <span className="font-bold">{formatCurrency(1200)}</span>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm">Savings</span>
+                          <span className="font-bold">{formatCurrency(1500)}</span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 text-center">
+                        AI-powered recommendations based on spending patterns
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Notifications */}
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg font-bold flex items-center space-x-2">
+                        <Bell className="h-5 w-5" />
+                        <span>Notifications</span>
+                      </CardTitle>
+                      <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 text-xs font-semibold rounded-full bg-secondary text-secondary-foreground">
+                        {sampleNotifications.length}
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {sampleNotifications.slice(0, 5).map((notif) => (
+                        <div key={notif.id} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <div className="flex items-start space-x-2">
+                            <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                              notif.type === 'warning' ? 'bg-yellow-500' :
+                              notif.type === 'success' ? 'bg-green-500' :
+                              notif.type === 'info' ? 'bg-blue-500' :
+                              notif.type === 'reminder' ? 'bg-orange-500' :
+                              'bg-purple-500'
+                            }`} />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{notif.title}</p>
+                              <p className="text-xs text-gray-500">{notif.message}</p>
+                              <p className="text-xs text-gray-400 mt-1">{notif.timestamp}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Recent Activity */}
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-lg font-bold">Recent Activity</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {sampleTransactions.slice(0, 5).map((transaction) => (
+                        <div key={transaction.id} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <span className="text-xl">{transaction.icon}</span>
+                            <div>
+                              <p className="text-sm font-medium line-clamp-1">{transaction.description}</p>
+                              <p className="text-xs text-gray-500">{formatDate(transaction.date)}</p>
+                            </div>
+                          </div>
+                          <p className={`font-bold ${transaction.amount < 0 ? "text-red-600" : "text-green-600"}`}>
+                            {formatCurrency(Math.abs(transaction.amount))}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {/* Transactions Tab */}
+          {activeTab === "transactions" && (
+            <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+              <CardHeader>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
+                  <CardTitle className="text-xl font-bold">All Transactions</CardTitle>
+                  <div className="flex items-center space-x-3">
+                    <Badge variant="outline" className="text-xs">Sample Data</Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Account</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                    </TableHeader>
+                    <TableBody>
+                      {sampleTransactions.map((transaction) => (
+                        <TableRow key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <TableCell>{formatDate(transaction.date)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              <span>{transaction.icon}</span>
+                              <span className="font-medium">{transaction.description}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {transaction.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{transaction.account}</TableCell>
+                          <TableCell className={`text-right font-bold ${transaction.amount < 0 ? "text-red-600" : "text-green-600"}`}>
+                            {transaction.amount < 0 ? "-" : "+"}{formatCurrency(Math.abs(transaction.amount))}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Accounts Overview - Enhanced */}
-      <Card className={`${glassmorphismCard} hover:scale-[1.01] transition-all duration-300`}>
-        <CardHeader>
-          <CardTitle className="text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
-            <span className="text-lg">🏦</span>
-            Accounts Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-gray-200 dark:border-gray-700">
-                  <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Account</TableHead>
-                  <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Type</TableHead>
-                  <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Institution</TableHead>
-                  <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sampleAccounts.map((account, index) => {
-                  const IconComponent = account.icon;
-                  const getStatusColor = (status: string) => {
-                    switch (status) {
-                      case 'excellent': return 'text-green-600 dark:text-green-400';
-                      case 'healthy': return 'text-green-600 dark:text-green-400';
-                      case 'good': return 'text-blue-600 dark:text-blue-400';
-                      case 'caution': return 'text-orange-600 dark:text-orange-400';
-                      default: return 'text-gray-600 dark:text-gray-400';
-                    }
-                  };
-                  const getStatusText = (status: string) => {
-                    switch (status) {
-                      case 'excellent': return '✅ Excellent';
-                      case 'healthy': return '✅ All good';
-                      case 'good': return '✅ Good';
-                      case 'caution': return '⚠️ Near limit';
-                      default: return 'ℹ️ Normal';
-                    }
-                  };
-                  
-                  return (
-                    <TableRow key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: account.color + '20' }}>
-                            <IconComponent className="h-4 w-4" style={{ color: account.color }} />
+          {/* Assets & Liabilities Tab */}
+          {activeTab === "assets" && (
+            <div className="space-y-6">
+              {/* Net Worth Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-0 shadow-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <Home className="h-8 w-8 text-green-600" />
+                      <ArrowUpRight className="h-5 w-5 text-green-600" />
+                    </div>
+                    <p className="text-3xl font-bold">{formatCurrency(totalAssets)}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Total Assets</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 border-0 shadow-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <CreditCard className="h-8 w-8 text-red-600" />
+                      <ArrowDownRight className="h-5 w-5 text-red-600" />
+                    </div>
+                    <p className="text-3xl font-bold">{formatCurrency(totalLiabilities)}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Total Liabilities</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-0 shadow-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <Target className="h-8 w-8 text-blue-600" />
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${netWorth >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                        {netWorth >= 0 ? "Positive" : "Negative"}
+                      </span>
+                    </div>
+                    <p className="text-3xl font-bold">{formatCurrency(netWorth)}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Net Worth</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Assets Table */}
+              <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-xl font-bold">Assets</CardTitle>
+                  <Badge variant="outline" className="text-xs">Sample Data</Badge>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Value</TableHead>
+                        <TableHead>Description</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sampleAssets.map((asset) => (
+                        <TableRow key={asset.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <TableCell className="font-medium">{asset.name}</TableCell>
+                          <TableCell>{asset.type}</TableCell>
+                          <TableCell className="font-bold text-green-600">{formatCurrency(asset.value)}</TableCell>
+                          <TableCell className="text-sm text-gray-600 dark:text-gray-400">{asset.description}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {/* Liabilities Table */}
+              <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-xl font-bold">Liabilities</CardTitle>
+                  <Badge variant="outline" className="text-xs">Sample Data</Badge>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Balance</TableHead>
+                        <TableHead>Interest Rate</TableHead>
+                        <TableHead>Min Payment</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sampleLiabilities.map((liability) => (
+                        <TableRow key={liability.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <TableCell className="font-medium">{liability.name}</TableCell>
+                          <TableCell>{liability.type}</TableCell>
+                          <TableCell className="font-bold text-red-600">{formatCurrency(liability.balance)}</TableCell>
+                          <TableCell>{liability.interest_rate}%</TableCell>
+                          <TableCell>{formatCurrency(liability.minimum_payment)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Budget Tab */}
+          {activeTab === "budget" && (
+            <div className="space-y-6">
+              <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-0 shadow-xl">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-bold">Budget Management</CardTitle>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      AI-powered budget recommendations based on your spending
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-xs">Sample Data</Badge>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="text-center mb-6">
+                      <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                        {formatCurrency(sampleBudget.total)}
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Total Monthly Budget</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {sampleBudget.categories.map((category, index) => (
+                        <div key={index} className="p-4 bg-white/80 dark:bg-gray-900/80 rounded-lg">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium">{category.name}</span>
+                            <span className="text-sm text-gray-500">{category.percentage}%</span>
                           </div>
-                          <span className="text-xs sm:text-sm text-gray-900 dark:text-white">{account.name}</span>
+                          <div className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                            {formatCurrency(category.amount)}
+                          </div>
+                          <Progress value={category.percentage} className="h-2" />
                         </div>
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm text-gray-900 dark:text-white">{account.type}</TableCell>
-                      <TableCell className="text-xs sm:text-sm text-gray-900 dark:text-white">{account.institution}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <span className={`font-medium text-xs sm:text-sm ${account.balance < 0 ? "text-red-600 dark:text-red-400" : getStatusColor(account.status)}`}>
-                            ${Math.abs(account.balance).toLocaleString()}
-                          </span>
-                          <span className={`text-xs ${getStatusColor(account.status)}`}>
-                            {getStatusText(account.status)}
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
-      {/* Recent Transactions - Enhanced */}
-      <Card className={`${glassmorphismCard} hover:scale-[1.01] transition-all duration-300`}>
-        <CardHeader>
-          <CardTitle className="text-sm sm:text-base text-gray-900 dark:text-white flex items-center gap-2">
-            <span className="text-lg">📅</span>
-            Recent Transactions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-gray-200 dark:border-gray-700">
-                  <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Date</TableHead>
-                  <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Description</TableHead>
-                  <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Category</TableHead>
-                  <TableHead className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Account</TableHead>
-                  <TableHead className="text-right text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sampleTransactions.map((transaction) => (
-                  <TableRow key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group">
-                    <TableCell className="text-xs sm:text-sm text-gray-900 dark:text-white">{transaction.date}</TableCell>
-                    <TableCell className="font-medium text-xs sm:text-sm text-gray-900 dark:text-white">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">{transaction.icon}</span>
-                        {transaction.description}
+          {/* Goals Tab */}
+          {activeTab === "goals" && (
+            <div className="space-y-6">
+              <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-xl font-bold">Financial Goals</CardTitle>
+                  <Badge variant="outline" className="text-xs">Sample Data</Badge>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {sampleGoals.map((goal, index) => {
+                      const progress = goal.target_amount && goal.target_amount > 0 
+                        ? ((goal.current_amount || 0) / goal.target_amount) * 100 
+                        : 0
+                      return (
+                        <Card key={`goal-${goal.id || index}`} className="hover:shadow-lg transition-shadow group">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-4">
+                              <Target className="h-6 w-6 text-purple-600" />
+                              <div className="flex items-center space-x-2">
+                                <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors">
+                                  {formatPercent(progress)} Complete
+                                </span>
+                              </div>
+                            </div>
+                            <h3 className="font-bold text-lg mb-2">{goal.name}</h3>
+                            <Progress value={progress} className="h-3 mb-3" />
+                            <div className="flex justify-between text-sm">
+                              <span>{formatCurrency(goal.current_amount || 0)}</span>
+                              <span className="font-bold">{formatCurrency(goal.target_amount)}</span>
+                            </div>
+                            {goal.target_date && (
+                              <p className="text-xs text-gray-500 mt-2">
+                                Target: {formatDate(goal.target_date)}
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Investments Tab */}
+          {activeTab === "investments" && (
+            <div className="space-y-6">
+              <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                <CardHeader>
+                  <CardTitle className="text-xl font-bold">Investment Portfolio</CardTitle>
+                  <Badge variant="outline" className="text-xs">Sample Data</Badge>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="text-center">
+                      <div className="text-4xl font-bold text-gray-900 dark:text-white mb-1">
+                        {formatCurrency(sampleInvestments.reduce((sum, inv) => sum + inv.value, 0))}
                       </div>
-                    </TableCell>
-                    <TableCell className="text-xs sm:text-sm">
-                      <Badge variant="outline" className="text-xs bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                        {transaction.category}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs sm:text-sm text-gray-900 dark:text-white">{transaction.account}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex flex-col items-end gap-1">
-                        <span className={`font-medium text-xs sm:text-sm ${transaction.amount < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
-                          {transaction.amount < 0 ? "-" : "+"}${Math.abs(transaction.amount).toFixed(2)}
-                        </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {transaction.trend}
-                        </span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Alerts & Notifications - Enhanced */}
-      <Card className={`${glassmorphismCard} hover:scale-[1.01] transition-all duration-300`}>
-        <CardHeader>
-          <CardTitle className="text-gray-900 dark:text-white flex items-center gap-2">
-            <span className="text-lg">🧠</span>
-            Smart Insights & Alerts
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800 hover:shadow-lg transition-all duration-300 group">
-            <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Total portfolio value</p>
+                    </div>
+                    
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Investment</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead className="text-right">Value</TableHead>
+                            <TableHead className="text-right">Performance</TableHead>
+                            <TableHead className="text-right">Allocation</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {sampleInvestments.map((investment) => (
+                            <TableRow key={investment.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                              <TableCell className="font-medium">{investment.name}</TableCell>
+                              <TableCell>{investment.type}</TableCell>
+                              <TableCell className="text-right font-bold">{formatCurrency(investment.value)}</TableCell>
+                              <TableCell className={`text-right font-medium ${investment.performance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {investment.performance >= 0 ? '+' : ''}{investment.performance}%
+                              </TableCell>
+                              <TableCell className="text-right">{investment.allocation}%</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-            <div className="flex-1">
-              <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Monthly Spending Alert</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                Food & Dining Alert: Spending increased due to Cabo trip; current budget unaffected.
-              </p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-yellow-700 dark:text-yellow-300">🔥 Overspending detected</span>
-                <span className="text-gray-500 dark:text-gray-400">•</span>
-                <span className="text-gray-500 dark:text-gray-400">Tap to dismiss</span>
+          )}
+        </div>
+      </div>
+
+      {/* Call to Action Section */}
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-16">
+        <div className="max-w-7xl mx-auto px-6 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+            Ready to See Your Real Financial Picture?
+          </h2>
+          <p className="text-xl text-blue-100 mb-8 max-w-3xl mx-auto">
+            This is just a sample of what TrueFi.ai can do for you. Connect your accounts to get personalized insights, 
+            AI-powered recommendations, and a complete view of your financial health.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Link href="/auth" className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-200 shadow-lg">
+              Get Started Free
+            </Link>
+            <Link href="/how-to-use" className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors duration-200">
+              Learn More
+            </Link>
+          </div>
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Target className="w-8 h-8" />
               </div>
+              <h3 className="text-lg font-semibold mb-2">Smart Goals</h3>
+              <p className="text-blue-100">AI-powered goal setting and tracking</p>
             </div>
-          </div>
-
-          <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-800 hover:shadow-lg transition-all duration-300 group">
-            <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-            </div>
-            <div className="flex-1">
-              <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Savings Reminder</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                {"You're"} on track to meet the quarterly savings goal!
-              </p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-green-700 dark:text-green-300">✅ Goal achieved</span>
-                <span className="text-gray-500 dark:text-gray-400">•</span>
-                <span className="text-gray-500 dark:text-gray-400">Keep it up!</span>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <TrendingUp className="w-8 h-8" />
               </div>
+              <h3 className="text-lg font-semibold mb-2">Investment Insights</h3>
+              <p className="text-blue-100">Portfolio analysis and recommendations</p>
             </div>
-          </div>
-
-          <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200 dark:border-blue-800 hover:shadow-lg transition-all duration-300 group">
-            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Budget Update Suggestions</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                Expense Adjustments: Suggests $100 monthly savings on dining out to redirect to long-term savings.
-              </p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-blue-700 dark:text-blue-300">🧠 AI Suggestion</span>
-                <span className="text-gray-500 dark:text-gray-400">•</span>
-                <span className="text-gray-500 dark:text-gray-400">Tap to apply</span>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Zap className="w-8 h-8" />
               </div>
+              <h3 className="text-lg font-semibold mb-2">Instant Analysis</h3>
+              <p className="text-blue-100">Real-time financial health monitoring</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
+        </div>
+      </div>
     </div>
   )
 }

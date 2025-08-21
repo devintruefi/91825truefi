@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, Suspense, lazy } from "react"
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -24,10 +24,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PlaidConnect } from "@/components/plaid-connect"
-
-// Lazy load heavy components
-const InvestmentCard = lazy(() => import('./investment-card').then(module => ({ default: module.InvestmentCard })))
-const InvestmentForm = lazy(() => import('./investment-form').then(module => ({ default: module.InvestmentForm })))
+import { InvestmentCard } from './investment-card'
+import { InvestmentForm } from './investment-form'
 
 interface Investment {
   id: string
