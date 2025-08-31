@@ -35,6 +35,59 @@ interface BaseComponentProps {
   disabled?: boolean;
 }
 
+// Banner Component - for display-only steps (welcome, complete, etc.)
+export function BannerComponent({ data, onComplete }: BaseComponentProps) {
+  // Auto-advance after a short delay for display-only banners
+  useEffect(() => {
+    if (data?.autoAdvance) {
+      const timer = setTimeout(() => {
+        onComplete({ autoAdvanced: true });
+      }, 1500); // Show for 1.5 seconds then auto-advance
+      return () => clearTimeout(timer);
+    }
+  }, [data, onComplete]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="w-full"
+    >
+      <Card className="border-2 border-gradient-to-r from-cyan-500 to-blue-500 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950">
+        <CardContent className="p-8 text-center">
+          <div className="space-y-4">
+            {data?.icon && (
+              <div className="text-6xl mb-4">{data.icon}</div>
+            )}
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {data?.title || 'Welcome!'}
+            </h2>
+            {data?.body && (
+              <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                {data.body}
+              </p>
+            )}
+            {!data?.autoAdvance && (
+              <Button 
+                onClick={() => onComplete({ acknowledged: true })}
+                className="mt-6 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white"
+              >
+                Continue
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            )}
+            {data?.autoAdvance && (
+              <div className="mt-4">
+                <Sparkles className="h-5 w-5 text-cyan-500 animate-pulse mx-auto" />
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
 // Info Card Component - for privacy/security messages
 export function InfoCard({ data, onComplete }: BaseComponentProps) {
   return (

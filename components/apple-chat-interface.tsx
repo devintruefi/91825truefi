@@ -15,7 +15,8 @@ import {
   PieChartBuilder,
   QuickAdd,
   FormInput,
-  TradeoffsInput
+  TradeoffsInput,
+  BannerComponent
 } from '@/components/chat/onboarding-components'
 import { PlaidConnect } from '@/components/plaid-connect'
 import { DashboardPreview } from '@/components/chat/dashboard-preview'
@@ -498,27 +499,10 @@ function AppleChatInterfaceInner() {
     // Use a fixed timestamp to avoid hydration mismatch
     const fixedTimestamp = new Date('2024-01-01T12:00:00')
     
+    // Don't show any hardcoded onboarding messages - let the backend drive it
     if (user && isOnboarding) {
-      // For onboarding users, show friendly welcome asking about their main goal
-      return [{
-        id: "1",
-        content: `Hi ${user.first_name}! Welcome to TrueFi! 🌟\n\nI'm Penny, your AI financial assistant. I'm here to help you build a personalized financial plan that actually works for your life.\n\n🔒 **Your Privacy & Security:**\n• All your data is encrypted and secure\n• We never sell or share your personal information\n• You control what you share and when\n• Bank connections are read-only - I can't move your money\n\nLet's start building your financial future! What brought you to TrueFi today?`,
-        sender: "penny",
-        timestamp: fixedTimestamp,
-        component: {
-          type: 'buttons',
-          data: {
-            options: [
-              { id: 'debt', label: 'Pay off debt', value: 'debt_payoff', icon: '🎯' },
-              { id: 'emergency', label: 'Save for emergencies', value: 'emergency_fund', icon: '🛡️' },
-              { id: 'home', label: 'Save for a home', value: 'home_purchase', icon: '🏠' },
-              { id: 'retirement', label: 'Plan for retirement', value: 'retirement', icon: '🏖️' },
-              { id: 'wealth', label: 'Build wealth & invest', value: 'investments', icon: '📈' },
-              { id: 'other', label: 'Something else', value: 'other', icon: '💭' }
-            ]
-          }
-        }
-      }]
+      // Return empty array - will be populated by useEffect that fetches from backend
+      return []
     } else if (user) {
       // For authenticated users, show a personalized welcome message
       return [{
@@ -707,6 +691,100 @@ function AppleChatInterfaceInner() {
   useEffect(() => {
     setMessages(getInitialMessages())
   }, [user]);
+
+  // Track if we've fetched initial onboarding state
+  const [hasFetchedInitialOnboarding, setHasFetchedInitialOnboarding] = useState(false);
+
+  // Fetch initial onboarding state from backend when in onboarding mode
+  useEffect(() => {
+    if (!user || !isOnboardingMode) return;
+    if (hasFetchedInitialOnboarding) return;
+
+    const fetchInitialOnboardingState = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.error('No auth token for onboarding');
+        return;
+      }
+
+      try {
+        console.log('Fetching initial onboarding state from backend...');
+        console.log('Current messages length:', messages.length);
+        console.log('isOnboardingMode:', isOnboardingMode);
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            sessionId: sessionId || `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            isOnboarding: true,
+            onboardingProgress: onboardingProgress,
+            message: null,
+            componentResponse: null,
+            userId: user.id
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Initial onboarding response:', data);
+          console.log('Component present:', !!data.component);
+          console.log('Content present:', !!data.content);
+          
+          if (data.component && data.content) {
+            // Set the initial message with the component from backend
+            const initialMessage: Message = {
+              id: `initial_${Date.now()}`,
+              content: data.content,
+              sender: 'penny',
+              timestamp: new Date(),
+              component: data.component
+            };
+            
+            setMessages([initialMessage]);
+            console.log('Initial message set:', initialMessage);
+            
+            // Update onboarding progress
+            if (data.onboardingProgress) {
+              setOnboardingProgress(data.onboardingProgress);
+              setOnboardingPhase(data.onboardingProgress.currentStep || 'welcome');
+            }
+          } else {
+            console.error('Missing component or content in response:', {
+              hasComponent: !!data.component,
+              hasContent: !!data.content,
+              fullData: data
+            });
+            
+            // Fallback: Show a generic welcome message if we're missing data
+            if (data.onboardingProgress) {
+              const fallbackMessage: Message = {
+                id: `fallback_${Date.now()}`,
+                content: "Welcome to TrueFi! Let's get started with setting up your financial profile.",
+                sender: 'penny',
+                timestamp: new Date()
+              };
+              setMessages([fallbackMessage]);
+              setOnboardingProgress(data.onboardingProgress);
+              setOnboardingPhase(data.onboardingProgress.currentStep || 'welcome');
+            }
+          }
+        } else {
+          console.error('Failed to fetch initial onboarding state:', response.status);
+          const errorText = await response.text();
+          console.error('Error response:', errorText);
+        }
+      } catch (error) {
+        console.error('Error fetching initial onboarding state:', error);
+      }
+    };
+
+    // Fetch initial onboarding state
+    fetchInitialOnboardingState();
+    setHasFetchedInitialOnboarding(true);
+  }, [user, isOnboardingMode]);
 
   // Load chat sessions for authenticated users
   useEffect(() => {
@@ -1330,6 +1408,15 @@ function AppleChatInterfaceInner() {
     }
     
     switch (component.type) {
+      case 'banner':
+      case 'info':
+        return (
+          <BannerComponent
+            data={component.data}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+          />
+        )
       case 'buttons':
         return (
           <ButtonSelection 

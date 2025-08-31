@@ -14,6 +14,14 @@ import {
   type StepId
 } from './canonical-steps';
 
+// Import V2 canonical steps when ONBOARDING_V2 is enabled
+import {
+  ORDERED_STEPS_V2,
+  STEP_CONFIG_V2,
+  calculateProgressV2,
+  type OnboardingStepV2
+} from './canonical-v2';
+
 const prisma = new PrismaClient();
 
 /**
@@ -65,19 +73,51 @@ export async function hasCompletedConsent(userId: string): Promise<boolean> {
  * Get the count of items collected for a user
  */
 export async function getItemsCollected(userId: string): Promise<number> {
+  // Determine which steps to use based on ONBOARDING_V2 flag
+  const isV2 = process.env.ONBOARDING_V2 === 'true';
+  const stepsToCheck = isV2 
+    ? ORDERED_STEPS_V2.filter(step => {
+        // In V2, only count steps that actually collect data (not display-only like welcome)
+        // welcome and wrap_up are display-only steps
+        return step !== 'welcome' && step !== 'wrap_up';
+      })
+    : ORDERED_STEPS;
+
   const responses = await prisma.user_onboarding_responses.findMany({
     where: {
       user_id: userId,
       question: {
-        in: ORDERED_STEPS as string[]
+        in: stepsToCheck as string[]
       },
-      NOT: {
-        answer: null
-      }
+      // Exclude null or empty answers - handle both cases
+      AND: [
+        {
+          answer: {
+            not: ''
+          }
+        },
+        {
+          answer: {
+            not: '{}'
+          }
+        }
+      ]
     }
   });
   
-  return responses.length;
+  // Additional validation: parse JSON answers and exclude invalid/empty ones
+  const validResponses = responses.filter(r => {
+    if (!r.answer || r.answer === '' || r.answer === '{}') return false;
+    try {
+      const parsed = typeof r.answer === 'string' ? JSON.parse(r.answer) : r.answer;
+      return parsed && Object.keys(parsed).length > 0;
+    } catch {
+      // If not JSON, treat as valid if not empty
+      return r.answer && r.answer.length > 0;
+    }
+  });
+  
+  return validResponses.length;
 }
 
 /**
@@ -137,9 +177,30 @@ export async function initializeFreshSession(userId: string): Promise<{
 /**
  * Build the initial component message for fresh session
  */
-export function buildFreshSessionMessage(currentStep: StepId, itemsCollected: number): any {
-  const stepConfig = STEP_CONFIG[currentStep];
-  const progress = calculateProgress(currentStep);
+export function buildFreshSessionMessage(currentStep: StepId | OnboardingStepV2, itemsCollected: number): any {
+  const isV2 = process.env.ONBOARDING_V2 === 'true';
+  
+  // Handle V2 auto-advance for display-only steps
+  if (isV2 && (currentStep === 'welcome' || currentStep === 'wrap_up')) {
+    // Auto-advance from display-only steps in V2
+    const currentIndex = ORDERED_STEPS_V2.indexOf(currentStep as OnboardingStepV2);
+    const nextStep = currentIndex < ORDERED_STEPS_V2.length - 1 
+      ? ORDERED_STEPS_V2[currentIndex + 1]
+      : null;
+      
+    if (nextStep) {
+      // Recursively build message for the next interactive step
+      return buildFreshSessionMessage(nextStep, itemsCollected);
+    }
+  }
+  
+  const stepConfig = isV2 && ORDERED_STEPS_V2.includes(currentStep as OnboardingStepV2)
+    ? STEP_CONFIG_V2[currentStep as OnboardingStepV2]
+    : STEP_CONFIG[currentStep as StepId];
+    
+  const progress = isV2 && ORDERED_STEPS_V2.includes(currentStep as OnboardingStepV2)
+    ? calculateProgressV2([], currentStep as OnboardingStepV2)
+    : calculateProgress(currentStep as StepId);
   
   // Build component based on step
   let componentData: any = {};
@@ -230,6 +291,26 @@ export function buildFreshSessionMessage(currentStep: StepId, itemsCollected: nu
       }
   }
   
+  const isV2Flag = process.env.ONBOARDING_V2 === 'true';
+  
+  // Build header with correct progress for V2
+  const headerData = isV2Flag && 'percentComplete' in progress
+    ? {
+        index: ORDERED_STEPS_V2.indexOf(currentStep as OnboardingStepV2) + 1,
+        total: ORDERED_STEPS_V2.filter(s => s !== 'welcome' && s !== 'wrap_up').length, // Exclude display-only
+        comingNext: progress.nextLabel,
+        itemsCollected,
+        percentage: progress.percentComplete,
+        remaining: progress.remainingCount
+      }
+    : {
+        index: progress.currentIndex,
+        total: progress.total,
+        comingNext: progress.nextLabel,
+        itemsCollected,
+        percentage: progress.percentage
+      };
+  
   return {
     role: 'assistant',
     kind: 'component',
@@ -240,13 +321,7 @@ export function buildFreshSessionMessage(currentStep: StepId, itemsCollected: nu
       stepInstanceId: generateStepInstanceId(),
       nonce: generateNonce()
     },
-    header: {
-      index: progress.currentIndex,
-      total: progress.total,
-      comingNext: progress.nextLabel,
-      itemsCollected,
-      percentage: progress.percentage
-    }
+    header: headerData
   };
 }
 

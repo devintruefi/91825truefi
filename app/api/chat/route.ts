@@ -16,17 +16,30 @@ const openai = new OpenAI({
 });
 
 export async function POST(request: NextRequest) {
+  // Parse request body once at the beginning
+  let sessionId: string | undefined;
+  let requestUserId: string | undefined;
+  let message: string | undefined;
+  let componentResponse: any;
+  let onboardingProgress: any;
+  let requestIsOnboarding: boolean | undefined;
+  let requestUserFirstName: string | undefined;
+  
   try {
-    // Parse request body first
-    const { 
-      sessionId, 
-      userId: requestUserId, 
-      message, 
-      componentResponse, 
-      onboardingProgress,
-      isOnboarding: requestIsOnboarding,
-      userFirstName: requestUserFirstName
-    } = await request.json();
+    const body = await request.json();
+    sessionId = body.sessionId;
+    requestUserId = body.userId;
+    message = body.message;
+    componentResponse = body.componentResponse;
+    onboardingProgress = body.onboardingProgress;
+    requestIsOnboarding = body.isOnboarding;
+    requestUserFirstName = body.userFirstName;
+  } catch (parseError) {
+    console.error('Failed to parse request body:', parseError);
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  try {
 
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -182,7 +195,9 @@ export async function POST(request: NextRequest) {
     // This should trigger when loading the chat page fresh without any interaction
     if (!componentResponse && !message && isOnboarding) {
       console.log('Fresh session - building initial component message');
+      console.log('Current state.currentStep:', state.currentStep);
       const freshMessage = buildFreshSessionMessage(state.currentStep as any, itemsCollected);
+      console.log('Fresh message built:', JSON.stringify(freshMessage, null, 2));
       
       // Save the component message to chat history
       if (sessionId) {
@@ -192,7 +207,7 @@ export async function POST(request: NextRequest) {
             session_id: sessionId,
             user_id: userId,
             message_type: 'assistant',
-            content: freshMessage.componentData.question,
+            content: freshMessage.componentData?.question || 'Welcome to TrueFi!',
             rich_content: {
               component: {
                 type: freshMessage.componentType,
@@ -207,8 +222,8 @@ export async function POST(request: NextRequest) {
         });
       }
       
-      return NextResponse.json({
-        content: freshMessage.componentData.question,
+      const responseData = {
+        content: freshMessage.componentData?.question || 'Welcome to TrueFi!',
         component: {
           type: freshMessage.componentType,
           stepId: freshMessage.stepId,
@@ -217,21 +232,24 @@ export async function POST(request: NextRequest) {
         },
         onboardingProgress: {
           currentStep: state.currentStep,
-          percent: freshMessage.header.percentage,
-          stepNumber: freshMessage.header.index,
-          totalSteps: freshMessage.header.total,
-          itemsCollected: freshMessage.header.itemsCollected,
+          percent: freshMessage.header?.percentage || 0,
+          stepNumber: freshMessage.header?.index || 1,
+          totalSteps: freshMessage.header?.total || 27,
+          itemsCollected: freshMessage.header?.itemsCollected || 0,
           isComplete: false
         },
         meta: {
           onboarding: true,
           progress: {
             currentStep: state.currentStep,
-            percent: freshMessage.header.percentage
+            percent: freshMessage.header?.percentage || 0
           }
         },
         sessionId: sessionId || crypto.randomUUID()
-      });
+      };
+      
+      console.log('Returning fresh session response:', JSON.stringify(responseData, null, 2));
+      return NextResponse.json(responseData);
     }
     
     // Handle component response
@@ -497,10 +515,10 @@ export async function POST(request: NextRequest) {
     console.error('Error Stack:', error?.stack || 'No stack trace');
     console.error('Full Error:', error);
     
-    // Try to get current step from request or database
+    // Try to get current step from already parsed body and database
     let currentStepId = 'welcome';
     try {
-      const { componentResponse, userId: requestUserId } = await request.clone().json();
+      // Use values already parsed at the top of the function
       const authHeader = request.headers.get('authorization');
       const token = authHeader?.replace('Bearer ', '');
       

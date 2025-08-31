@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { getUserFromRequest } from '@/lib/auth';
+import { initializeFreshSession } from '@/lib/onboarding/fresh-session';
 
 const prisma = new PrismaClient();
 
@@ -9,6 +10,15 @@ const prisma = new PrismaClient();
  * Returns the current onboarding status for the authenticated user
  */
 export async function GET(request: NextRequest) {
+  // If ONBOARDING_V2 is enabled, redirect to v2 endpoint
+  if (process.env.ONBOARDING_V2 === 'true') {
+    // Forward to v2 status endpoint
+    const v2Response = await fetch(new URL('/api/onboarding/v2', request.url).toString(), {
+      headers: request.headers
+    });
+    return v2Response;
+  }
+  
   try {
     const user = await getUserFromRequest(request);
     if (!user) {
@@ -16,16 +26,28 @@ export async function GET(request: NextRequest) {
     }
 
     // Check onboarding progress
-    const onboardingProgress = await prisma.onboarding_progress.findUnique({
+    let onboardingProgress = await prisma.onboarding_progress.findUnique({
       where: { user_id: user.id }
     });
 
-    // If no record exists, user hasn't started onboarding
+    // If no record exists, initialize fresh session to determine proper starting step
     if (!onboardingProgress) {
+      console.log('No onboarding record found in status check, initializing fresh session');
+      const freshSession = await initializeFreshSession(user.id);
+      onboardingProgress = await prisma.onboarding_progress.findUnique({
+        where: { user_id: user.id }
+      });
+      
+      console.log('Fresh session initialized in status check:', {
+        currentStep: freshSession.currentStep,
+        itemsCollected: freshSession.itemsCollected,
+        startedAtConsent: freshSession.shouldStartAtConsent
+      });
+      
       return NextResponse.json({
         isOnboarding: true,
         isComplete: false,
-        currentStep: 'welcome',
+        currentStep: freshSession.currentStep,
         needsOnboarding: true
       });
     }
