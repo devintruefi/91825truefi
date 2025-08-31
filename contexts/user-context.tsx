@@ -123,6 +123,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (authToken) {
           try {
             console.log('Found OAuth token, validating with backend...');
+            console.log('Token format check:', authToken.substring(0, 50) + '...');
+            
             // Try to validate token with backend
             const response = await fetch('http://localhost:8080/api/auth/validate', {
               method: 'GET',
@@ -131,6 +133,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 'Content-Type': 'application/json',
               },
             });
+
+            console.log('Validation response status:', response.status);
+            console.log('Validation response headers:', Object.fromEntries(response.headers.entries()));
 
             if (response.ok) {
               const userData = await response.json();
@@ -143,8 +148,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
               setLoading(false);
               return;
             } else {
+              const errorText = await response.text();
+              console.log('OAuth token validation failed:', response.status, errorText);
               // Token is invalid, clear it
-              console.log('OAuth token invalid, clearing');
               localStorage.removeItem('auth_token');
               localStorage.removeItem('current_user_data');
               localStorage.removeItem('current_user_id');

@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { generateOnboardingSummary } from '@/lib/onboarding/unified-onboarding-flow';
 import jwt from 'jsonwebtoken';
+
+// Simple summary generator for onboarding data
+function generateOnboardingSummary(onboardingData: any) {
+  return {
+    completedAt: new Date().toISOString(),
+    stepsCompleted: onboardingData?.completedSteps?.length || 0,
+    responses: onboardingData?.responses || {},
+    hasPlaidConnection: !!onboardingData?.plaidConnection,
+    userId: onboardingData?.userId
+  };
+}
 
 const prisma = new PrismaClient();
 

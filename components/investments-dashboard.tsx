@@ -166,7 +166,8 @@ const useFilteredInvestments = (
   investments: Investment[], 
   searchQuery: string, 
   selectedAccount: string, 
-  selectedType: string, 
+  selectedType: string,
+  selectedRisk: string,
   sortBy: string
 ) => {
   return useMemo(() => {
@@ -189,6 +190,10 @@ const useFilteredInvestments = (
       filtered = filtered.filter(inv => inv.type === selectedType)
     }
     
+    if (selectedRisk !== "all") {
+      filtered = filtered.filter(inv => (inv.risk_level || "medium") === selectedRisk)
+    }
+    
     // Sort investments
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -208,8 +213,218 @@ const useFilteredInvestments = (
     })
     
     return filtered
-  }, [investments, searchQuery, selectedAccount, selectedType, sortBy])
+  }, [investments, searchQuery, selectedAccount, selectedType, selectedRisk, sortBy])
 }
+
+// Dummy data for non-logged-in users
+const dummyInvestments: Investment[] = [
+  {
+    id: "1",
+    name: "Apple Inc.",
+    symbol: "AAPL",
+    type: "stock",
+    quantity: 50,
+    purchase_price: 145.32,
+    current_price: 178.65,
+    purchase_date: "2023-01-15",
+    risk_level: "medium",
+    dividends: 150,
+    is_favorite: true,
+    tags: ["tech", "large-cap"]
+  },
+  {
+    id: "2",
+    name: "Vanguard S&P 500 ETF",
+    symbol: "VOO",
+    type: "etf",
+    quantity: 25,
+    purchase_price: 380.50,
+    current_price: 425.30,
+    purchase_date: "2022-09-20",
+    risk_level: "low",
+    dividends: 320,
+    expense_ratio: 0.03,
+    is_favorite: true,
+    tags: ["index", "diversified"]
+  },
+  {
+    id: "3",
+    name: "Microsoft Corporation",
+    symbol: "MSFT",
+    type: "stock",
+    quantity: 30,
+    purchase_price: 250.00,
+    current_price: 378.50,
+    purchase_date: "2023-03-10",
+    risk_level: "medium",
+    dividends: 90,
+    tags: ["tech", "growth"]
+  },
+  {
+    id: "4",
+    name: "Tesla Inc.",
+    symbol: "TSLA",
+    type: "stock",
+    quantity: 15,
+    purchase_price: 180.25,
+    current_price: 248.30,
+    purchase_date: "2023-05-22",
+    risk_level: "high",
+    tags: ["ev", "growth", "volatile"]
+  },
+  {
+    id: "5",
+    name: "Bitcoin",
+    symbol: "BTC",
+    type: "crypto",
+    quantity: 0.5,
+    purchase_price: 25000,
+    current_price: 42000,
+    purchase_date: "2023-02-01",
+    risk_level: "very_high",
+    tags: ["crypto", "alternative"]
+  },
+  {
+    id: "6",
+    name: "iShares Core US Aggregate Bond",
+    symbol: "AGG",
+    type: "bond",
+    quantity: 100,
+    purchase_price: 98.50,
+    current_price: 97.25,
+    purchase_date: "2022-12-01",
+    risk_level: "low",
+    dividends: 280,
+    tags: ["fixed-income", "stable"]
+  },
+  {
+    id: "7",
+    name: "Amazon.com Inc.",
+    symbol: "AMZN",
+    type: "stock",
+    quantity: 20,
+    purchase_price: 95.40,
+    current_price: 152.30,
+    purchase_date: "2023-04-15",
+    risk_level: "medium",
+    tags: ["tech", "e-commerce"]
+  },
+  {
+    id: "8",
+    name: "NVIDIA Corporation",
+    symbol: "NVDA",
+    type: "stock",
+    quantity: 10,
+    purchase_price: 280.00,
+    current_price: 485.20,
+    purchase_date: "2023-06-01",
+    risk_level: "high",
+    dividends: 10,
+    is_favorite: true,
+    tags: ["tech", "ai", "semiconductors"]
+  },
+  {
+    id: "9",
+    name: "JPMorgan Chase & Co.",
+    symbol: "JPM",
+    type: "stock",
+    quantity: 35,
+    purchase_price: 135.80,
+    current_price: 158.45,
+    purchase_date: "2023-02-28",
+    risk_level: "medium",
+    dividends: 140,
+    tags: ["financial", "dividend"]
+  },
+  {
+    id: "10",
+    name: "Gold ETF",
+    symbol: "GLD",
+    type: "commodity",
+    quantity: 40,
+    purchase_price: 175.00,
+    current_price: 185.50,
+    purchase_date: "2023-01-20",
+    risk_level: "medium",
+    tags: ["commodity", "hedge"]
+  },
+  {
+    id: "11",
+    name: "Ethereum",
+    symbol: "ETH",
+    type: "crypto",
+    quantity: 2,
+    purchase_price: 1500,
+    current_price: 2250,
+    purchase_date: "2023-03-15",
+    risk_level: "very_high",
+    tags: ["crypto", "smart-contracts"]
+  },
+  {
+    id: "12",
+    name: "Real Estate Investment Trust",
+    symbol: "VNQ",
+    type: "real_estate",
+    quantity: 50,
+    purchase_price: 82.30,
+    current_price: 88.75,
+    purchase_date: "2022-11-10",
+    risk_level: "medium",
+    dividends: 180,
+    tags: ["reit", "income"]
+  }
+]
+
+const dummyAccounts: InvestmentAccount[] = [
+  {
+    id: "acc1",
+    name: "Individual Brokerage",
+    type: "taxable",
+    institution_name: "Vanguard",
+    balance: 85420.50,
+    holdings: dummyInvestments.slice(0, 6),
+    performance: {
+      day: 1.2,
+      week: 2.8,
+      month: 5.4,
+      year: 18.5,
+      all_time: 32.4
+    },
+    tax_status: "taxable"
+  },
+  {
+    id: "acc2",
+    name: "Roth IRA",
+    type: "retirement",
+    institution_name: "Fidelity",
+    balance: 42350.25,
+    holdings: dummyInvestments.slice(6, 10),
+    performance: {
+      day: 0.8,
+      week: 1.5,
+      month: 3.2,
+      year: 12.8,
+      all_time: 28.6
+    },
+    tax_status: "tax_free"
+  },
+  {
+    id: "acc3",
+    name: "401(k)",
+    type: "retirement",
+    institution_name: "Charles Schwab",
+    balance: 125680.75,
+    holdings: dummyInvestments.slice(10),
+    performance: {
+      day: 0.5,
+      week: 1.1,
+      month: 2.8,
+      year: 9.5,
+      all_time: 45.2
+    },
+    tax_status: "tax_deferred"
+  }
+]
 
 export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   const [loading, setLoading] = useState(true)
@@ -234,6 +449,7 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedAccount, setSelectedAccount] = useState<string>("all")
   const [selectedType, setSelectedType] = useState<string>("all")
+  const [selectedRisk, setSelectedRisk] = useState<string>("all")
 
   // Memoized metrics and filtered investments
   const metrics = usePortfolioMetrics(investments, accounts)
@@ -241,7 +457,8 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
     investments, 
     searchQuery, 
     selectedAccount, 
-    selectedType, 
+    selectedType,
+    selectedRisk,
     config.sortBy
   )
 
@@ -259,6 +476,11 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   useEffect(() => {
     if (userId) {
       fetchInvestmentData()
+    } else {
+      // Load dummy data for non-logged-in users
+      setAccounts(dummyAccounts)
+      setInvestments(dummyInvestments)
+      setLoading(false)
     }
   }, [userId])
 
@@ -279,6 +501,11 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   }, [userId])
 
   const saveInvestment = useCallback(async (investment: Partial<Investment>) => {
+    if (!userId) {
+      alert("Please sign in to manage your investments")
+      return
+    }
+    
     try {
       const url = investment.id 
         ? `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}/${investment.id}`
@@ -303,6 +530,11 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   }, [userId, fetchInvestmentData])
 
   const deleteInvestment = useCallback(async (id: string) => {
+    if (!userId) {
+      alert("Please sign in to manage your investments")
+      return
+    }
+    
     if (!confirm("Are you sure you want to delete this investment?")) return
     
     try {
@@ -319,11 +551,16 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   }, [userId, fetchInvestmentData])
 
   const toggleFavorite = useCallback(async (id: string) => {
+    if (!userId) {
+      alert("Please sign in to manage favorites")
+      return
+    }
+    
     const investment = investments.find(i => i.id === id)
     if (investment) {
       await saveInvestment({ ...investment, is_favorite: !investment.is_favorite })
     }
-  }, [investments, saveInvestment])
+  }, [userId, investments, saveInvestment])
 
   const exportData = useCallback(() => {
     const csv = [
@@ -362,69 +599,133 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
 
   return (
     <div className="space-y-6">
-      {/* Header Section */}
-      <Card className="bg-gradient-to-br from-navy-900 via-navy-800 to-blue-900 text-white border border-navy-700 shadow-2xl" style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #1a2f4e 50%, #152238 100%)' }}>
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-gradient-to-br from-blue-600/20 to-blue-500/20 rounded-lg backdrop-blur-sm border border-blue-500/30">
-                <Briefcase className="h-6 w-6 text-blue-400" />
+      {/* Header Section - Apple-inspired Design */}
+      <Card className="bg-white dark:bg-gray-900 border-0 shadow-sm overflow-hidden">
+        <CardContent className="p-0">
+          {/* Clean header with subtle accent */}
+          <div className="px-8 py-6 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                {/* Minimal icon treatment */}
+                <div className="relative">
+                  <div className="absolute inset-0 bg-blue-500 rounded-2xl opacity-10 blur-xl"></div>
+                  <div className="relative bg-white dark:bg-gray-800 p-3 rounded-2xl shadow-sm">
+                    <TrendingUp className="h-6 w-6 text-blue-500" strokeWidth={1.5} />
+                  </div>
+                </div>
+                
+                {/* Typography hierarchy */}
+                <div>
+                  <h1 className="text-2xl font-semibold text-gray-900 dark:text-white tracking-tight">
+                    Portfolio
+                  </h1>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    Real-time investment tracking
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">Investment Portfolio</h2>
-                <p className="text-slate-400 text-sm mt-1">Track and manage all your investments</p>
+
+              {/* Action buttons - subtle and functional */}
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowSettings(!showSettings)}
+                  className="h-9 w-9 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
+                >
+                  <Settings className="h-4 w-4" strokeWidth={1.5} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={exportData}
+                  className="h-9 w-9 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
+                >
+                  <Download className="h-4 w-4" strokeWidth={1.5} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={fetchInvestmentData}
+                  className="h-9 w-9 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
+                >
+                  <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
+                </Button>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSettings(!showSettings)}
-                className="bg-blue-900/30 text-blue-100 border-blue-600/50 hover:bg-blue-800/40 hover:text-white hover:border-blue-500 transition-all"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportData}
-                className="bg-blue-900/30 text-blue-100 border-blue-600/50 hover:bg-blue-800/40 hover:text-white hover:border-blue-500 transition-all"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchInvestmentData}
-                className="bg-blue-900/30 text-blue-100 border-blue-600/50 hover:bg-blue-800/40 hover:text-white hover:border-blue-500 transition-all"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
             </div>
           </div>
 
-          {/* Key Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-blue-800/20 backdrop-blur-sm rounded-lg p-3 border border-blue-600/30">
-              <p className="text-xs text-blue-200/80 mb-1 font-medium uppercase tracking-wider">Total Value</p>
-              <p className="text-xl font-bold text-white">{formatCompact(metrics.totalValue)}</p>
-            </div>
-            <div className="bg-blue-800/20 backdrop-blur-sm rounded-lg p-3 border border-blue-600/30">
-              <p className="text-xs text-blue-200/80 mb-1 font-medium uppercase tracking-wider">Total Return</p>
-              <p className={cn(
-                "text-xl font-bold",
-                metrics.totalGainLoss >= 0 ? "text-emerald-400" : "text-rose-400"
-              )}>
-                {formatPercent(metrics.totalGainLossPercent)}
-              </p>
-            </div>
-            <div className="bg-blue-800/20 backdrop-blur-sm rounded-lg p-3 border border-blue-600/30">
-              <p className="text-xs text-blue-200/80 mb-1 font-medium uppercase tracking-wider">Dividends</p>
-              <p className="text-xl font-bold text-white">{formatCompact(metrics.totalDividends)}</p>
-            </div>
-            <div className="bg-blue-800/20 backdrop-blur-sm rounded-lg p-3 border border-blue-600/30">
-              <p className="text-xs text-blue-200/80 mb-1 font-medium uppercase tracking-wider">Holdings</p>
-              <p className="text-xl font-bold text-white">{metrics.investmentCount}</p>
+          {/* Metrics Section - Clean grid layout */}
+          <div className="px-8 py-6 border-t border-gray-100 dark:border-gray-800">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {/* Total Value */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Total Value
+                </p>
+                <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  {formatCompact(metrics.totalValue)}
+                </p>
+                <div className="flex items-center gap-1">
+                  <div className="w-1 h-1 rounded-full bg-gray-400"></div>
+                  <p className="text-xs text-gray-500">
+                    {metrics.accountCount} accounts
+                  </p>
+                </div>
+              </div>
+
+              {/* Returns */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Total Return
+                </p>
+                <div className="flex items-baseline gap-2">
+                  <p className={cn(
+                    "text-2xl font-semibold",
+                    metrics.totalGainLoss >= 0 ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"
+                  )}>
+                    {formatPercent(metrics.totalGainLossPercent)}
+                  </p>
+                  {metrics.totalGainLoss >= 0 ? (
+                    <ArrowUpRight className="h-4 w-4 text-green-600 dark:text-green-500" strokeWidth={2} />
+                  ) : (
+                    <ArrowDownRight className="h-4 w-4 text-red-600 dark:text-red-500" strokeWidth={2} />
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">
+                  {formatCurrency(Math.abs(metrics.totalGainLoss))}
+                </p>
+              </div>
+
+              {/* Dividends */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Dividends
+                </p>
+                <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  {formatCompact(metrics.totalDividends)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {metrics.totalValue > 0 ? `${((metrics.totalDividends / metrics.totalValue) * 100).toFixed(2)}% yield` : '0% yield'}
+                </p>
+              </div>
+
+              {/* Holdings */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Holdings
+                </p>
+                <p className="text-2xl font-semibold text-gray-900 dark:text-white">
+                  {metrics.investmentCount}
+                </p>
+                <div className="flex items-center gap-2">
+                  {Object.keys(metrics.allocation).length > 0 && (
+                    <p className="text-xs text-gray-500">
+                      {Object.keys(metrics.allocation).length} types
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -476,6 +777,19 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Select value={selectedRisk} onValueChange={setSelectedRisk}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="All Risk Levels" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Risk</SelectItem>
+                  <SelectItem value="low">Low Risk</SelectItem>
+                  <SelectItem value="medium">Medium Risk</SelectItem>
+                  <SelectItem value="high">High Risk</SelectItem>
+                  <SelectItem value="very_high">Very High Risk</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center gap-2">
@@ -509,12 +823,16 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
               <Button
                 className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
                 onClick={() => {
+                  if (!userId) {
+                    alert("Please sign in to add investments")
+                    return
+                  }
                   setEditingInvestment(null)
                   setShowAddInvestment(true)
                 }}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add Investment
+                {userId ? "Add Investment" : "Sign In to Add"}
               </Button>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 
 // GET user settings
 export async function GET(request: NextRequest) {
@@ -161,7 +162,7 @@ export async function PUT(request: NextRequest) {
               updated_at: new Date(),
             },
             create: {
-              id: crypto.randomUUID(),
+              id: randomUUID(),
               user_id: userId,
               marital_status: data.maritalStatus,
               dependents: data.dependents,
@@ -181,7 +182,7 @@ export async function PUT(request: NextRequest) {
               updated_at: new Date(),
             },
             create: {
-              id: crypto.randomUUID(),
+              id: randomUUID(),
               user_id: userId,
               theme: 'system',
               notifications_enabled: true,
@@ -211,7 +212,7 @@ export async function PUT(request: NextRequest) {
             updated_at: new Date(),
           },
           create: {
-            id: crypto.randomUUID(),
+            id: randomUUID(),
             user_id: userId,
             theme: 'system',
             notifications_enabled: data.emailNotifications || data.pushNotifications,

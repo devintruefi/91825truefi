@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
-import { OnboardingState, OnboardingResponses } from '@/lib/onboarding/unified-onboarding-flow';
+
+// Simple type definitions for onboarding state
+interface OnboardingState {
+  userId: string;
+  currentStep: string;
+  completedSteps: string[];
+  responses: OnboardingResponses;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface OnboardingResponses {
+  [key: string]: any;
+}
 
 const prisma = new PrismaClient();
 

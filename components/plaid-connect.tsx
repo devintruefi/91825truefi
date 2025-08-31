@@ -99,10 +99,12 @@ export function PlaidConnect({ onSuccess, onError, variant = "default", classNam
               onError()
             }
           }
-        } catch (err) {
-          setError('Failed to link account')
+        } catch (err: any) {
+          console.error('Plaid link error:', err)
+          setError('Unable to connect your bank right now. You can skip this step and continue.')
+          // Still call onError to allow skipping
           if (onError) {
-            onError()
+            setTimeout(() => onError(), 1500)
           }
         } finally {
           setLoading(false)
@@ -181,10 +183,12 @@ export function PlaidConnect({ onSuccess, onError, variant = "default", classNam
               onError()
             }
           }
-        } catch (err) {
-          setError('Failed to link account')
+        } catch (err: any) {
+          console.error('Plaid link error:', err)
+          setError('Unable to connect your bank right now. You can skip this step and continue.')
+          // Still call onError to allow skipping
           if (onError) {
-            onError()
+            setTimeout(() => onError(), 1500)
           }
         } finally {
           setLoading(false)

@@ -112,68 +112,89 @@ export function SettingsContent() {
           description: "Please login to view settings",
           variant: "destructive"
         })
+        setLoading(false)
         return
       }
       
-      const response = await fetch('http://localhost:8080/api/user/settings', {
+      const response = await fetch('/api/user/settings', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
       
       if (!response.ok) {
-        throw new Error('Failed to fetch settings')
+        // Handle specific error cases
+        if (response.status === 401) {
+          toast({
+            title: "Session expired",
+            description: "Please login again to continue",
+            variant: "destructive"
+          })
+          localStorage.removeItem('auth_token')
+          setLoading(false)
+          return
+        }
+        
+        const errorData = await response.json().catch(() => null)
+        throw new Error(errorData?.error || 'Failed to fetch settings')
       }
       
       const data = await response.json()
       
-      // Update profile data
-      setProfileData({
-        firstName: data.profile.firstName || '',
-        lastName: data.profile.lastName || '',
-        email: data.profile.email || '',
-        phone: data.profile.phone || '',
-        street: data.profile.street || '',
-        city: data.profile.city || '',
-        state: data.profile.state || '',
-        postalCode: data.profile.postalCode || '',
-        incomeRange: data.profile.incomeRange || '50k-75k',
-        maritalStatus: data.profile.maritalStatus || '',
-        dependents: data.profile.dependents || 0,
-        primaryGoals: data.profile.primaryGoals || '',
-        riskTolerance: data.preferences.riskTolerance || 'moderate',
-        investmentHorizon: data.preferences.investmentHorizon || 'medium'
-      })
+      // Update profile data with safe access
+      if (data.profile) {
+        setProfileData({
+          firstName: data.profile.firstName || '',
+          lastName: data.profile.lastName || '',
+          email: data.profile.email || '',
+          phone: data.profile.phone || '',
+          street: data.profile.street || '',
+          city: data.profile.city || '',
+          state: data.profile.state || '',
+          postalCode: data.profile.postalCode || '',
+          incomeRange: data.profile.incomeRange || '50k-75k',
+          maritalStatus: data.profile.maritalStatus || '',
+          dependents: data.profile.dependents || 0,
+          primaryGoals: data.profile.primaryGoals || '',
+          riskTolerance: data.preferences?.riskTolerance || 'moderate',
+          investmentHorizon: data.preferences?.investmentHorizon || 'medium'
+        })
+      }
       
-      // Update notification settings
-      setNotificationSettings({
-        emailNotifications: data.notifications.emailNotifications,
-        pushNotifications: data.notifications.pushNotifications,
-        weeklyFinancialSummary: data.notifications.weeklyFinancialSummary,
-        goalMilestones: data.notifications.goalMilestones,
-        budgetAlerts: data.notifications.budgetAlerts,
-        marketUpdates: data.notifications.marketUpdates,
-        productUpdates: data.notifications.productUpdates,
-        dailyReminders: data.notifications.dailyReminders,
-        pennyMessages: data.notifications.pennyMessages,
-        urgentAlerts: data.notifications.urgentAlerts,
-        smsSecurityAlerts: data.notifications.smsSecurityAlerts,
-        smsPaymentReminders: data.notifications.smsPaymentReminders
-      })
+      // Update notification settings with safe access
+      if (data.notifications) {
+        setNotificationSettings({
+          emailNotifications: data.notifications.emailNotifications ?? true,
+          pushNotifications: data.notifications.pushNotifications ?? true,
+          weeklyFinancialSummary: data.notifications.weeklyFinancialSummary ?? true,
+          goalMilestones: data.notifications.goalMilestones ?? true,
+          budgetAlerts: data.notifications.budgetAlerts ?? true,
+          marketUpdates: data.notifications.marketUpdates ?? false,
+          productUpdates: data.notifications.productUpdates ?? false,
+          dailyReminders: data.notifications.dailyReminders ?? true,
+          pennyMessages: data.notifications.pennyMessages ?? true,
+          urgentAlerts: data.notifications.urgentAlerts ?? true,
+          smsSecurityAlerts: data.notifications.smsSecurityAlerts ?? true,
+          smsPaymentReminders: data.notifications.smsPaymentReminders ?? false
+        })
+      }
       
+      // Update privacy settings with safe access
+      if (data.privacy) {
+        setPrivacySettings({
+          dataAnalytics: data.privacy.dataAnalytics ?? true,
+          personalizedRecommendations: data.privacy.personalizedRecommendations ?? true,
+          marketingCommunications: data.privacy.marketingCommunications ?? false
+        })
+      }
       
-      // Update privacy settings
-      setPrivacySettings({
-        dataAnalytics: data.privacy.dataAnalytics,
-        personalizedRecommendations: data.privacy.personalizedRecommendations,
-        marketingCommunications: data.privacy.marketingCommunications
-      })
-      
-      // Update security settings
-      setSecuritySettings(prev => ({
-        ...prev,
-        twoFactorEnabled: data.security.twoFactorEnabled
-      }))
+      // Update security settings with safe access
+      if (data.security) {
+        setSecuritySettings(prev => ({
+          ...prev,
+          twoFactorEnabled: data.security.twoFactorEnabled ?? false
+        }))
+      }
       
     } catch (error) {
       console.error('Error fetching settings:', error)
@@ -200,7 +221,7 @@ export function SettingsContent() {
         return
       }
       
-      const response = await fetch('http://localhost:8080/api/user/settings', {
+      const response = await fetch('/api/user/settings', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

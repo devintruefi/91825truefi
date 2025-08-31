@@ -866,47 +866,151 @@ export function DashboardContent() {
         </div>
       </div>
 
-      {/* Call to Action Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-16">
-        <div className="max-w-7xl mx-auto px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Ready to See Your Real Financial Picture?
-          </h2>
-          <p className="text-xl text-blue-100 mb-8 max-w-3xl mx-auto">
-            This is just a sample of what TrueFi.ai can do for you. Connect your accounts to get personalized insights, 
-            AI-powered recommendations, and a complete view of your financial health.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/auth" className="bg-white text-blue-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-200 shadow-lg">
-              Get Started Free
-            </Link>
-            <Link href="/how-to-use" className="border-2 border-white text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition-colors duration-200">
-              Learn More
-            </Link>
+      {/* Call to Action Section - Premium Apple Design */}
+      <div className="relative bg-white dark:bg-black py-32 overflow-hidden">
+        {/* Sophisticated gradient orbs */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-gradient-to-br from-gray-200/20 to-transparent rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-40 -left-40 w-[600px] h-[600px] bg-gradient-to-tr from-gray-200/20 to-transparent rounded-full blur-3xl"></div>
+        </div>
+        
+        <div className="relative max-w-6xl mx-auto px-6">
+          {/* Main Content */}
+          <div className="text-center space-y-8">
+            
+            {/* Small Eyebrow Text */}
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-500 uppercase tracking-wider">
+              Your Complete Financial OS
+            </p>
+            
+            {/* Main Headline - SF Pro Display style */}
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-semibold text-gray-900 dark:text-white leading-[1.1] tracking-[-0.02em]">
+              Ready to see your
+              <br />
+              <span className="relative inline-block mt-1">
+                <span className="relative z-10 bg-gradient-to-r from-gray-900 via-gray-600 to-gray-900 dark:from-white dark:via-gray-400 dark:to-white bg-clip-text text-transparent">
+                  real numbers?
+                </span>
+                {/* Subtle underline accent */}
+                <div className="absolute -bottom-1 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-gray-300 dark:via-gray-700 to-transparent"></div>
+              </span>
+            </h2>
+            
+            {/* Subheadline - Clean and minimal */}
+            <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto font-light leading-relaxed">
+              Every transaction. Every insight. Every decision.
+              <br className="hidden md:block" />
+              Unified in one beautifully simple experience.
+            </p>
+            
+            {/* CTA Section with sophisticated buttons */}
+            <div className="pt-8 space-y-6">
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <Link 
+                  href="/auth" 
+                  className="group relative overflow-hidden px-10 py-5 bg-black dark:bg-white text-white dark:text-black rounded-[28px] font-medium text-lg transition-all duration-500 hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <span className="relative z-10 flex items-center gap-2">
+                    Start Free Trial
+                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
+                  </span>
+                  {/* Gradient hover effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-800 to-gray-900 dark:from-gray-100 dark:to-gray-200 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
+                </Link>
+                
+                <Link 
+                  href="/how-to-use" 
+                  className="group px-10 py-5 text-gray-900 dark:text-white font-medium text-lg transition-all duration-300 relative"
+                >
+                  <span className="flex items-center gap-2">
+                    Watch Demo
+                    <div className="w-10 h-10 rounded-full border border-gray-300 dark:border-gray-700 flex items-center justify-center group-hover:bg-gray-100 dark:group-hover:bg-gray-900 transition-colors duration-300">
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                  </span>
+                </Link>
+              </div>
+              
+              {/* Trust text */}
+              <p className="text-sm text-gray-500 dark:text-gray-600">
+                No credit card required • 30-day free trial • Cancel anytime
+              </p>
+            </div>
           </div>
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Target className="w-8 h-8" />
+          
+          {/* Feature Cards - Bento Box Style */}
+          <div className="mt-32 grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Card 1 */}
+            <div className="group relative bg-gray-50 dark:bg-gray-900/50 rounded-3xl p-8 hover:bg-gray-100 dark:hover:bg-gray-900 transition-all duration-500 border border-gray-200/50 dark:border-gray-800/50">
+              <div className="space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-white dark:bg-black flex items-center justify-center shadow-sm">
+                  <Activity className="w-7 h-7 text-gray-700 dark:text-gray-300" strokeWidth={1.25} />
+                </div>
+                <h3 className="text-2xl font-semibold text-gray-900 dark:text-white tracking-tight">
+                  Real-time sync
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Your accounts update instantly. See every transaction as it happens, across all your institutions.
+                </p>
+                <div className="pt-4">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <span>Live data from 12,000+ banks</span>
+                  </div>
+                </div>
               </div>
-              <h3 className="text-lg font-semibold mb-2">Smart Goals</h3>
-              <p className="text-blue-100">AI-powered goal setting and tracking</p>
             </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <TrendingUp className="w-8 h-8" />
+            
+            {/* Card 2 */}
+            <div className="group relative bg-gray-50 dark:bg-gray-900/50 rounded-3xl p-8 hover:bg-gray-100 dark:hover:bg-gray-900 transition-all duration-500 border border-gray-200/50 dark:border-gray-800/50">
+              <div className="space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-white dark:bg-black flex items-center justify-center shadow-sm">
+                  <Sparkles className="w-7 h-7 text-gray-700 dark:text-gray-300" strokeWidth={1.25} />
+                </div>
+                <h3 className="text-2xl font-semibold text-gray-900 dark:text-white tracking-tight">
+                  AI that learns
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+                  Personalized insights that adapt to your spending patterns and financial goals over time.
+                </p>
+                <div className="pt-4">
+                  <div className="flex -space-x-2">
+                    {[1,2,3,4].map(i => (
+                      <div key={i} className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-800 border-2 border-white dark:border-black"></div>
+                    ))}
+                    <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 border-2 border-white dark:border-black flex items-center justify-center">
+                      <span className="text-xs text-gray-600 dark:text-gray-400">+2M</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h3 className="text-lg font-semibold mb-2">Investment Insights</h3>
-              <p className="text-blue-100">Portfolio analysis and recommendations</p>
             </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Zap className="w-8 h-8" />
+            
+            {/* Card 3 */}
+            <div className="group relative bg-gray-50 dark:bg-gray-900/50 rounded-3xl p-8 hover:bg-gray-100 dark:hover:bg-gray-900 transition-all duration-500 border border-gray-200/50 dark:border-gray-800/50">
+              <div className="space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-white dark:bg-black flex items-center justify-center shadow-sm">
+                  <Eye className="w-7 h-7 text-gray-700 dark:text-gray-300" strokeWidth={1.25} />
+                </div>
+                <h3 className="text-2xl font-semibold text-gray-900 dark:text-white tracking-tight">
+                  Complete clarity
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
+                  No hidden fees, no surprises. See exactly where your money goes with surgical precision.
+                </p>
+                <div className="pt-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div className="h-full w-3/4 bg-gradient-to-r from-gray-400 to-gray-600 dark:from-gray-600 dark:to-gray-400 rounded-full"></div>
+                    </div>
+                    <span className="text-sm text-gray-500">75% clearer</span>
+                  </div>
+                </div>
               </div>
-              <h3 className="text-lg font-semibold mb-2">Instant Analysis</h3>
-              <p className="text-blue-100">Real-time financial health monitoring</p>
             </div>
           </div>
+          
+          
         </div>
       </div>
     </div>

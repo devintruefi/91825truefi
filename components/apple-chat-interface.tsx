@@ -13,7 +13,9 @@ import {
   CardSelection, 
   SliderInput, 
   PieChartBuilder,
-  QuickAdd
+  QuickAdd,
+  FormInput,
+  TradeoffsInput
 } from '@/components/chat/onboarding-components'
 import { PlaidConnect } from '@/components/plaid-connect'
 import { DashboardPreview } from '@/components/chat/dashboard-preview'
@@ -43,7 +45,9 @@ interface Message {
   timestamp: Date
   feedback?: "positive" | "negative" | null
   component?: {
-    type: 'buttons' | 'slider' | 'checkboxes' | 'cards' | 'plaid' | 'pieChart' | 'quickAdd'
+    type: 'buttons' | 'slider' | 'checkboxes' | 'cards' | 'plaid' | 'pieChart' | 'quickAdd' | 
+           'assetsInput' | 'liabilitiesInput' | 'dashboardPreview' | 'form' | 'tradeoffs'
+    stepId?: string
     data: any
   }
 }
@@ -549,7 +553,7 @@ function AppleChatInterfaceInner() {
   const [editingTitle, setEditingTitle] = useState<string>("")
   const [onboardingPhase, setOnboardingPhase] = useState<string>('welcome')
   const [onboardingProgress, setOnboardingProgress] = useState<Record<string, any>>({
-    currentStep: isOnboarding ? 'MAIN_GOAL' : null,
+    currentStep: isOnboarding ? 'welcome' : null,
     mode: 'standard', // quick, standard, or complete
     responses: {},
     completedSteps: [],
@@ -636,17 +640,65 @@ function AppleChatInterfaceInner() {
     // This effect is no longer needed as streaming is handled by setMessages
   }, [isTyping, streamingMessageId]);
 
-  // Set initial onboarding mode from URL params - only run this when user first loads
+  // Check onboarding status from backend when user loads
   const [hasSetInitialOnboarding, setHasSetInitialOnboarding] = useState(false);
   
   useEffect(() => {
     if (user && !hasSetInitialOnboarding) {
-      console.log('Setting initial onboarding mode from URL:', isOnboarding);
-      setIsOnboardingMode(isOnboarding);
-      if (isOnboarding && !onboardingProgress.currentStep) {
-        console.log('Initializing onboarding progress with MAIN_GOAL step');
-        setOnboardingProgress(prev => ({ ...prev, currentStep: 'MAIN_GOAL' }));
-      }
+      // Check actual onboarding status from backend
+      const checkOnboardingStatus = async () => {
+        try {
+          const token = localStorage.getItem('auth_token');
+          if (!token) return;
+          
+          const response = await fetch('/api/onboarding/status', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (response.ok) {
+            const status = await response.json();
+            console.log('Onboarding status from backend:', status);
+            
+            // Set onboarding mode based on backend status, not just URL
+            if (status.needsOnboarding) {
+              setIsOnboardingMode(true);
+              setOnboardingProgress(prev => ({ 
+                ...prev, 
+                currentStep: status.currentStep || 'welcome'
+              }));
+              
+              // If we're resuming onboarding and URL doesn't have the param, add it
+              if (!isOnboarding && status.currentStep !== 'welcome' && status.currentStep !== 'complete') {
+                console.log('Resuming onboarding from step:', status.currentStep);
+                // Optionally update URL to reflect onboarding state
+                const url = new URL(window.location.href);
+                url.searchParams.set('onboarding', 'true');
+                window.history.replaceState({}, '', url);
+              }
+            } else {
+              // User has completed onboarding
+              setIsOnboardingMode(false);
+              // Remove onboarding param if present
+              if (isOnboarding) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('onboarding');
+                window.history.replaceState({}, '', url);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check onboarding status:', error);
+          // Fall back to URL param behavior
+          setIsOnboardingMode(isOnboarding);
+          if (isOnboarding && !onboardingProgress.currentStep) {
+            setOnboardingProgress(prev => ({ ...prev, currentStep: 'welcome' }));
+          }
+        }
+      };
+      
+      checkOnboardingStatus();
       setHasSetInitialOnboarding(true);
     }
   }, [user, isOnboarding, hasSetInitialOnboarding]);
@@ -940,38 +992,31 @@ function AppleChatInterfaceInner() {
   }
 
   // Function to handle interactive component responses
-  const handleComponentResponse = async (messageId: string, value: any, componentType: string) => {
+  const handleComponentResponse = async (messageId: string, value: any, componentType: string, componentStepId?: string) => {
     // ALWAYS ensure onboarding mode is active when handling component responses during onboarding
     if (onboardingProgress.currentStep && onboardingProgress.currentStep !== 'complete') {
       console.log('Component response during onboarding - ensuring onboarding mode is ON');
       setIsOnboardingMode(true);
     }
     
-    // Import the comprehensive onboarding flow
-    const { OnboardingManager } = await import('@/lib/onboarding/comprehensive-onboarding')
-    const ONBOARDING_STEPS = {
-      WELCOME: 'welcome',
-      MAIN_GOAL: 'main_goal',
-      LIFE_STAGE: 'life_stage',
-      PLAID_CONNECTION: 'plaid_connection',
-      AUTO_ANALYSIS: 'auto_analysis',
-      INCOME_CONFIRMATION: 'income_confirmation',
-      DETECTED_EXPENSES: 'detected_expenses',
-      MANUAL_INCOME: 'manual_income',
-      MANUAL_EXPENSES: 'manual_expenses',
-      QUICK_ACCOUNTS: 'quick_accounts',
-      RISK_TOLERANCE: 'risk_tolerance',
-      GOALS_SELECTION: 'goals_selection',
-      DASHBOARD_PREVIEW: 'dashboard_preview',
-      COMPLETE: 'complete'
-    }
+    // CRITICAL: Always use the stepId from the component, not from progress
+    // This ensures synchronization between client and server
+    const currentStepId = componentStepId || 'unknown';
+    
+    console.log('=== Client Component Response ===');
+    console.log('Message ID:', messageId);
+    console.log('Step ID:', currentStepId);
+    console.log('Component Type:', componentType);
+    console.log('Value:', value);
     
     // Log every answer to user_onboarding_responses
     if (user && value !== 'skipped') {
       const token = localStorage.getItem('auth_token')
       if (token) {
-        // Determine the question based on current step
-        let question = onboardingProgress.currentStep || ONBOARDING_STEPS.MAIN_GOAL
+        // Use the actual step ID for logging
+        const question = currentStepId;
+        
+        console.log('Logging response to database:', { question, answer: value });
         
         // Log to database
         await fetch('/api/onboarding/log-response', {
@@ -986,18 +1031,19 @@ function AppleChatInterfaceInner() {
     }
     
     // Update onboarding progress
-    const updatedProgress = { ...onboardingProgress }
-    const currentStep = onboardingProgress.currentStep || ONBOARDING_STEPS.MAIN_GOAL
+    const updatedProgress = { ...onboardingProgress, currentStep: currentStepId }
+    const currentStep = currentStepId
     
     // Store the response based on component type and current step
     switch (componentType) {
       case 'buttons':
-        // Store based on current step context
-        if (currentStep === ONBOARDING_STEPS.MAIN_GOAL) {
+        // Store based on current step context (handle both uppercase and lowercase)
+        const stepLower = currentStep.toLowerCase();
+        if (stepLower === 'main_goal' || stepLower === 'main-goal') {
           updatedProgress.mainGoal = value
-        } else if (currentStep === ONBOARDING_STEPS.LIFE_STAGE) {
+        } else if (stepLower === 'life_stage' || stepLower === 'life-stage') {
           updatedProgress.lifeStage = value
-        } else if (currentStep === ONBOARDING_STEPS.INCOME_CONFIRMATION) {
+        } else if (stepLower === 'income_confirmation' || stepLower === 'income-confirmation') {
           updatedProgress.incomeConfirmed = value === 'confirmed'
         } else {
           updatedProgress[`response_${currentStep}`] = value
@@ -1005,25 +1051,30 @@ function AppleChatInterfaceInner() {
         break
         
       case 'cards':
-        if (currentStep === ONBOARDING_STEPS.LIFE_STAGE) {
+        const stepLowerCards = currentStep.toLowerCase();
+        if (stepLowerCards === 'life_stage' || stepLowerCards === 'life-stage') {
           updatedProgress.lifeStage = value
+        } else if (stepLowerCards === 'main_goal' || stepLowerCards === 'main-goal') {
+          updatedProgress.mainGoal = value
         } else {
           updatedProgress.selectedCard = value
         }
         break
         
       case 'slider':
-        if (currentStep === ONBOARDING_STEPS.RISK_TOLERANCE) {
+        const stepLowerSlider = currentStep.toLowerCase();
+        if (stepLowerSlider === 'risk_tolerance' || stepLowerSlider === 'risk-tolerance') {
           updatedProgress.riskTolerance = value
-        } else if (currentStep === ONBOARDING_STEPS.MANUAL_INCOME) {
+        } else if (stepLowerSlider === 'manual_income' || stepLowerSlider === 'manual-income' || stepLowerSlider === 'income_capture') {
           updatedProgress.monthlyIncome = value
-        } else if (currentStep === ONBOARDING_STEPS.MANUAL_EXPENSES) {
+        } else if (stepLowerSlider === 'manual_expenses' || stepLowerSlider === 'manual-expenses' || stepLowerSlider === 'expenses_capture') {
           updatedProgress.monthlyExpenses = value
         }
         break
         
       case 'checkboxes':
-        if (currentStep === ONBOARDING_STEPS.GOALS_SELECTION || currentStep === 'goals_selection') {
+        const stepLowerCheck = currentStep.toLowerCase();
+        if (stepLowerCheck === 'goals_selection' || stepLowerCheck === 'goals-selection') {
           updatedProgress.selectedGoals = value.selected || value
           // Save goals to database
           if (value.selected || value) {
@@ -1132,17 +1183,15 @@ function AppleChatInterfaceInner() {
         break
     }
     
-    // Determine next step using the comprehensive flow
-    const nextStep = OnboardingManager.getNextStep(currentStep, value)
-    if (nextStep) {
-      // Mark current step as completed before moving to next
-      const completedSteps = updatedProgress.completedSteps || []
-      if (!completedSteps.includes(currentStep)) {
-        completedSteps.push(currentStep)
-      }
-      updatedProgress.completedSteps = completedSteps
-      updatedProgress.currentStep = nextStep
+    // Mark current step as completed
+    const completedSteps = updatedProgress.completedSteps || []
+    if (!completedSteps.includes(currentStep)) {
+      completedSteps.push(currentStep)
     }
+    updatedProgress.completedSteps = completedSteps
+    
+    // The server will determine the next step based on the response
+    // We just track what's been completed here
     
     setOnboardingProgress(updatedProgress)
     
@@ -1257,23 +1306,27 @@ function AppleChatInterfaceInner() {
     const responseMessage = typeof value === 'object' ? JSON.stringify(value) : value
     console.log('=== SENDING COMPONENT RESPONSE ===');
     console.log('Component type:', componentType);
+    console.log('Step ID:', currentStepId);
     console.log('Value:', value);
     console.log('Response message:', responseMessage);
     console.log('Current isOnboardingMode before send:', isOnboardingMode);
     console.log('Updated progress before send:', updatedProgress);
     
-    // Force onboarding mode for the next request
-    await handleSendMessage(`[Component Response: ${componentType}] ${responseMessage}`, true, updatedProgress)
+    // Force onboarding mode for the next request - include stepId in message
+    await handleSendMessage(`[Component Response: ${componentType}:${currentStepId}] ${responseMessage}`, true, updatedProgress)
   }
 
   // Function to render interactive components
   const renderInteractiveComponent = (component: any, messageId: string) => {
+    // Extract step ID from component if available
+    const stepId = component.stepId || component.data?.stepId || onboardingProgress.currentStep;
+    
     const handleComplete = (value: any) => {
-      handleComponentResponse(messageId, value, component.type)
+      handleComponentResponse(messageId, value, component.type, stepId)
     }
     
     const handleSkip = () => {
-      handleComponentResponse(messageId, 'skipped', component.type)
+      handleComponentResponse(messageId, 'skipped', component.type, stepId)
     }
     
     switch (component.type) {
@@ -1393,6 +1446,22 @@ function AppleChatInterfaceInner() {
         return (
           <LiabilitiesInput
             onSubmit={(liabilities) => handleComplete(liabilities)}
+            onSkip={handleSkip}
+          />
+        )
+      case 'form':
+        return (
+          <FormInput
+            data={component.data}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+          />
+        )
+      case 'tradeoffs':
+        return (
+          <TradeoffsInput
+            data={component.data}
+            onComplete={handleComplete}
             onSkip={handleSkip}
           />
         )
@@ -1588,25 +1657,70 @@ function AppleChatInterfaceInner() {
       }
       
       // Add authorization header if user is authenticated
+      console.log('=== AUTH DEBUG ===');
+      console.log('user object:', user);
+      console.log('user.id:', user?.id);
+      console.log('localStorage auth_token:', localStorage.getItem('auth_token'));
+      
       if (user) {
         const token = localStorage.getItem('auth_token')
         if (token) {
           headers['Authorization'] = `Bearer ${token}`
+          console.log('Authorization header set:', `Bearer ${token.substring(0, 20)}...`);
+        } else {
+          console.log('No auth_token found in localStorage');
+        }
+      } else {
+        console.log('No user object found');
+      }
+      
+      console.log('Final headers:', headers);
+      
+      // Parse component responses from the message
+      let componentResponse = null;
+      if (userMessage.includes('[Component Response:')) {
+        // Updated regex to capture stepId from format: [Component Response: type:stepId] value
+        const match = userMessage.match(/\[Component Response: ([^:]+)(?::([^\]]+))?\] (.+)/);
+        if (match) {
+          const componentType = match[1];
+          const stepId = match[2] || forceProgress?.currentStep || onboardingProgress.currentStep;
+          const valueStr = match[3];
+          try {
+            // Try to parse as JSON first
+            componentResponse = {
+              stepId: stepId,
+              componentType,
+              value: JSON.parse(valueStr)
+            };
+          } catch {
+            // If not JSON, use as string
+            componentResponse = {
+              stepId: stepId,
+              componentType,
+              value: valueStr
+            };
+          }
+          console.log('Parsed component response:', componentResponse);
         }
       }
       
       // Add onboarding context if in onboarding mode
       const requestBody: any = { 
-        message: userMessage, 
+        message: userMessage,
         conversationHistory,
         sessionId: activeSessionId || sessionId
+      }
+      
+      // Add component response if present
+      if (componentResponse) {
+        requestBody.componentResponse = componentResponse;
       }
       
       // Use forced progress if provided (from component responses), otherwise use current state
       const progressToSend = forceProgress || onboardingProgress;
       const shouldBeOnboarding = isOnboardingMode || (progressToSend.currentStep && progressToSend.currentStep !== 'complete');
       
-      if (shouldBeOnboarding) {
+      if (shouldBeOnboarding || componentResponse) {
         requestBody.isOnboarding = true
         requestBody.onboardingPhase = onboardingPhase
         requestBody.onboardingProgress = progressToSend
@@ -1614,6 +1728,7 @@ function AppleChatInterfaceInner() {
         console.log('isOnboardingMode:', isOnboardingMode);
         console.log('shouldBeOnboarding:', shouldBeOnboarding);
         console.log('onboardingProgress being sent:', progressToSend);
+        console.log('componentResponse:', componentResponse);
       } else {
         console.log('=== NOT SENDING AS ONBOARDING ===');
         console.log('isOnboardingMode:', isOnboardingMode);
@@ -1696,17 +1811,39 @@ function AppleChatInterfaceInner() {
           }
         }
         
-        aiResponseContent = data.message || data.response
+        // Extract message and component from different possible response structures
+        aiResponseContent = data.content || data.message || data.response || data.assistantMessage?.content
         
         // Add component to the message if present
         let messageComponent = undefined
         if (data.component) {
-          console.log('=== COMPONENT RECEIVED ===');
+          console.log('=== COMPONENT RECEIVED (direct) ===');
           console.log('data.component:', data.component);
           messageComponent = data.component
+        } else if (data.assistantMessage?.component) {
+          console.log('=== COMPONENT RECEIVED (assistantMessage) ===');
+          console.log('data.assistantMessage.component:', data.assistantMessage.component);
+          messageComponent = data.assistantMessage.component
         } else {
           console.log('=== NO COMPONENT IN RESPONSE ===');
           console.log('data keys:', Object.keys(data));
+          console.log('Full response:', data);
+        }
+        
+        // Update onboarding progress if present
+        if (data.onboardingProgress) {
+          console.log('=== UPDATING ONBOARDING PROGRESS ===');
+          console.log('New progress:', data.onboardingProgress);
+          setOnboardingProgress(prev => ({
+            ...prev,
+            ...data.onboardingProgress,
+            currentStep: data.onboardingProgress.currentStep || prev.currentStep
+          }));
+          
+          // Keep onboarding mode active unless complete
+          if (!data.onboardingProgress.isComplete) {
+            setIsOnboardingMode(true);
+          }
         }
         
         // Update the streaming message with full content and component

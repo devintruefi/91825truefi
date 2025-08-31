@@ -8,30 +8,45 @@ datasource db {
 }
 
 model accounts {
-  id                  String    @id @db.Uuid
-  user_id             String    @db.Uuid
-  plaid_account_id    String    @unique(map: "ix_accounts_plaid_account_id") @db.VarChar(255)
-  name                String    @db.VarChar(255)
-  type                String    @db.VarChar(50)
-  subtype             String?   @db.VarChar(50)
-  mask                String?   @db.VarChar(4)
-  institution_name    String?   @db.VarChar(255)
-  balance             Decimal?  @db.Decimal(18, 2)
-  currency            String?   @db.VarChar(3)
-  is_active           Boolean?
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @db.Timestamptz(6)
-  plaid_connection_id String?   @db.Uuid
-  plaid_item_id       String?
-  plaid_type          String?
-  plaid_subtype       String?
-  available_balance   Decimal?  @db.Decimal
-  limit_amount        Decimal?  @db.Decimal
-  institution_id      String?   @db.Uuid
-  users               users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                                                                String                    @id @db.Uuid
+  user_id                                                           String                    @db.Uuid
+  plaid_account_id                                                  String                    @db.VarChar(255)
+  name                                                              String                    @db.VarChar(255)
+  type                                                              String                    @db.VarChar(50)
+  subtype                                                           String?                   @db.VarChar(50)
+  mask                                                              String?                   @db.VarChar(4)
+  institution_name                                                  String?                   @db.VarChar(255)
+  balance                                                           Decimal?                  @db.Decimal(18, 2)
+  currency                                                          String?                   @db.VarChar(3)
+  is_active                                                         Boolean?
+  created_at                                                        DateTime?                 @default(now()) @db.Timestamptz(6)
+  updated_at                                                        DateTime?                 @db.Timestamptz(6)
+  plaid_connection_id                                               String?                   @db.Uuid
+  plaid_item_id                                                     String?
+  available_balance                                                 Decimal?                  @db.Decimal
+  limit_amount                                                      Decimal?                  @db.Decimal
+  institution_id                                                    String?                   @db.Uuid
+  official_name                                                     String?
+  persistent_account_id                                             String?
+  balances_last_updated                                             DateTime?                 @db.Timestamptz(6)
+  unofficial_currency_code                                          String?
+  institutions                                                      institutions?             @relation(fields: [institution_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plaid_connections                                                 plaid_connections?        @relation(fields: [plaid_item_id], references: [plaid_item_id], onDelete: Cascade, onUpdate: NoAction)
+  users                                                             users                     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  plaid_connections_accounts_plaid_connection_idToplaid_connections plaid_connections?        @relation("accounts_plaid_connection_idToplaid_connections", fields: [plaid_connection_id], references: [id], onUpdate: NoAction, map: "fk_accounts_plaid_connection")
+  credit_card_aprs                                                  credit_card_aprs[]       @ignore
+  goal_accounts                                                     goal_accounts[]
+  holdings                                                          holdings[]
+  holdings_current                                                  holdings_current[]
+  holdings_lots                                                     holdings_lots[]
+  investment_transactions                                           investment_transactions[]
+  student_loan_details                                              student_loan_details?
+  transactions                                                      transactions[]
+  vehicle_assets                                                    vehicle_assets[]
 
   @@index([plaid_account_id], map: "idx_accounts_plaid_id")
   @@index([user_id], map: "idx_accounts_user_id")
+  @@index([plaid_account_id], map: "idx_accounts_plaid_account_id")
 }
 
 model agent_run_log {
@@ -52,15 +67,18 @@ model agent_run_log {
   @@index([user_id], map: "idx_agent_run_log_user_id")
 }
 
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model budget_categories {
-  id         String    @id @db.Uuid
-  budget_id  String    @db.Uuid
-  category   String    @db.VarChar(100)
-  amount     Decimal   @db.Decimal(18, 2)
-  created_at DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @db.Timestamptz(6)
-  budgets    budgets   @relation(fields: [budget_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id              String            @id @db.Uuid
+  budget_id       String            @db.Uuid
+  category        String            @db.VarChar(100)
+  amount          Decimal           @db.Decimal(18, 2)
+  created_at      DateTime?         @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?         @db.Timestamptz(6)
+  budgets         budgets           @relation(fields: [budget_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  budget_spending budget_spending[]
 
+  @@unique([budget_id, category], map: "uq_budget_category")
   @@index([budget_id], map: "idx_budget_categories_budget_id")
   @@index([category], map: "idx_budget_categories_category")
 }
@@ -121,12 +139,15 @@ model chat_messages {
   rich_content  Json?
   turn_number   Int
   created_at    DateTime      @db.Timestamptz(6)
-  chat_sessions chat_sessions @relation(fields: [session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user_id       String        @db.Uuid
+  chat_sessions chat_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users         users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([created_at], map: "idx_chat_messages_created_at")
   @@index([session_id], map: "idx_chat_messages_session_id")
   @@index([turn_number], map: "idx_chat_messages_turn")
   @@index([message_type], map: "idx_chat_messages_type")
+  @@index([user_id, session_id], map: "idx_chat_messages_user_session")
 }
 
 model chat_sessions {
@@ -138,7 +159,7 @@ model chat_sessions {
   created_at    DateTime        @db.Timestamptz(6)
   updated_at    DateTime        @db.Timestamptz(6)
   chat_messages chat_messages[]
-  users         users           @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users         users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([created_at], map: "idx_chat_sessions_created_at")
   @@index([session_id], map: "idx_chat_sessions_session_id")
@@ -166,7 +187,7 @@ model contribution_schedule {
   user_id        String?  @db.Uuid
   monthly_amount Decimal? @db.Decimal(12, 2)
   employer_match Decimal? @db.Decimal(5, 2)
-  users          users?   @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users          users?   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model estate_docs {
@@ -198,7 +219,7 @@ model financial_insights {
   is_read      Boolean
   expires_at   DateTime? @db.Timestamptz(6)
   created_at   DateTime  @db.Timestamptz(6)
-  users        users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([created_at], map: "idx_financial_insights_created_at")
   @@index([severity], map: "idx_financial_insights_severity")
@@ -208,34 +229,50 @@ model financial_insights {
 }
 
 model goals {
-  id             String    @id @db.Uuid
-  user_id        String    @db.Uuid
-  name           String    @db.VarChar(255)
-  description    String?
-  target_amount  Decimal   @db.Decimal(18, 2)
-  current_amount Decimal?  @db.Decimal(18, 2)
-  target_date    DateTime? @db.Timestamptz(6)
-  priority       String?   @db.VarChar(20)
-  is_active      Boolean?
-  created_at     DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime? @db.Timestamptz(6)
-  users          users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                     String               @id @db.Uuid
+  user_id                String               @db.Uuid
+  name                   String               @db.VarChar(255)
+  description            String?
+  target_amount          Decimal              @db.Decimal(18, 2)
+  current_amount         Decimal?             @db.Decimal(18, 2)
+  target_date            DateTime?            @db.Timestamptz(6)
+  priority               String?              @db.VarChar(20)
+  is_active              Boolean?
+  created_at             DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime?            @db.Timestamptz(6)
+  allocation_method      String?              @default("auto") @db.VarChar(20)
+  checking_buffer_amount Decimal?             @default(2000.00) @db.Decimal(10, 2)
+  allocation_percentage  Decimal?             @db.Decimal(5, 2)
+  allocation_priority    Int?                 @default(5)
+  auto_calculated_amount Decimal?             @db.Decimal(10, 2)
+  last_auto_calculation  DateTime?            @db.Timestamptz(6)
+  allocation_history     allocation_history[]
+  goal_accounts          goal_accounts[]
+  users                  users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([user_id], map: "idx_goals_user_id")
+  @@index([allocation_priority], map: "idx_goals_allocation_priority")
 }
 
 model holdings {
-  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  account_id        String?     @db.Uuid
-  security_id       String?     @db.Uuid
-  quantity          Decimal?    @db.Decimal(20, 6)
-  cost_basis        Decimal?    @db.Decimal(18, 2)
-  institution_price Decimal?    @db.Decimal(18, 6)
-  institution_value Decimal?    @db.Decimal(18, 2)
-  last_price_date   DateTime?   @db.Date
-  created_at        DateTime?   @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime?   @default(now()) @db.Timestamptz(6)
-  securities        securities? @relation(fields: [security_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id                        String?     @db.Uuid
+  security_id                       String?     @db.Uuid
+  quantity                          Decimal?    @db.Decimal(20, 6)
+  cost_basis                        Decimal?    @db.Decimal(18, 2)
+  institution_price                 Decimal?    @db.Decimal(18, 6)
+  institution_value                 Decimal?    @db.Decimal(18, 2)
+  last_price_date                   DateTime?   @db.Date
+  created_at                        DateTime?   @default(now()) @db.Timestamptz(6)
+  updated_at                        DateTime?   @default(now()) @db.Timestamptz(6)
+  institution_price_as_of           DateTime?   @db.Date
+  institution_price_datetime        DateTime?   @db.Timestamptz(6)
+  position_iso_currency_code        String?     @db.VarChar(3)
+  position_unofficial_currency_code String?
+  vested_quantity                   Decimal?    @db.Decimal
+  vested_value                      Decimal?    @db.Decimal
+  accounts                          accounts?   @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_holdings_account")
+  securities                        securities? @relation(fields: [security_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_holdings_security")
 
   @@index([account_id], map: "idx_holdings_account")
   @@index([security_id], map: "idx_holdings_security")
@@ -248,6 +285,10 @@ model institutions {
   name                 String
   country_code         String?             @default("US") @db.Char(2)
   created_at           DateTime?           @default(now()) @db.Timestamptz(6)
+  logo_url             String?
+  products             String[]
+  updated_at           DateTime?           @default(now()) @db.Timestamptz(6)
+  accounts             accounts[]
   plaid_connections    plaid_connections[]
 
   @@index([name], map: "idx_institutions_name")
@@ -274,17 +315,32 @@ model insurances {
 }
 
 model loan_details {
-  account_id            String    @id @db.Uuid
-  interest_rate         Decimal?  @db.Decimal(6, 3)
-  origination_principal Decimal?  @db.Decimal(18, 2)
-  origination_date      DateTime? @db.Date
-  maturity_date         DateTime? @db.Date
-  next_payment_due      DateTime? @db.Date
-  next_payment_amount   Decimal?  @db.Decimal(18, 2)
-  last_payment_date     DateTime? @db.Date
-  last_payment_amount   Decimal?  @db.Decimal(18, 2)
-  created_at            DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime? @default(now()) @db.Timestamptz(6)
+  account_id                  String    @id @db.Uuid
+  interest_rate               Decimal?  @db.Decimal(6, 3)
+  origination_principal       Decimal?  @db.Decimal(18, 2)
+  origination_date            DateTime? @db.Date
+  maturity_date               DateTime? @db.Date
+  next_payment_due            DateTime? @db.Date
+  next_payment_amount         Decimal?  @db.Decimal(18, 2)
+  last_payment_date           DateTime? @db.Date
+  last_payment_amount         Decimal?  @db.Decimal(18, 2)
+  created_at                  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime? @default(now()) @db.Timestamptz(6)
+  last_statement_balance      Decimal?  @db.Decimal(18, 2)
+  last_statement_issue_date   DateTime? @db.Date
+  minimum_payment_amount      Decimal?  @db.Decimal(18, 2)
+  escrow_balance              Decimal?  @db.Decimal(18, 2)
+  has_pmi                     Boolean?
+  past_due_amount             Decimal?  @db.Decimal(18, 2)
+  current_late_fee            Decimal?  @db.Decimal(18, 2)
+  ytd_interest_paid           Decimal?  @db.Decimal(18, 2)
+  ytd_principal_paid          Decimal?  @db.Decimal(18, 2)
+  is_overdue                  Boolean?
+  outstanding_interest_amount Decimal?  @db.Decimal(18, 2)
+  payment_reference_number    String?
+  interest_rate_type          String?
+  has_prepayment_penalty      Boolean?
+  property_address            Json?
 }
 
 model manual_assets {
@@ -296,13 +352,15 @@ model manual_assets {
   notes                      String?
   created_at                 DateTime?                    @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime?                    @default(now()) @db.Timestamptz(6)
+  asset_valuations           asset_valuations[]
   business_ownership_details business_ownership_details[]
   collectible_details        collectible_details[]
-  users                      users?                       @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                      users?                       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   other_manual_asset_details other_manual_asset_details[]
   other_manual_assets        other_manual_assets[]
   real_estate_details        real_estate_details[]
-  vehicle_assets             vehicle_assets[]
+  vehicle_assets             vehicle_assets?
+  vehicle_assets_old         vehicle_assets_old[]
   vehicle_details            vehicle_details[]
 
   @@index([user_id], map: "idx_manual_assets_user")
@@ -318,7 +376,7 @@ model manual_liabilities {
   notes           String?
   created_at      DateTime? @default(now()) @db.Timestamptz(6)
   updated_at      DateTime? @default(now()) @db.Timestamptz(6)
-  users           users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users           users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([user_id], map: "idx_manual_liabilities_user")
 }
@@ -361,19 +419,21 @@ model plaid_account_taxonomy {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model plaid_connections {
-  id                        String        @id @db.Uuid
-  user_id                   String        @db.Uuid
-  plaid_access_token        String        @db.VarChar(255)
-  plaid_item_id             String        @db.VarChar(255)
-  plaid_institution_id_text String        @db.VarChar(255)
-  is_active                 Boolean
-  last_sync_at              DateTime?     @db.Timestamptz(6)
-  created_at                DateTime      @db.Timestamptz(6)
-  updated_at                DateTime      @db.Timestamptz(6)
-  institution_id            String?       @db.Uuid
-  institution_name          String?
-  institutions              institutions? @relation(fields: [institution_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_plaid_connections_institution")
-  users                     users         @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                                                       String        @id @db.Uuid
+  user_id                                                  String        @db.Uuid
+  plaid_access_token                                       String        @db.VarChar(255)
+  plaid_item_id                                            String        @unique @db.VarChar(255)
+  plaid_institution_id_text                                String        @db.VarChar(255)
+  is_active                                                Boolean
+  last_sync_at                                             DateTime?     @db.Timestamptz(6)
+  created_at                                               DateTime      @db.Timestamptz(6)
+  updated_at                                               DateTime      @db.Timestamptz(6)
+  institution_id                                           String?       @db.Uuid
+  institution_name                                         String?
+  accounts                                                 accounts[]
+  accounts_accounts_plaid_connection_idToplaid_connections accounts[]    @relation("accounts_plaid_connection_idToplaid_connections")
+  institutions                                             institutions? @relation(fields: [institution_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_plaid_connections_institution")
+  users                                                    users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([plaid_institution_id_text], map: "idx_plaid_connections_institution")
   @@index([plaid_item_id], map: "idx_plaid_connections_item_id")
@@ -408,25 +468,44 @@ model real_estate_details {
 }
 
 model recurring_income {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id       String?   @db.Uuid
-  source        String?
-  gross_monthly Decimal?  @db.Decimal(12, 2)
-  next_pay_date DateTime? @db.Date
-  inflation_adj Boolean?  @default(true)
-  users         users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String?   @db.Uuid
+  source         String?
+  gross_monthly  Decimal?  @db.Decimal(12, 2)
+  next_pay_date  DateTime? @db.Date
+  inflation_adj  Boolean?  @default(true)
+  frequency      String?
+  net_monthly    Decimal?  @db.Decimal
+  employer       String?
+  effective_from DateTime? @db.Date
+  effective_to   DateTime? @db.Date
+  is_net         Boolean   @default(false)
+  metadata       Json?     @default("{}")
+  users          users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, source, frequency, effective_from], map: "recurring_income_unique_source")
+  @@unique([user_id, source, effective_from], map: "uq_recurring_income_source")
 }
 
 model securities {
-  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name          String?
-  ticker        String?
-  security_type String?
-  cusip         String?
-  isin          String?
-  currency      String?    @default("USD") @db.Char(3)
-  created_at    DateTime?  @default(now()) @db.Timestamptz(6)
-  holdings      holdings[]
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                    String?
+  ticker                  String?
+  security_type           String?
+  cusip                   String?
+  isin                    String?
+  currency                String?                   @default("USD") @db.Char(3)
+  created_at              DateTime?                 @default(now()) @db.Timestamptz(6)
+  is_cash_equivalent      Boolean?
+  institution_security_id String?
+  institution_id          String?
+  proxy_security_id       String?
+  sedol                   String?
+  plaid_security_id       String?
+  holdings                holdings[]
+  holdings_current        holdings_current[]
+  holdings_lots           holdings_lots[]
+  investment_transactions investment_transactions[]
 }
 
 model tax_profile {
@@ -435,31 +514,43 @@ model tax_profile {
   state         String?  @db.Char(2)
   federal_rate  Decimal? @db.Decimal(4, 2)
   state_rate    Decimal? @db.Decimal(4, 2)
-  users         users    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users         users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model transactions {
-  id                   String   @id @db.Uuid
-  user_id              String   @db.Uuid
-  account_id           String   @db.Uuid
-  plaid_transaction_id String   @unique @db.VarChar(255)
-  amount               Float
-  currency_code        String   @db.VarChar(3)
-  date                 DateTime @db.Timestamptz(6)
-  name                 String   @db.VarChar(255)
-  merchant_name        String?  @db.VarChar(255)
-  category             String?  @db.VarChar(100)
-  category_id          String?  @db.VarChar(50)
-  pending              Boolean
-  payment_channel      String?  @db.VarChar(50)
-  transaction_type     String?  @db.VarChar(50)
-  location             Json?
-  payment_meta         Json?
-  created_at           DateTime @db.Timestamptz(6)
-  pfc_primary          String?
-  pfc_detailed         String?
-  users                users    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                       String                  @id @db.Uuid
+  user_id                  String                  @db.Uuid
+  account_id               String                  @db.Uuid
+  plaid_transaction_id     String                  @db.VarChar(255)
+  amount                   Decimal                 @db.Decimal(18, 2)
+  currency_code            String                  @db.VarChar(3)
+  date                     DateTime                @db.Timestamptz(6)
+  name                     String                  @db.VarChar(255)
+  merchant_name            String?                 @db.VarChar(255)
+  category                 String?                 @db.VarChar(100)
+  category_id              String?                 @db.VarChar(50)
+  pending                  Boolean
+  payment_channel          String?                 @db.VarChar(50)
+  transaction_type         String?                 @db.VarChar(50)
+  location                 Json?
+  payment_meta             Json?
+  created_at               DateTime                @db.Timestamptz(6)
+  pfc_primary              String?
+  pfc_detailed             String?
+  category_uuid            String?                 @db.Uuid
+  authorized_date          DateTime?               @db.Date
+  authorized_datetime      DateTime?               @db.Timestamptz(6)
+  posted_datetime          DateTime?               @db.Timestamptz(6)
+  pending_transaction_id   String?                 @db.VarChar(255)
+  merchant_entity_id       String?
+  pfc_confidence_level     String?
+  transaction_code         String?
+  account_owner            String?
+  unofficial_currency_code String?
+  accounts                 accounts                @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_txn_account")
+  transaction_categories   transaction_categories? @relation(fields: [category_uuid], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                    users                   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([account_id], map: "idx_transactions_account_id")
   @@index([amount], map: "idx_transactions_amount")
@@ -470,6 +561,13 @@ model transactions {
   @@index([plaid_transaction_id], map: "idx_transactions_plaid_id")
   @@index([user_id], map: "idx_transactions_user_id")
   @@index([user_id, date(sort: Desc)], map: "idx_txn_user_date")
+  @@index([account_id], map: "idx_transactions_account_id_fk")
+  @@index([category_id], map: "idx_transactions_category_id")
+  @@index([category_uuid], map: "idx_transactions_category_uuid")
+  @@index([user_id, date(sort: Desc)], map: "idx_transactions_user_date")
+  @@index([pending_transaction_id], map: "transactions_pending_txn_id_idx")
+  @@index([location], map: "idx_transactions_location_gin", type: Gin)
+  @@index([payment_meta], map: "idx_transactions_payment_meta_gin", type: Gin)
 }
 
 model user_identity {
@@ -483,7 +581,7 @@ model user_identity {
   postal_code   String?
   created_at    DateTime? @default(now()) @db.Timestamptz(6)
   updated_at    DateTime? @default(now()) @db.Timestamptz(6)
-  users         users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users         users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model user_preferences {
@@ -501,41 +599,51 @@ model user_preferences {
   investment_horizon    String?  @db.VarChar(20)
   created_at            DateTime @db.Timestamptz(6)
   updated_at            DateTime @db.Timestamptz(6)
-  users                 users    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users                 users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([user_id], map: "idx_user_preferences_user_id")
 }
 
 model users {
-  id                        String                      @id @db.Uuid
-  email                     String                      @unique(map: "ix_users_email") @db.VarChar(255)
-  first_name                String                      @db.VarChar(100)
-  last_name                 String                      @db.VarChar(100)
-  password_hash             String                      @db.VarChar(255)
-  is_active                 Boolean
-  is_advisor                Boolean
-  created_at                DateTime                    @db.Timestamptz(6)
-  updated_at                DateTime                    @db.Timestamptz(6)
-  accounts                  accounts[]
-  agent_run_log             agent_run_log[]
-  budgets                   budgets[]
-  chat_history              chat_history[]
-  chat_sessions             chat_sessions[]
-  contribution_schedule     contribution_schedule[]
-  estate_docs               estate_docs[]
-  financial_insights        financial_insights[]
-  goals                     goals[]
-  insurances                insurances[]
-  manual_assets             manual_assets[]
-  manual_liabilities        manual_liabilities[]
-  onboarding_progress       onboarding_progress?
-  plaid_connections         plaid_connections[]
-  recurring_income          recurring_income[]
-  tax_profile               tax_profile?
-  transactions              transactions[]
-  user_identity             user_identity?
-  user_onboarding_responses user_onboarding_responses[]
-  user_preferences          user_preferences?
+  id                           String                      @id @db.Uuid
+  email                        String                      @unique(map: "ix_users_email") @db.VarChar(255)
+  first_name                   String                      @db.VarChar(100)
+  last_name                    String                      @db.VarChar(100)
+  password_hash                String                      @db.VarChar(255)
+  is_active                    Boolean
+  is_advisor                   Boolean
+  created_at                   DateTime                    @db.Timestamptz(6)
+  updated_at                   DateTime                    @db.Timestamptz(6)
+  default_checking_buffer      Decimal?                    @default(2000.00) @db.Decimal(10, 2)
+  auto_allocation_enabled      Boolean?                    @default(true)
+  allocation_refresh_frequency String?                     @default("daily") @db.VarChar(20)
+  plaid_access_token           String?
+  accounts                     accounts[]
+  agent_run_log                agent_run_log[]
+  allocation_history           allocation_history[]
+  budgets                      budgets[]
+  chat_history                 chat_history[]
+  chat_messages                chat_messages[]
+  chat_sessions                chat_sessions[]
+  contribution_schedule        contribution_schedule[]
+  estate_docs                  estate_docs[]
+  financial_insights           financial_insights[]
+  goals                        goals[]
+  insurances                   insurances[]
+  manual_assets                manual_assets[]
+  manual_liabilities           manual_liabilities[]
+  onboarding_progress          onboarding_progress?
+  plaid_connections            plaid_connections[]
+  plaid_import_metadata        plaid_import_metadata[]
+  recurring_income             recurring_income[]
+  tax_profile                  tax_profile?
+  transaction_categories       transaction_categories[]
+  transactions                 transactions[]
+  user_identity                user_identity?
+  user_onboarding_responses    user_onboarding_responses[]
+  user_passwords               user_passwords?
+  user_preferences             user_preferences?
+  user_two_factor_auth         user_two_factor_auth?
 
   @@index([created_at], map: "idx_users_created_at")
   @@index([email], map: "idx_users_email")
@@ -565,20 +673,20 @@ model onboarding_progress {
 }
 
 model vehicle_assets {
-  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  manual_asset_id String        @db.Uuid
+  id              BigInt        @id(map: "vehicle_assets_new_pkey") @default(autoincrement())
+  asset_id        String        @unique(map: "vehicle_assets_asset_uidx") @db.Uuid
   make            String?
   model           String?
   year            Int?
   vin             String?
-  purchase_price  Decimal?      @db.Decimal
+  purchase_price  Decimal?      @db.Decimal(18, 2)
   purchase_date   DateTime?     @db.Date
   mileage         Int?
-  estimated_value Decimal?      @db.Decimal
-  valuation_date  DateTime?     @db.Date
+  loan_account_id String?       @db.Uuid
   created_at      DateTime?     @default(now()) @db.Timestamptz(6)
   updated_at      DateTime?     @default(now()) @db.Timestamptz(6)
-  manual_assets   manual_assets @relation(fields: [manual_asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  manual_assets   manual_assets @relation(fields: [asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "vehicle_assets_new_asset_id_fkey")
+  accounts        accounts?     @relation(fields: [loan_account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "vehicle_assets_new_loan_account_id_fkey")
 }
 
 model vehicle_details {
@@ -596,4 +704,239 @@ model vehicle_details {
   created_at      DateTime?     @default(now()) @db.Timestamptz(6)
   updated_at      DateTime?     @default(now()) @db.Timestamptz(6)
   manual_assets   manual_assets @relation(fields: [manual_asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model allocation_history {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            String?   @db.Uuid
+  goal_id            String?   @db.Uuid
+  calculated_amount  Decimal?  @db.Decimal(10, 2)
+  calculation_method String?   @db.VarChar(50)
+  account_snapshot   Json?
+  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  goals              goals?    @relation(fields: [goal_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users              users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([goal_id], map: "idx_allocation_history_goal_id")
+  @@index([user_id], map: "idx_allocation_history_user_id")
+}
+
+model asset_valuations {
+  id            BigInt        @id @default(autoincrement())
+  asset_id      String        @db.Uuid
+  as_of_date    DateTime      @db.Date
+  value         Decimal       @db.Decimal(18, 2)
+  method        String?
+  source        String?
+  created_at    DateTime?     @default(now()) @db.Timestamptz(6)
+  manual_assets manual_assets @relation(fields: [asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([asset_id, as_of_date])
+  @@index([asset_id, as_of_date], map: "asset_valuations_asset_date_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model budget_spending {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category_id       String            @db.Uuid
+  manual_amount     Decimal?          @default(0) @db.Decimal(18, 2)
+  month             Int               @db.SmallInt
+  year              Int
+  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?         @default(now()) @db.Timestamptz(6)
+  budget_categories budget_categories @relation(fields: [category_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_budget_spending_category")
+
+  @@unique([category_id, year, month])
+  @@index([category_id], map: "idx_budget_spending_category_id")
+  @@index([year, month], map: "idx_budget_spending_month_year")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model credit_card_aprs {
+  account_id             String?   @db.Uuid
+  apr_type               String?
+  apr_percentage         Decimal?  @db.Decimal(7, 4)
+  balance_subject_to_apr Decimal?  @db.Decimal(18, 2)
+  interest_charge_amount Decimal?  @db.Decimal(18, 2)
+  id                     BigInt    @id @default(autoincrement())
+  accounts               accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([account_id, apr_type], map: "uq_credit_card_aprs_account_type")
+  @@ignore
+}
+
+model goal_accounts {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  goal_id               String    @db.Uuid
+  account_id            String    @db.Uuid
+  allocation_percentage Decimal?  @default(100.00) @db.Decimal(5, 2)
+  allocation_type       String?   @default("percentage") @db.VarChar(20)
+  fixed_amount          Decimal?  @db.Decimal(10, 2)
+  threshold_amount      Decimal?  @db.Decimal(10, 2)
+  is_active             Boolean?  @default(true)
+  created_at            DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime? @default(now()) @db.Timestamptz(6)
+  accounts              accounts  @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  goals                 goals     @relation(fields: [goal_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([goal_id, account_id])
+  @@index([account_id], map: "idx_goal_accounts_account_id")
+  @@index([goal_id], map: "idx_goal_accounts_goal_id")
+}
+
+model holdings_current {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id       String     @db.Uuid
+  security_id      String     @db.Uuid
+  quantity         Decimal    @db.Decimal
+  cost_basis_total Decimal?   @db.Decimal
+  market_value     Decimal?   @db.Decimal
+  as_of_date       DateTime   @db.Date
+  accounts         accounts   @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  securities       securities @relation(fields: [security_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([account_id, security_id, as_of_date])
+}
+
+model holdings_lots {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id       String     @db.Uuid
+  security_id      String     @db.Uuid
+  lot_opened_at    DateTime?  @db.Date
+  quantity         Decimal    @db.Decimal
+  cost_basis_total Decimal?   @db.Decimal
+  market_value     Decimal?   @db.Decimal
+  as_of_date       DateTime   @db.Date
+  accounts         accounts   @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  securities       securities @relation(fields: [security_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model investment_transactions {
+  id                              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                         String      @db.Uuid
+  account_id                      String      @db.Uuid
+  security_id                     String?     @db.Uuid
+  plaid_investment_transaction_id String      @unique
+  date                            DateTime    @db.Timestamptz(6)
+  name                            String?
+  type                            String?
+  subtype                         String?
+  amount                          Decimal?    @db.Decimal(18, 2)
+  quantity                        Decimal?    @db.Decimal
+  price                           Decimal?    @db.Decimal(18, 6)
+  fees                            Decimal?    @db.Decimal(18, 2)
+  currency_code                   String?     @db.VarChar(3)
+  created_at                      DateTime?   @default(now()) @db.Timestamptz(6)
+  cancel_transaction_id           String?
+  unofficial_currency_code        String?
+  accounts                        accounts    @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_invtxn_account")
+  securities                      securities? @relation(fields: [security_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_invtxn_security")
+
+  @@index([account_id, date(sort: Desc)], map: "inv_txn_account_date_idx")
+}
+
+model plaid_category_map {
+  plaid_category_id      String                 @id
+  category_uuid          String                 @db.Uuid
+  transaction_categories transaction_categories @relation(fields: [category_uuid], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model plaid_import_metadata {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String?   @db.Uuid
+  plaid_account_id String
+  import_batch_id  String?
+  institution_name String?
+  import_status    String?
+  import_timestamp DateTime? @db.Timestamptz(6)
+  error_details    String?
+  users            users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([plaid_account_id], map: "idx_plaid_import_metadata_plaid_account_id")
+  @@index([user_id], map: "idx_plaid_import_metadata_user_id")
+}
+
+model student_loan_details {
+  id                              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id                      String     @unique(map: "student_loan_details_account_uidx") @db.Uuid
+  account_number                  String?
+  loan_name                       String?
+  loan_status_type                String?
+  loan_status_end_date            DateTime?  @db.Date
+  expected_payoff_date            DateTime?  @db.Date
+  guarantor                       String?
+  disbursement_dates              DateTime[] @db.Date
+  interest_rate_percentage        Decimal?   @db.Decimal(7, 4)
+  repayment_plan_type             String?
+  repayment_plan_description      String?
+  pslf_payments_made              Int?
+  pslf_payments_remaining         Int?
+  pslf_estimated_eligibility_date DateTime?  @db.Date
+  servicer_address                Json?
+  ytd_interest_paid               Decimal?   @db.Decimal(18, 2)
+  ytd_principal_paid              Decimal?   @db.Decimal(18, 2)
+  created_at                      DateTime   @default(now()) @db.Timestamptz(6)
+  last_payment_date               DateTime?  @db.Date
+  last_payment_amount             Decimal?   @db.Decimal(18, 2)
+  next_payment_due                DateTime?  @db.Date
+  minimum_payment_amount          Decimal?   @db.Decimal(18, 2)
+  origination_principal           Decimal?   @db.Decimal(18, 2)
+  origination_date                DateTime?  @db.Date
+  outstanding_interest_amount     Decimal?   @db.Decimal(18, 2)
+  payment_reference_number        String?
+  sequence_number                 String?
+  accounts                        accounts   @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_student_loans_account")
+
+  @@index([account_id], map: "student_loan_details_account_idx")
+}
+
+model transaction_categories {
+  id                           String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                      String?                  @db.Uuid
+  category_name                String
+  parent_category_id           String?                  @db.Uuid
+  is_system_defined            Boolean?                 @default(false)
+  created_at                   DateTime?                @default(now()) @db.Timestamptz(6)
+  is_essential                 Boolean                  @default(false)
+  plaid_category_id            String?
+  plaid_category_map           plaid_category_map[]
+  transaction_categories       transaction_categories?  @relation("transaction_categoriesTotransaction_categories", fields: [parent_category_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_transaction_categories transaction_categories[] @relation("transaction_categoriesTotransaction_categories")
+  users                        users?                   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  transactions                 transactions[]
+
+  @@index([user_id], map: "idx_transaction_categories_user_id")
+}
+
+model user_passwords {
+  user_id       String    @id @db.Uuid
+  password_hash String
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+  users         users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model user_two_factor_auth {
+  user_id           String    @id @db.Uuid
+  two_factor_method String?
+  two_factor_secret String?
+  last_verified_at  DateTime? @db.Timestamptz(6)
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+  users             users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model vehicle_assets_old {
+  id              String        @id(map: "vehicle_assets_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  manual_asset_id String        @db.Uuid
+  make            String?
+  model           String?
+  year            Int?
+  vin             String?
+  purchase_price  Decimal?      @db.Decimal
+  purchase_date   DateTime?     @db.Date
+  mileage         Int?
+  estimated_value Decimal?      @db.Decimal
+  valuation_date  DateTime?     @db.Date
+  created_at      DateTime?     @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime?     @default(now()) @db.Timestamptz(6)
+  manual_assets   manual_assets @relation(fields: [manual_asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "vehicle_assets_manual_asset_id_fkey")
 }

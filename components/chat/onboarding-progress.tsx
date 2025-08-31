@@ -1,24 +1,13 @@
 "use client"
 
 import { Progress } from '@/components/ui/progress';
-import { CheckCircle, Circle } from 'lucide-react';
-import { ONBOARDING_STEPS, STEP_NAMES, getProgressPercentage, getNextStep, OnboardingStep } from '@/lib/onboarding/onboarding-manager';
-
-// Helper to get preview text for next step
-function getNextStepPreview(currentStep: string): string {
-  const nextStepMap: Record<string, string> = {
-    [ONBOARDING_STEPS.MAIN_GOAL]: 'Your life stage',
-    [ONBOARDING_STEPS.LIFE_STAGE]: 'Family size',
-    [ONBOARDING_STEPS.DEPENDENTS]: 'Bank connection',
-    [ONBOARDING_STEPS.BANK_CONNECTION]: 'Income verification',
-    [ONBOARDING_STEPS.INCOME_CONFIRMATION]: 'Risk comfort',
-    [ONBOARDING_STEPS.RISK_TOLERANCE]: 'Financial goals',
-    [ONBOARDING_STEPS.GOALS_SELECTION]: 'Budget setup',
-    [ONBOARDING_STEPS.BUDGET_REVIEW]: 'Dashboard preview',
-    [ONBOARDING_STEPS.DASHBOARD_PREVIEW]: 'All done!'
-  };
-  return nextStepMap[currentStep] || '';
-}
+import { CheckCircle } from 'lucide-react';
+import { 
+  ORDERED_STEPS, 
+  STEP_CONFIG, 
+  calculateProgress,
+  type StepId 
+} from '@/lib/onboarding/canonical-steps';
 
 interface OnboardingProgressProps {
   currentStep: string;
@@ -26,35 +15,37 @@ interface OnboardingProgressProps {
 }
 
 export function OnboardingProgress({ currentStep, completedSteps }: OnboardingProgressProps) {
-  const progress = getProgressPercentage(currentStep as any);
-  const steps = Object.values(ONBOARDING_STEPS).filter(s => s !== 'complete');
-  const currentStepIndex = Math.max(0, steps.indexOf(currentStep as any)); // Ensure minimum 0
-  const totalSteps = steps.length;
+  // Use canonical progress calculation
+  const progressInfo = calculateProgress(currentStep as StepId);
+  const { currentIndex, total, percentage, nextLabel } = progressInfo;
   
   // Calculate what information has been collected based on actual completed steps
   const collectedInfo = completedSteps.length;
-  const remainingInfo = Math.max(0, totalSteps - collectedInfo - 1); // -1 for current step, ensure min 0
+  const remainingInfo = Math.max(0, total - collectedInfo - 1); // -1 for current step
+  
+  // Get current step label
+  const currentStepLabel = STEP_CONFIG[currentStep as StepId]?.label || currentStep;
   
   return (
     <div className="w-full p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-lg mb-4">
       <div className="space-y-4">
-        {/* Header with Step Count */}
+        {/* Header with Step Count - FIXED to show correct progress */}
         <div className="text-center">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-            Step {currentStepIndex + 1} of {totalSteps}
+            Step {currentIndex} of {total}
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Setting up your personalized financial profile
           </p>
         </div>
         
-        {/* Progress Bar with Enhanced Visual */}
+        {/* Progress Bar with Correct Percentage */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
             <span>Overall Progress</span>
-            <span className="font-semibold">{progress}% Complete</span>
+            <span className="font-semibold">{percentage}% Complete</span>
           </div>
-          <Progress value={progress} className="h-3" />
+          <Progress value={percentage} className="h-3" />
         </div>
         
         {/* Information Collection Status */}
@@ -81,11 +72,12 @@ export function OnboardingProgress({ currentStep, completedSteps }: OnboardingPr
           </div>
         </div>
         
-        {/* Enhanced Step Indicators */}
+        {/* Enhanced Step Indicators - Show first 6 steps */}
         <div className="flex justify-between items-center">
-          {steps.slice(0, Math.min(6, totalSteps)).map((step, index) => {
+          {ORDERED_STEPS.slice(0, Math.min(6, total)).map((step, index) => {
             const isCompleted = completedSteps.includes(step);
             const isCurrent = step === currentStep;
+            const stepConfig = STEP_CONFIG[step];
             
             return (
               <div key={step} className="flex flex-col items-center">
@@ -108,21 +100,21 @@ export function OnboardingProgress({ currentStep, completedSteps }: OnboardingPr
                     isCompleted ? 'text-green-600 dark:text-green-400' :
                     'text-gray-500 dark:text-gray-400'}
                 `}>
-                  {STEP_NAMES[step].split(' ').slice(0, 2).join(' ')}
+                  {stepConfig.label.split(' ').slice(0, 2).join(' ')}
                 </span>
               </div>
             );
           })}
         </div>
         
-        {/* Current Step Details */}
+        {/* Current Step Details with FIXED "Coming next" */}
         <div className="text-center space-y-1">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            📍 {STEP_NAMES[currentStep as OnboardingStep]}
+            📍 {currentStepLabel}
           </p>
-          {progress < 100 && (
+          {nextLabel && percentage < 100 && (
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Coming next: {getNextStepPreview(currentStep)}
+              Coming next: {nextLabel}
             </p>
           )}
         </div>

@@ -1,8 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import { ONBOARDING_STEPS, OnboardingStep } from '@/lib/onboarding/steps';
 
 const prisma = new PrismaClient();
+
+// Map legacy phase names to new canonical step IDs
+const PHASE_TO_STEP_MAP: Record<string, OnboardingStep> = {
+  'welcome': 'welcome',
+  'consent': 'consent',
+  'main-goal': 'main_goal',
+  'life-stage': 'life_stage',
+  'dependents': 'dependents',
+  'jurisdiction': 'jurisdiction',
+  'household': 'household',
+  'plaid-connection': 'plaid_connection',
+  'income-capture': 'income_capture',
+  'income-confirmation': 'income_confirmation',
+  'manual-income': 'manual_income',
+  'pay-structure': 'pay_structure',
+  'benefits-equity': 'benefits_equity',
+  'expenses-capture': 'expenses_capture',
+  'detected-expenses': 'detected_expenses',
+  'manual-expenses': 'manual_expenses',
+  'quick-accounts': 'quick_accounts',
+  'debts-detail': 'debts_detail',
+  'housing': 'housing',
+  'insurance': 'insurance',
+  'emergency-fund': 'emergency_fund',
+  'risk-tolerance': 'risk_tolerance',
+  'risk-capacity': 'risk_capacity',
+  'preferences-values': 'preferences_values',
+  'goals-selection': 'goals_selection',
+  'goal-parameters': 'goal_parameters',
+  'budget-review': 'budget_review',
+  'savings-auto-rules': 'savings_auto_rules',
+  'plan-tradeoffs': 'plan_tradeoffs',
+  'dashboard-preview': 'dashboard_preview',
+  'first-actions': 'first_actions',
+  'monitoring-preferences': 'monitoring_preferences',
+  'celebrate-complete': 'celebrate_complete',
+  'complete': 'complete',
+  // Legacy mappings
+  'preview': 'dashboard_preview',
+  'done': 'complete'
+};
 
 export async function POST(request: NextRequest) {
   let retryCount = 0;
@@ -43,19 +85,27 @@ export async function POST(request: NextRequest) {
         });
       }
 
+    // Map phase to canonical step ID
+    const stepId = PHASE_TO_STEP_MAP[phase] || phase;
+    const isValidStep = Object.values(ONBOARDING_STEPS).includes(stepId as OnboardingStep);
+    
+    if (!isValidStep && phase !== 'complete') {
+      console.warn(`Invalid step ID: ${phase}, using as-is`);
+    }
+
     // 1. Update onboarding_progress table
     await prisma.onboarding_progress.upsert({
       where: { user_id: userId },
       update: {
-        current_step: phase,
-        is_complete: phase === 'complete',
+        current_step: stepId,
+        is_complete: stepId === 'complete' || phase === 'complete',
         updated_at: new Date()
       },
       create: {
         id: crypto.randomUUID(),
         user_id: userId,
-        current_step: phase,
-        is_complete: phase === 'complete',
+        current_step: stepId,
+        is_complete: stepId === 'complete' || phase === 'complete',
         created_at: new Date(),
         updated_at: new Date()
       }
@@ -280,8 +330,8 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ 
         success: true,
-        phase: phase || currentStep,
-        dashboardReady: phase === 'complete' || progress?.showDashboardPreview,
+        phase: stepId || phase || currentStep,
+        dashboardReady: stepId === 'complete' || phase === 'complete' || progress?.showDashboardPreview,
         retryCount
       });
 

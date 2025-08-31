@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { OnboardingChatSessionManager } from '@/lib/onboarding/chat-session-manager';
-import { generateOnboardingSummary } from '@/lib/onboarding/unified-onboarding-flow';
 import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
