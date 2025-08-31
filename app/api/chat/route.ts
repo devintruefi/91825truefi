@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       message, 
       componentResponse, 
       onboardingProgress,
-      isOnboarding,
+      isOnboarding: requestIsOnboarding,
       userFirstName: requestUserFirstName
     } = await request.json();
 
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       console.log('No authorization token provided in request');
       
       // Check if this is an onboarding request - allow limited access
-      if (isOnboarding || componentResponse) {
+      if (requestIsOnboarding || componentResponse) {
         console.log('Onboarding request detected without token - checking for userId in request');
         // For onboarding, try to use userId from request if provided
         if (requestUserId) {

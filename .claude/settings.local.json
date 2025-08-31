@@ -1,13 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm run dev:*)"
     ],
+    "deny": [],
+    "ask": [],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
       "c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625"
-    ],
-    "deny": [],
-    "ask": []
+    ]
   }
 }
