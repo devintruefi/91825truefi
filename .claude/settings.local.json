@@ -1,44 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Bash(grep:*)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components\\chat/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components\\chat/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components\\chat/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\app\\api\\chat/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\app\\api\\chat/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\app\\api\\chat/**)",
-      "Bash(npx tsc:*)",
-      "Bash(npm run build:*)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\prisma/**)",
-      "Read(c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625/**)",
-      "Bash(node:*)",
-      "Bash(npx tsx:*)",
-      "Bash(git checkout:*)",
-      "Bash(npx prisma migrate:*)",
-      "Bash(cd:*)",
-      "Bash(npm test:*)",
-      "Bash(git add:*)",
-      "Bash(properly\" message.\n\n🤖 Generated with [Claude Code](https://claude.ai/code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git commit:*)"
     ],
     "defaultMode": "acceptEdits",
     "additionalDirectories": [
       "c:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625"
-    ]
+    ],
+    "deny": [],
+    "ask": []
   }
 }

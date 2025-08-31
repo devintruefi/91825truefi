@@ -185,6 +185,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
             // regardless of whether it's demo or not - this ensures newly created users are loaded
             console.log('Setting existing user from localStorage:', user);
             setUser(user)
+            
+            // IMPORTANT: Ensure we have an auth token for this user
+            // If no token exists, generate a local one
+            const existingToken = localStorage.getItem('auth_token');
+            if (!existingToken) {
+              console.log('User exists but no auth_token found, generating local token');
+              // Generate a simple JWT-like token for local use
+              const localToken = btoa(JSON.stringify({
+                userId: user.id,
+                user_id: user.id,
+                sub: user.id,
+                first_name: user.first_name,
+                firstName: user.first_name,
+                email: user.email,
+                iat: Date.now(),
+                exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+              }));
+              localStorage.setItem('auth_token', localToken);
+              console.log('Generated and stored local auth token');
+            }
+            
             setLoading(false)
             return
           } catch (err) {
@@ -284,6 +305,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
         setUser(demoUser)
         localStorage.setItem('demo_user_id', demoUser.id)
+        
+        // Generate auth token for demo user
+        const demoToken = btoa(JSON.stringify({
+          userId: demoUser.id,
+          user_id: demoUser.id,
+          sub: demoUser.id,
+          first_name: demoUser.first_name,
+          firstName: demoUser.first_name,
+          email: demoUser.email,
+          iat: Date.now(),
+          exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+        }));
+        localStorage.setItem('auth_token', demoToken);
+        console.log('Generated auth token for demo user');
+        
         return
       }
 
@@ -335,6 +371,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('current_user_id', user.id);
           localStorage.setItem('current_user_data', JSON.stringify(user));
           localStorage.removeItem('demo_user_id');
+          
+          // Generate auth token for local user login
+          const localToken = btoa(JSON.stringify({
+            userId: user.id,
+            user_id: user.id,
+            sub: user.id,
+            first_name: user.first_name,
+            firstName: user.first_name,
+            email: user.email,
+            iat: Date.now(),
+            exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+          }));
+          localStorage.setItem('auth_token', localToken);
+          console.log('Generated auth token for local user login');
+          
           return;
         }
         
