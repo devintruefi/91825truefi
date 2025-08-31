@@ -17,34 +17,55 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
+    // Parse request body first
+    const { 
+      sessionId, 
+      userId: requestUserId, 
+      message, 
+      componentResponse, 
+      onboardingProgress,
+      isOnboarding,
+      userFirstName: requestUserFirstName
+    } = await request.json();
+
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
     let userId = '';
     let isAuthenticated = false;
     let userFirstName = 'there';
 
-    // Require authentication
+    // Check for authentication token
     if (!token) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+      console.log('No authorization token provided in request');
+      
+      // Check if this is an onboarding request - allow limited access
+      if (isOnboarding || componentResponse) {
+        console.log('Onboarding request detected without token - checking for userId in request');
+        // For onboarding, try to use userId from request if provided
+        if (requestUserId) {
+          userId = requestUserId;
+          userFirstName = requestUserFirstName || 'there';
+          console.log('Using userId from request for onboarding:', userId);
+        } else {
+          console.error('No token and no userId in onboarding request');
+          return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+        }
+      } else {
+        return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+      }
+    } else {
+      // Verify the token
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        userId = decoded.userId || decoded.sub || decoded.user_id || '';
+        userFirstName = decoded.first_name || decoded.firstName || 'there';
+        isAuthenticated = true;
+        console.log('Token verified successfully for user:', userId);
+      } catch (error) {
+        console.error('Token verification failed:', error);
+        return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+      }
     }
-
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-      userId = decoded.userId || decoded.sub || decoded.user_id || '';
-      userFirstName = decoded.first_name || decoded.firstName || 'there';
-      isAuthenticated = true;
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const { 
-      sessionId, 
-      userId: requestUserId, 
-      message, 
-      componentResponse, 
-      onboardingProgress 
-    } = await request.json();
 
     // Use userId from token, not from request body for security
     if (!userId && requestUserId) {

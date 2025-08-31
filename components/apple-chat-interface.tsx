@@ -1662,16 +1662,39 @@ function AppleChatInterfaceInner() {
       console.log('user.id:', user?.id);
       console.log('localStorage auth_token:', localStorage.getItem('auth_token'));
       
-      if (user) {
-        const token = localStorage.getItem('auth_token')
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`
-          console.log('Authorization header set:', `Bearer ${token.substring(0, 20)}...`);
+      // Try to get token from localStorage first (most reliable)
+      const token = localStorage.getItem('auth_token');
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+        console.log('Authorization header set:', `Bearer ${token.substring(0, 20)}...`);
+      } else if (user) {
+        // If no token in localStorage but user exists, we have a problem
+        console.error('WARNING: User is logged in but no auth_token in localStorage!');
+        console.log('User data:', { id: user.id, first_name: user.first_name });
+        
+        // Try to recover by checking sessionStorage or cookies
+        const sessionToken = sessionStorage.getItem('auth_token');
+        if (sessionToken) {
+          console.log('Found token in sessionStorage, using that');
+          headers['Authorization'] = `Bearer ${sessionToken}`;
+          // Also save to localStorage for future use
+          localStorage.setItem('auth_token', sessionToken);
         } else {
-          console.log('No auth_token found in localStorage');
+          console.error('No token found in sessionStorage either');
+          // This is a critical error - user is logged in but we have no token
+          setMessages(prev => [...prev, {
+            id: `error_${Date.now()}`,
+            content: "Authentication error: Please refresh the page or log in again.",
+            sender: "system",
+            timestamp: new Date()
+          }]);
+          setIsLoading(false);
+          setIsTyping(false);
+          return;
         }
       } else {
-        console.log('No user object found');
+        console.log('No user object found - user not logged in');
       }
       
       console.log('Final headers:', headers);
@@ -1724,6 +1747,13 @@ function AppleChatInterfaceInner() {
         requestBody.isOnboarding = true
         requestBody.onboardingPhase = onboardingPhase
         requestBody.onboardingProgress = progressToSend
+        
+        // Include user info for fallback authentication during onboarding
+        if (user && !token) {
+          requestBody.userId = user.id;
+          requestBody.userFirstName = user.first_name;
+        }
+        
         console.log('=== SENDING ONBOARDING REQUEST ===');
         console.log('isOnboardingMode:', isOnboardingMode);
         console.log('shouldBeOnboarding:', shouldBeOnboarding);
