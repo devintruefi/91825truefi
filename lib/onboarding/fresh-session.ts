@@ -4,6 +4,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import * as crypto from 'crypto';
 import { 
   ORDERED_STEPS, 
   STEP_CONFIG, 
@@ -90,8 +91,9 @@ export async function initializeFreshSession(userId: string): Promise<{
   const hasConsent = await hasCompletedConsent(userId);
   const itemsCollected = await getItemsCollected(userId);
   
-  // Determine starting step
-  const currentStep: StepId = hasConsent ? 'welcome' : 'consent';
+  // Determine starting step - AUTO-ADVANCE from welcome to main_goal
+  // If user has consent, skip welcome and go straight to main_goal
+  const currentStep: StepId = hasConsent ? 'main_goal' : 'consent';
   const shouldStartAtConsent = !hasConsent;
   
   // Create or update onboarding_progress
@@ -110,9 +112,24 @@ export async function initializeFreshSession(userId: string): Promise<{
     }
   });
   
+  // If we're starting at main_goal, mark welcome as completed
+  if (currentStep === 'main_goal') {
+    await prisma.user_onboarding_responses.create({
+      data: {
+        id: crypto.randomUUID(),
+        user_id: userId,
+        question: 'welcome',
+        answer: { auto_advanced: true },
+        created_at: new Date()
+      }
+    }).catch(() => {
+      // Ignore if already exists
+    });
+  }
+  
   return {
     currentStep,
-    itemsCollected,
+    itemsCollected: itemsCollected + (currentStep === 'main_goal' ? 1 : 0), // Count welcome as collected if auto-advanced
     shouldStartAtConsent
   };
 }
@@ -140,29 +157,26 @@ export function buildFreshSessionMessage(currentStep: StepId, itemsCollected: nu
       break;
       
     case 'welcome':
+      // Welcome should not be shown - we auto-advance to main_goal
+      // If somehow we get here, redirect to main_goal
       componentData = {
-        question: "What brought you to TrueFi today?",
+        question: "Welcome to TrueFi! Let's get started.",
         options: [
-          { id: 'pay_off_debt', label: 'Pay off debt', value: 'pay_off_debt', icon: '🎯' },
-          { id: 'save_emergencies', label: 'Save for emergencies', value: 'save_emergencies', icon: '🛡️' },
-          { id: 'save_home', label: 'Save for a home', value: 'save_home', icon: '🏠' },
-          { id: 'plan_retirement', label: 'Plan for retirement', value: 'plan_retirement', icon: '🏖️' },
-          { id: 'build_wealth', label: 'Build wealth & invest', value: 'build_wealth', icon: '📈' },
-          { id: 'something_else', label: 'Something else', value: 'something_else', icon: '💭' }
+          { id: 'continue', label: 'Continue', value: 'continue', icon: '➡️' }
         ]
       };
       break;
       
     case 'main_goal':
       componentData = {
-        question: "What's your main financial priority right now?",
+        question: "What brought you to TrueFi today?",
         options: [
-          { id: 'save_more', label: 'Save more money 💵', value: 'save_more', icon: '💵' },
-          { id: 'invest_wisely', label: 'Invest wisely 📈', value: 'invest_wisely', icon: '📈' },
-          { id: 'eliminate_debt', label: 'Eliminate debt 🎯', value: 'eliminate_debt', icon: '🎯' },
-          { id: 'plan_retirement', label: 'Plan for retirement 🏖️', value: 'plan_retirement', icon: '🏖️' },
-          { id: 'buy_home', label: 'Buy a home 🏠', value: 'buy_home', icon: '🏠' },
-          { id: 'build_emergency', label: 'Build emergency fund 🛡️', value: 'build_emergency', icon: '🛡️' }
+          { id: 'understand-finances', label: 'Understand my finances', value: 'understand_finances', icon: '📊' },
+          { id: 'fix-budget', label: 'Fix my budget', value: 'fix_budget', icon: '💰' },
+          { id: 'save-goals', label: 'Save for goals', value: 'save_goals', icon: '🎯' },
+          { id: 'grow-wealth', label: 'Grow wealth', value: 'grow_wealth', icon: '📈' },
+          { id: 'pay-debt', label: 'Pay off debt', value: 'pay_off_debt', icon: '💳' },
+          { id: 'something-else', label: 'Something else', value: 'something_else', icon: '💭' }
         ]
       };
       break;
