@@ -1,46 +1,40 @@
-substitutions:
-  _AR_REGION: us-west2
-  _AR_REPO: truefi-images
-  _IMAGE_NAME: penny-api
-  _RUN_REGION: us-central1
-  _SERVICE: truefi-api-service
-  _CLOUDSQL: truefi:us-central1:true-fi-db
-
 options:
   logging: CLOUD_LOGGING_ONLY
 
 steps:
+  # Build Docker image from TRUEFIBACKEND/Dockerfile
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'build',
-      '-t', '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$SHORT_SHA',
+      '-t', 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA',
       '-f', 'TRUEFIBACKEND/Dockerfile',
       'TRUEFIBACKEND'
     ]
 
+  # Push Docker image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'push',
-      '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$SHORT_SHA'
+      'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA'
     ]
 
+  # Deploy to Cloud Run with Cloud SQL connection
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args: [
-      'run', 'deploy', '${_SERVICE}',
-      '--image', '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$SHORT_SHA',
-      '--region', '${_RUN_REGION}',
+      'run', 'deploy', 'truefi-api-service',
+      '--image', 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA',
+      '--region', 'us-central1',
       '--platform', 'managed',
-      '--service-account', '118529284371-compute@developer.gserviceaccount.com',
-      '--add-cloudsql-instances', '${_CLOUDSQL}',
+      '--add-cloudsql-instances', 'river-sky-455001-j1:us-central1:true-fi-db',
       '--allow-unauthenticated',
       '--port', '8000',
       '--memory', '512Mi',
       '--cpu', '1',
       '--max-instances', '10',
-      '--set-env-vars', 'DB_HOST=/cloudsql/${_CLOUDSQL},DB_PORT=5432,DB_NAME=truefi_db,DB_USER=truefi_user,DB_SSL_MODE=disable',
+      '--set-env-vars', 'DB_HOST=/cloudsql/river-sky-455001-j1:us-central1:true-fi-db,DB_PORT=5432,DB_NAME=truefi_db,DB_USER=truefi_user,DB_SSL_MODE=disable',
       '--set-secrets', 'DB_PASSWORD=DB_PASSWORD:latest'
     ]
 
 images:
-  - '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$SHORT_SHA'
+  - 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA'
