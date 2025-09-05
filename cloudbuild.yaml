@@ -14,8 +14,8 @@ steps:
     args: [
       'build',
       '-t', '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$SHORT_SHA',
-      '-f', 'true-fi-back-end/Dockerfile',
-      './true-fi-back-end'
+      '-f', 'TRUEFIBACKEND/Dockerfile',
+      'TRUEFIBACKEND'
     ]
 
   - name: 'gcr.io/cloud-builders/docker'
