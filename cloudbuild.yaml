@@ -6,6 +6,9 @@ substitutions:
   _SERVICE: truefi-api-service
   _CLOUDSQL: truefi:us-central1:true-fi-db
 
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: [
