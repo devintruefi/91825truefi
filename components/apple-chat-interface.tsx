@@ -7,22 +7,8 @@ import { useUser } from '@/contexts/user-context'
 import { useSearchParams } from 'next/navigation'
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
-import { 
-  ButtonSelection, 
-  CheckboxGroup, 
-  CardSelection, 
-  SliderInput, 
-  PieChartBuilder,
-  QuickAdd,
-  FormInput,
-  TradeoffsInput,
-  BannerComponent
-} from '@/components/chat/onboarding-components'
-import { PlaidConnect } from '@/components/plaid-connect'
+// Chat components only - onboarding moved to dashboard
 import { DashboardPreview } from '@/components/chat/dashboard-preview'
-import { OnboardingProgress } from '@/components/chat/onboarding-progress'
-import { AssetsInput } from '@/components/chat/assets-input'
-import { LiabilitiesInput } from '@/components/chat/liabilities-input'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown, Edit2, Check, X } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
@@ -46,8 +32,7 @@ interface Message {
   timestamp: Date
   feedback?: "positive" | "negative" | null
   component?: {
-    type: 'buttons' | 'slider' | 'checkboxes' | 'cards' | 'plaid' | 'pieChart' | 'quickAdd' | 
-           'assetsInput' | 'liabilitiesInput' | 'dashboardPreview' | 'form' | 'tradeoffs'
+    type: 'dashboardPreview' | string  // Keep generic for backward compatibility
     stepId?: string
     data: any
   }
@@ -535,15 +520,7 @@ function AppleChatInterfaceInner() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState<string>("")
-  const [onboardingPhase, setOnboardingPhase] = useState<string>('welcome')
-  const [onboardingProgress, setOnboardingProgress] = useState<Record<string, any>>({
-    currentStep: isOnboarding ? 'welcome' : null,
-    mode: 'standard', // quick, standard, or complete
-    responses: {},
-    completedSteps: [],
-    dashboardReady: false
-  })
-  const [isOnboardingMode, setIsOnboardingMode] = useState(isOnboarding)
+  // Removed all onboarding state - moved to dashboard
   
   // Add suggestions visibility state - initialize to true for SSR consistency
   const [suggestionsVisible, setSuggestionsVisible] = useState(true)
@@ -624,82 +601,16 @@ function AppleChatInterfaceInner() {
     // This effect is no longer needed as streaming is handled by setMessages
   }, [isTyping, streamingMessageId]);
 
-  // Check onboarding status from backend when user loads
-  const [hasSetInitialOnboarding, setHasSetInitialOnboarding] = useState(false);
-  
-  useEffect(() => {
-    if (user && !hasSetInitialOnboarding) {
-      // Check actual onboarding status from backend
-      const checkOnboardingStatus = async () => {
-        try {
-          const token = localStorage.getItem('auth_token');
-          if (!token) return;
-          
-          const response = await fetch('/api/onboarding/status', {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (response.ok) {
-            const status = await response.json();
-            console.log('Onboarding status from backend:', status);
-            
-            // Set onboarding mode based on backend status, not just URL
-            if (status.needsOnboarding) {
-              setIsOnboardingMode(true);
-              setOnboardingProgress(prev => ({ 
-                ...prev, 
-                currentStep: status.currentStep || 'welcome'
-              }));
-              
-              // If we're resuming onboarding and URL doesn't have the param, add it
-              if (!isOnboarding && status.currentStep !== 'welcome' && status.currentStep !== 'complete') {
-                console.log('Resuming onboarding from step:', status.currentStep);
-                // Optionally update URL to reflect onboarding state
-                const url = new URL(window.location.href);
-                url.searchParams.set('onboarding', 'true');
-                window.history.replaceState({}, '', url);
-              }
-            } else {
-              // User has completed onboarding
-              setIsOnboardingMode(false);
-              // Remove onboarding param if present
-              if (isOnboarding) {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('onboarding');
-                window.history.replaceState({}, '', url);
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Failed to check onboarding status:', error);
-          // Fall back to URL param behavior
-          setIsOnboardingMode(isOnboarding);
-          if (isOnboarding && !onboardingProgress.currentStep) {
-            setOnboardingProgress(prev => ({ ...prev, currentStep: 'welcome' }));
-          }
-        }
-      };
-      
-      checkOnboardingStatus();
-      setHasSetInitialOnboarding(true);
-    }
-  }, [user, isOnboarding, hasSetInitialOnboarding]);
+  // Removed onboarding status check - handled by dashboard
 
   // Update messages when user changes (login/logout)
   useEffect(() => {
     setMessages(getInitialMessages())
   }, [user]);
 
-  // Track if we've fetched initial onboarding state
-  const [hasFetchedInitialOnboarding, setHasFetchedInitialOnboarding] = useState(false);
+  // Removed onboarding initialization - handled by dashboard
 
-  // Fetch initial onboarding state from backend when in onboarding mode
-  useEffect(() => {
-    if (!user || !isOnboardingMode) return;
-    if (hasFetchedInitialOnboarding) return;
-
+  /* Removed - onboarding handled by dashboard
     const fetchInitialOnboardingState = async () => {
       const token = localStorage.getItem('auth_token');
       if (!token) {
@@ -782,9 +693,7 @@ function AppleChatInterfaceInner() {
     };
 
     // Fetch initial onboarding state
-    fetchInitialOnboardingState();
-    setHasFetchedInitialOnboarding(true);
-  }, [user, isOnboardingMode]);
+  */
 
   // Load chat sessions for authenticated users
   useEffect(() => {
@@ -1032,7 +941,7 @@ function AppleChatInterfaceInner() {
     }
   }
 
-  // Helper function to trigger Plaid auto-analysis
+  /* Removed - Plaid integration handled by dashboard
   const triggerAutoAnalysis = async (plaidData: any) => {
     if (!user) return
     
@@ -1068,9 +977,10 @@ function AppleChatInterfaceInner() {
       console.error('Failed to analyze Plaid data:', error)
     }
   }
+  */
 
-  // Function to handle interactive component responses
-  const handleComponentResponse = async (messageId: string, value: any, componentType: string, componentStepId?: string) => {
+  /* Removed - onboarding component responses handled by dashboard
+  const handleComponentResponse = async (messageId: string, value: any, componentType: string, componentStepId?: string, componentData?: any) => {
     // ALWAYS ensure onboarding mode is active when handling component responses during onboarding
     if (onboardingProgress.currentStep && onboardingProgress.currentStep !== 'complete') {
       console.log('Component response during onboarding - ensuring onboarding mode is ON');
@@ -1157,7 +1067,7 @@ function AppleChatInterfaceInner() {
           // Save goals to database
           if (value.selected || value) {
             const goals = (value.selected || value).map((goalId: string) => {
-              const goalInfo = component?.data?.options?.find((opt: any) => opt.id === goalId || opt.value === goalId)
+              const goalInfo = componentData?.options?.find((opt: any) => opt.id === goalId || opt.value === goalId)
               return {
                 name: goalInfo?.label || goalId,
                 description: goalInfo?.description || '',
@@ -1393,163 +1303,18 @@ function AppleChatInterfaceInner() {
     // Force onboarding mode for the next request - include stepId in message
     await handleSendMessage(`[Component Response: ${componentType}:${currentStepId}] ${responseMessage}`, true, updatedProgress)
   }
+  */
 
-  // Function to render interactive components
+  // Safe renderer for interactive components (only non-onboarding components)
   const renderInteractiveComponent = (component: any, messageId: string) => {
-    // Extract step ID from component if available
-    const stepId = component.stepId || component.data?.stepId || onboardingProgress.currentStep;
+    if (!component || typeof component !== 'object') return null;
     
-    const handleComplete = (value: any) => {
-      handleComponentResponse(messageId, value, component.type, stepId)
-    }
-    
-    const handleSkip = () => {
-      handleComponentResponse(messageId, 'skipped', component.type, stepId)
-    }
-    
+    // Only render known safe components
     switch (component.type) {
-      case 'banner':
-      case 'info':
-        return (
-          <BannerComponent
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
-          />
-        )
-      case 'buttons':
-        return (
-          <ButtonSelection 
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
-          />
-        )
-      case 'slider':
-        return (
-          <SliderInput
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
-          />
-        )
-      case 'checkboxes':
-        return (
-          <CheckboxGroup
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
-          />
-        )
-      case 'cards':
-        return (
-          <CardSelection
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
-          />
-        )
-      case 'plaid':
-        return (
-          <div className="space-y-4">
-            {/* Title and benefits */}
-            {component.data && (
-              <div className="space-y-3">
-                {component.data.title && (
-                  <h3 className="text-lg font-semibold text-center">
-                    {component.data.title}
-                  </h3>
-                )}
-                {component.data.subtitle && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
-                    {component.data.subtitle}
-                  </p>
-                )}
-                {component.data.benefits && (
-                  <Card className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20">
-                    <div className="space-y-2">
-                      {component.data.benefits.map((benefit: string, index: number) => (
-                        <div key={index} className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
-                          <span>{benefit}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                )}
-              </div>
-            )}
-            
-            <PlaidConnect 
-              onSuccess={(publicToken: string, metadata: any) => {
-                handleComplete({ publicToken, metadata })
-              }}
-              onError={() => {
-                handleSkip()
-              }}
-            />
-            <Button variant="ghost" className="w-full" onClick={handleSkip}>
-              I'll connect my accounts later
-            </Button>
-          </div>
-        )
-      case 'pieChart':
-        return (
-          <PieChartBuilder
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
-          />
-        )
-      case 'quickAdd':
-        return (
-          <QuickAdd
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
-          />
-        )
       case 'dashboardPreview':
         return (
           <DashboardPreview
             data={component.data}
-            onContinue={() => handleComplete('continue')}
-            onViewDashboard={() => {
-              handleComplete('view-dashboard')
-              setTimeout(() => {
-                window.location.href = '/dashboard'
-              }, 1000)
-            }}
-          />
-        )
-      case 'assetsInput':
-        return (
-          <AssetsInput
-            onSubmit={(assets) => handleComplete(assets)}
-            onSkip={handleSkip}
-          />
-        )
-      case 'liabilitiesInput':
-        return (
-          <LiabilitiesInput
-            onSubmit={(liabilities) => handleComplete(liabilities)}
-            onSkip={handleSkip}
-          />
-        )
-      case 'form':
-        return (
-          <FormInput
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
-          />
-        )
-      case 'tradeoffs':
-        return (
-          <TradeoffsInput
-            data={component.data}
-            onComplete={handleComplete}
-            onSkip={handleSkip}
           />
         )
       default:
@@ -1557,7 +1322,7 @@ function AppleChatInterfaceInner() {
     }
   }
 
-  // Function to save onboarding data to database
+  /* Removed - onboarding handled by dashboard
   const saveOnboardingData = async (showPreview = false) => {
     if (!user) return
     
@@ -1611,24 +1376,13 @@ function AppleChatInterfaceInner() {
     
     return false
   }
+  */
 
   const handleSendMessage = async (customMessage?: string, isAutomated?: boolean, forceProgress?: any) => {
     const userMessage = customMessage || inputValue.trim()
     if (!userMessage || isLoading) return
     
-    // During onboarding, if it's not an automated component response, show a helpful message
-    if (isOnboardingMode && !isAutomated && !customMessage?.includes('[Component Response:')) {
-      // Add a gentle reminder message
-      const reminderMessage: Message = {
-        id: `penny_reminder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        content: "I see you're eager to share more! Let me guide you through these questions first - just click the options above to continue. Once we're done with the setup, we can chat about anything you'd like! 😊",
-        sender: "penny",
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, reminderMessage])
-      setInputValue("")
-      return // Don't send the message to the API
-    }
+    // Removed onboarding mode check - chat is always available
     
     if (!isAutomated) {
       setInputValue("")
@@ -1729,8 +1483,7 @@ function AppleChatInterfaceInner() {
     
     try {
       // Limit conversation history to prevent context length errors
-      // For onboarding, only keep last 10 messages; for regular chat, keep last 20
-      const maxMessages = isOnboardingMode ? 10 : 20;
+      const maxMessages = 20;
       const recentMessages = messages.slice(-maxMessages);
       const conversationHistory = recentMessages.map(msg => ({ 
         sender: msg.sender, 
@@ -1793,7 +1546,7 @@ function AppleChatInterfaceInner() {
         const match = userMessage.match(/\[Component Response: ([^:]+)(?::([^\]]+))?\] (.+)/);
         if (match) {
           const componentType = match[1];
-          const stepId = match[2] || forceProgress?.currentStep || onboardingProgress.currentStep;
+          const stepId = match[2] || 'unknown';
           const valueStr = match[3];
           try {
             // Try to parse as JSON first
@@ -1826,31 +1579,7 @@ function AppleChatInterfaceInner() {
         requestBody.componentResponse = componentResponse;
       }
       
-      // Use forced progress if provided (from component responses), otherwise use current state
-      const progressToSend = forceProgress || onboardingProgress;
-      const shouldBeOnboarding = isOnboardingMode || (progressToSend.currentStep && progressToSend.currentStep !== 'complete');
-      
-      if (shouldBeOnboarding || componentResponse) {
-        requestBody.isOnboarding = true
-        requestBody.onboardingPhase = onboardingPhase
-        requestBody.onboardingProgress = progressToSend
-        
-        // Include user info for fallback authentication during onboarding
-        if (user && !token) {
-          requestBody.userId = user.id;
-          requestBody.userFirstName = user.first_name;
-        }
-        
-        console.log('=== SENDING ONBOARDING REQUEST ===');
-        console.log('isOnboardingMode:', isOnboardingMode);
-        console.log('shouldBeOnboarding:', shouldBeOnboarding);
-        console.log('onboardingProgress being sent:', progressToSend);
-        console.log('componentResponse:', componentResponse);
-      } else {
-        console.log('=== NOT SENDING AS ONBOARDING ===');
-        console.log('isOnboardingMode:', isOnboardingMode);
-        console.log('progressToSend:', progressToSend);
-      }
+      // Removed onboarding context - handled by dashboard
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -1900,33 +1629,7 @@ function AppleChatInterfaceInner() {
           if (!activeSessionId) activeSessionId = data.session_id
         }
         
-        // Handle onboarding-specific responses
-        if (data.onboardingUpdate) {
-          console.log('=== ONBOARDING UPDATE RECEIVED ===');
-          console.log('data.onboardingUpdate:', data.onboardingUpdate);
-          console.log('Current isOnboardingMode:', isOnboardingMode);
-          
-          setOnboardingPhase(data.onboardingUpdate.phase || onboardingPhase)
-          setOnboardingProgress(data.onboardingUpdate.progress || onboardingProgress)
-          
-          // Keep onboarding mode active unless explicitly complete
-          if (!data.onboardingUpdate.complete && !isOnboardingMode) {
-            console.log('Keeping onboarding mode active');
-            setIsOnboardingMode(true)
-          }
-          
-          // Check if onboarding is complete
-          if (data.onboardingUpdate.complete) {
-            setIsOnboardingMode(false)
-            localStorage.setItem('onboarding_complete', 'true')
-            // Save all collected data to database
-            await saveOnboardingData()
-            // Redirect to dashboard after completion
-            setTimeout(() => {
-              window.location.href = '/dashboard'
-            }, 3000)
-          }
-        }
+        // Removed onboarding response handling - handled by dashboard
         
         // Extract message and component from different possible response structures
         aiResponseContent = data.content || data.message || data.response || data.assistantMessage?.content
@@ -1947,21 +1650,7 @@ function AppleChatInterfaceInner() {
           console.log('Full response:', data);
         }
         
-        // Update onboarding progress if present
-        if (data.onboardingProgress) {
-          console.log('=== UPDATING ONBOARDING PROGRESS ===');
-          console.log('New progress:', data.onboardingProgress);
-          setOnboardingProgress(prev => ({
-            ...prev,
-            ...data.onboardingProgress,
-            currentStep: data.onboardingProgress.currentStep || prev.currentStep
-          }));
-          
-          // Keep onboarding mode active unless complete
-          if (!data.onboardingProgress.isComplete) {
-            setIsOnboardingMode(true);
-          }
-        }
+        // Removed onboarding progress updates - handled by dashboard
         
         // Update the streaming message with full content and component
         setMessages((prev) => 
@@ -2408,15 +2097,7 @@ function AppleChatInterfaceInner() {
                           whileHover={{ scale: 1.01 }}
                           className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-2xl px-6 py-4 text-sm lg:text-base shadow-lg border border-gray-200 dark:border-gray-700"
                         >
-                          {/* Show onboarding progress if in onboarding mode */}
-                          {isOnboardingMode && onboardingProgress.currentStep && (
-                            <div className="mb-4">
-                              <OnboardingProgress
-                                currentStep={onboardingProgress.currentStep}
-                                completedSteps={onboardingProgress.completedSteps || []}
-                              />
-                            </div>
-                          )}
+                          {/* Removed onboarding progress - handled by dashboard */}
                               {message.id === streamingMessageId && isTyping
         ? renderPennyMessage(message.content || '', theme)
         : renderPennyMessage(message.content || '', theme)
@@ -2481,9 +2162,9 @@ function AppleChatInterfaceInner() {
         className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 p-2 sm:p-4"
       >
         <div className="max-w-[1600px] mx-auto">
-          {/* Enhanced Quick Suggestions with Toggle - Hide during onboarding */}
+          {/* Enhanced Quick Suggestions with Toggle */}
           <AnimatePresence mode="wait">
-            {!isOnboardingMode && suggestionsVisible ? (
+            {suggestionsVisible ? (
               <motion.div
                 key="expanded"
                 initial={{ height: 0, opacity: 0 }}
@@ -2567,7 +2248,7 @@ function AppleChatInterfaceInner() {
                   )}
                 </div>
               </motion.div>
-            ) : !isOnboardingMode ? (
+            ) : (
               // Minimal show suggestions button when hidden - not shown during onboarding
               <motion.div
                 key="collapsed"
@@ -2586,24 +2267,10 @@ function AppleChatInterfaceInner() {
                   <ChevronUp className="w-3 h-3" />
                 </Button>
               </motion.div>
-            ) : null}
+            )}
           </AnimatePresence>
           
-          {/* Onboarding Guidance */}
-          {isOnboardingMode && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
-            >
-              <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">
-                ✨ Building Your Financial Profile
-              </p>
-              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                Please answer using the buttons above to create your personalized experience
-              </p>
-            </motion.div>
-          )}
+          {/* Removed onboarding guidance - handled by dashboard */}
           
           {/* Enhanced Input Field */}
           <div className="flex items-end space-x-3 max-w-4xl mx-auto">
@@ -2613,9 +2280,9 @@ function AppleChatInterfaceInner() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder={isOnboardingMode ? "Please use the buttons above to continue the setup... 👆" : "Ask Penny anything about your finances... 💬"}
-                className={`pr-20 text-sm sm:text-base py-2 sm:py-4 rounded-xl border-2 focus:border-cyan-500 focus:ring-cyan-500/20 transition-all duration-200 resize-none min-h-[50px] sm:min-h-[60px] max-h-[200px] overflow-y-auto whitespace-pre-wrap ${isOnboardingMode ? 'opacity-50 cursor-not-allowed' : ''}`}
-                disabled={isLoading || isOnboardingMode}
+                placeholder="Ask Penny anything about your finances... 💬"
+                className="pr-20 text-sm sm:text-base py-2 sm:py-4 rounded-xl border-2 focus:border-cyan-500 focus:ring-cyan-500/20 transition-all duration-200 resize-none min-h-[50px] sm:min-h-[60px] max-h-[200px] overflow-y-auto whitespace-pre-wrap"
+                disabled={isLoading}
                 rows={1}
                 style={{
                   minHeight: '50px',
@@ -2645,12 +2312,16 @@ function AppleChatInterfaceInner() {
             
               <Button
                 onClick={() => handleSendMessage()}
-                disabled={!inputValue.trim() || isLoading || isOnboardingMode}
+                disabled={!inputValue.trim() || isLoading}
               className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold rounded-full transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               <Send className="w-5 h-5 sm:w-6 sm:h-6" />
               </Button>
           </div>
+        </div>
+        {/* Disclaimer message - ChatGPT style */}
+        <div className="text-center text-xs text-gray-500 mt-2">
+          Penny can make mistakes. Check important info.
         </div>
       </motion.div>
       </div>

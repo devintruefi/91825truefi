@@ -13,15 +13,6 @@ import { useUser } from "@/contexts/user-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 // Third-party auth handler functions (placeholders)
-const handleAppleAuth = () => {
-  console.log("Apple authentication triggered")
-  // TODO: Implement Apple Sign In flow
-}
-
-const handleMicrosoftAuth = () => {
-  console.log("Microsoft authentication triggered")
-  // TODO: Implement Microsoft OAuth flow
-}
 
 export function AuthContent() {
   const { login, createUser, loading, error, user } = useUser()
@@ -79,8 +70,9 @@ export function AuthContent() {
       newUrl.searchParams.delete('provider');
       window.history.replaceState({}, '', newUrl.toString());
       
-      // Redirect to Penny chat for onboarding - the user context should pick up the token
-      window.location.href = '/chat?onboarding=true';
+      // Redirect to dashboard - the user context should pick up the token
+      // Dashboard will handle guided onboarding for new users
+      window.location.href = '/dashboard';
     }
   }, []);
 
@@ -322,38 +314,6 @@ export function AuthContent() {
                         <span>Continue with Google</span>
                       </div>
                     </Button>
-
-                    {/* Apple Sign In */}
-                    <Button
-                      onClick={handleAppleAuth}
-                      className="w-full h-12 bg-black hover:bg-gray-900 dark:border dark:border-gray-600 text-white font-medium transition-all duration-200 hover:shadow-md active:scale-[0.98]"
-                      aria-label="Sign in with Apple"
-                    >
-                      <div className="flex items-center justify-center space-x-3">
-                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
-                        </svg>
-                        <span>Continue with Apple</span>
-                      </div>
-                    </Button>
-
-                    {/* Microsoft Sign In */}
-                    <Button
-                      onClick={handleMicrosoftAuth}
-                      variant="outline"
-                      className="w-full h-12 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-medium transition-all duration-200 hover:shadow-md active:scale-[0.98]"
-                      aria-label="Sign in with Microsoft"
-                    >
-                      <div className="flex items-center justify-center space-x-3">
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                          <path fill="#F25022" d="M1 1h10v10H1z" />
-                          <path fill="#00A4EF" d="M13 1h10v10H13z" />
-                          <path fill="#7FBA00" d="M1 13h10v10H1z" />
-                          <path fill="#FFB900" d="M13 13h10v10H13z" />
-                        </svg>
-                        <span>Continue with Microsoft</span>
-                      </div>
-                    </Button>
                   </div>
 
                   {/* Divider */}
@@ -466,38 +426,6 @@ export function AuthContent() {
                           />
                         </svg>
                         <span>Continue with Google</span>
-                      </div>
-                    </Button>
-
-                    {/* Apple Sign Up */}
-                    <Button
-                      onClick={handleAppleAuth}
-                      className="w-full h-12 bg-black hover:bg-gray-900 dark:border dark:border-gray-600 text-white font-medium transition-all duration-200 hover:shadow-md active:scale-[0.98]"
-                      aria-label="Sign up with Apple"
-                    >
-                      <div className="flex items-center justify-center space-x-3">
-                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
-                        </svg>
-                        <span>Continue with Apple</span>
-                      </div>
-                    </Button>
-
-                    {/* Microsoft Sign Up */}
-                    <Button
-                      onClick={handleMicrosoftAuth}
-                      variant="outline"
-                      className="w-full h-12 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-medium transition-all duration-200 hover:shadow-md active:scale-[0.98]"
-                      aria-label="Sign up with Microsoft"
-                    >
-                      <div className="flex items-center justify-center space-x-3">
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                          <path fill="#F25022" d="M1 1h10v10H1z" />
-                          <path fill="#00A4EF" d="M13 1h10v10H13z" />
-                          <path fill="#7FBA00" d="M1 13h10v10H1z" />
-                          <path fill="#FFB900" d="M13 13h10v10H13z" />
-                        </svg>
-                        <span>Continue with Microsoft</span>
                       </div>
                     </Button>
                   </div>
@@ -618,13 +546,13 @@ export function AuthContent() {
                       />
                       <Label htmlFor="terms" className="text-sm">
                         I agree to the{" "}
-                        <Button variant="link" className="p-0 h-auto text-sm text-cyan-600 hover:text-cyan-700">
+                        <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-700 underline">
                           Terms and Conditions
-                        </Button>
+                        </a>
                         {" "}and{" "}
-                        <Button variant="link" className="p-0 h-auto text-sm text-cyan-600 hover:text-cyan-700">
+                        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:text-cyan-700 underline">
                           Privacy Policy
-                        </Button>
+                        </a>
                       </Label>
                     </div>
                     <Button 

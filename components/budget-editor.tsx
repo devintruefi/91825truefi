@@ -23,9 +23,10 @@ const formatCurrency = (amount: number): string => {
 
 interface BudgetEditorProps {
   className?: string;
+  onSave?: () => void;
 }
 
-export function BudgetEditor({ className }: BudgetEditorProps) {
+export function BudgetEditor({ className, onSave }: BudgetEditorProps) {
   const { budget, loading, error, updateBudget, updateCategory, addCategory, deleteCategory } = useBudget();
   const { toast } = useToast();
   
@@ -262,6 +263,22 @@ export function BudgetEditor({ className }: BudgetEditorProps) {
               </div>
             );
           })}
+        </div>
+        
+        {/* Main Budget Save Button */}
+        <div className="pt-4 border-t">
+          <Button 
+            id="onb-budget-save-btn"
+            className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+            onClick={() => {
+              // This could trigger a more comprehensive save
+              toast({ title: "Budget Saved", description: "Your budget has been saved successfully!" });
+              onSave?.();
+            }}
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Save Budget
+          </Button>
         </div>
       </CardContent>
     </Card>

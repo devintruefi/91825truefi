@@ -16,7 +16,13 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:onboarding:headless": "tsx test/headless-onboarding.test.ts",
-    "test:e2e:onboarding": "playwright test tests/onboarding.spec.ts"
+    "test:e2e:onboarding": "playwright test tests/onboarding.spec.ts",
+    "test:onboarding": "tsx test/test-onboarding-full.ts",
+    "test:onboarding:interactive": "tsx test/test-onboarding-full.ts --interactive",
+    "test:onboarding:quick": "tsx test/test-onboarding-full.ts --quick",
+    "test:onboarding:v2": "tsx test/test-onboarding-full.ts --v2",
+    "reset:test-users": "tsx scripts/reset-test-user.ts",
+    "reset:user": "tsx scripts/reset-test-user.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

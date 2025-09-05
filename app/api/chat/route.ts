@@ -6,14 +6,50 @@ import { OnboardingManager, OnboardingState, OnboardingContext } from '@/lib/onb
 import { ONBOARDING_STEPS, OnboardingStep } from '@/lib/onboarding/steps';
 import { normalizeStepId, isValidStepId } from '@/lib/onboarding/step-utils';
 import { initializeFreshSession, buildFreshSessionMessage, getItemsCollected } from '@/lib/onboarding/fresh-session';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 // Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
+
+// Helper function to validate and ensure proper UUID session
+async function ensureValidSessionId(sessionId: string | undefined, userId: string): Promise<string> {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  
+  // If sessionId is already a valid UUID, return it
+  if (sessionId && uuidRegex.test(sessionId)) {
+    return sessionId;
+  }
+  
+  // Try to find an existing active session for the user
+  const existingSession = await prisma.chat_sessions.findFirst({
+    where: { 
+      user_id: userId,
+      is_active: true 
+    },
+    orderBy: { created_at: 'desc' }
+  });
+  
+  if (existingSession) {
+    return existingSession.id;
+  }
+  
+  // Create a new session with proper UUID
+  const newSession = await prisma.chat_sessions.create({
+    data: {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      session_id: sessionId || `session_${Date.now()}`, // Keep original for reference
+      title: 'Chat Session',
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date()
+    }
+  });
+  
+  return newSession.id;
+}
 
 export async function POST(request: NextRequest) {
   // Parse request body once at the beginning
@@ -133,23 +169,22 @@ export async function POST(request: NextRequest) {
         const assistantMessage = completion.choices[0].message.content || "I'm here to help with your financial journey!";
 
         // Save to chat history
-        if (sessionId) {
-          await prisma.chat_messages.create({
-            data: {
-              id: crypto.randomUUID(),
-              session_id: sessionId,
-              user_id: userId,
-              message_type: 'assistant',
-              content: assistantMessage,
-              turn_number: 1,
-              created_at: new Date()
-            }
-          });
-        }
+        const validSessionId = await ensureValidSessionId(sessionId, userId);
+        await prisma.chat_messages.create({
+          data: {
+            id: crypto.randomUUID(),
+            session_id: validSessionId,
+            user_id: userId,
+            message_type: 'assistant',
+            content: assistantMessage,
+            turn_number: 1,
+            created_at: new Date()
+          }
+        });
 
         return NextResponse.json({
           content: assistantMessage,
-          sessionId
+          sessionId: validSessionId
         });
       } catch (error) {
         console.error('OpenAI API error:', error);
@@ -160,11 +195,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Ensure we have a valid UUID session ID for database operations
+    const validSessionId = await ensureValidSessionId(sessionId, userId);
+    
     // Check if user has Plaid data by querying database
     const plaidConnections = await prisma.plaid_connections.findMany({
       where: { user_id: userId }
     });
     const hasPlaidData = plaidConnections.length > 0;
+
+    // Check if income has been detected from Plaid
+    let incomeConfirmed = onboardingProgress?.incomeConfirmed || false;
+    if (hasPlaidData && !incomeConfirmed) {
+      // Check if we have detected income stored
+      const detectedIncomeResponse = await prisma.user_onboarding_responses.findFirst({
+        where: { 
+          user_id: userId,
+          question: 'detected_income'
+        },
+        orderBy: { created_at: 'desc' }
+      });
+      
+      if (detectedIncomeResponse) {
+        try {
+          const incomeData = JSON.parse(detectedIncomeResponse.answer);
+          incomeConfirmed = incomeData.confirmed === true && incomeData.amount > 0;
+        } catch (e) {
+          // If parsing fails, keep incomeConfirmed as false
+        }
+      }
+    }
 
     // Get items collected for progress tracking
     const itemsCollected = await getItemsCollected(userId);
@@ -176,14 +236,14 @@ export async function POST(request: NextRequest) {
       responses: onboardingProgress?.responses || {},
       progress: onboardingProgress || {},
       hasPlaidData: hasPlaidData,
-      incomeConfirmed: onboardingProgress?.incomeConfirmed || false,
+      incomeConfirmed: incomeConfirmed,
       selectedGoals: onboardingProgress?.selectedGoals || [],
       is_complete: userOnboardingProgress?.is_complete || false
     };
 
     const ctx: OnboardingContext = {
       userId,
-      sessionId: sessionId || crypto.randomUUID(),
+      sessionId: validSessionId,
       prisma
     };
 
@@ -200,27 +260,25 @@ export async function POST(request: NextRequest) {
       console.log('Fresh message built:', JSON.stringify(freshMessage, null, 2));
       
       // Save the component message to chat history
-      if (sessionId) {
-        await prisma.chat_messages.create({
-          data: {
-            id: crypto.randomUUID(),
-            session_id: sessionId,
-            user_id: userId,
-            message_type: 'assistant',
-            content: freshMessage.componentData?.question || 'Welcome to TrueFi!',
-            rich_content: {
-              component: {
-                type: freshMessage.componentType,
-                stepId: freshMessage.stepId,
-                data: freshMessage.componentData,
-                meta: freshMessage.meta
-              }
-            },
-            turn_number: 1,
-            created_at: new Date()
-          }
-        });
-      }
+      await prisma.chat_messages.create({
+        data: {
+          id: crypto.randomUUID(),
+          session_id: validSessionId,
+          user_id: userId,
+          message_type: 'assistant',
+          content: freshMessage.componentData?.question || 'Welcome to TrueFi!',
+          rich_content: {
+            component: {
+              type: freshMessage.componentType,
+              stepId: freshMessage.stepId,
+              data: freshMessage.componentData,
+              meta: freshMessage.meta
+            }
+          },
+          turn_number: 1,
+          created_at: new Date()
+        }
+      });
       
       const responseData = {
         content: freshMessage.componentData?.question || 'Welcome to TrueFi!',
@@ -245,7 +303,7 @@ export async function POST(request: NextRequest) {
             percent: freshMessage.header?.percentage || 0
           }
         },
-        sessionId: sessionId || crypto.randomUUID()
+        sessionId: validSessionId || crypto.randomUUID() // Use the valid UUID session ID
       };
       
       console.log('Returning fresh session response:', JSON.stringify(responseData, null, 2));
@@ -487,24 +545,22 @@ export async function POST(request: NextRequest) {
           percent: progress
         }
       },
-      sessionId: sessionId || crypto.randomUUID()
+      sessionId: validSessionId
     };
 
     // Save message to chat history with rich_content
-    if (sessionId) {
-      await prisma.chat_messages.create({
-        data: {
-          id: crypto.randomUUID(),
-          session_id: sessionId,
-          user_id: userId,
-          message_type: 'assistant',
-          content: assistantMessage,
-          rich_content: component ? { component } : null,
-          turn_number: 1,
-          created_at: new Date()
-        }
-      });
-    }
+    await prisma.chat_messages.create({
+      data: {
+        id: crypto.randomUUID(),
+        session_id: validSessionId,
+        user_id: userId,
+        message_type: 'assistant',
+        content: assistantMessage,
+        rich_content: component ? { component } : null,
+        turn_number: 1,
+        created_at: new Date()
+      }
+    });
 
     return NextResponse.json(response);
 

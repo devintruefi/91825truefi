@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
+import { categorizeBudgetTransaction } from '@/lib/categorization';
+import { generateAIBudget } from '@/lib/ai-budget-generator';
 
-// Smart budget generation utilities
+// Keep these for demo user functionality
 const ESSENTIALS_CATEGORIES = [
   'Housing', 'Transportation', 'Food & Dining', 'Utilities', 
   'Healthcare', 'Insurance', 'Debt Payments', 'Basic Groceries'
@@ -61,6 +63,8 @@ const CATEGORY_MAPPING: Record<string, string> = {
   'Credit Cards': 'Debt Payments',
   'Loans': 'Debt Payments'
 };
+
+const DEMO_USER_ID = '123e4567-e89b-12d3-a456-426614174000';
 
 function mapTransactionCategory(transactionCategory: string): string {
   if (CATEGORY_MAPPING[transactionCategory]) {
@@ -141,7 +145,7 @@ async function analyzeUserSpending(userId: string, months: number = 3) {
   const averageMonthlySpending = totalSpending / months;
   const spendingByCategory: Record<string, number> = {};
   transactions.forEach(tx => {
-    const category = mapTransactionCategory(tx.category || 'Uncategorized');
+    const category = categorizeBudgetTransaction(tx.category);
     spendingByCategory[category] = (spendingByCategory[category] || 0) + Math.abs(tx.amount);
   });
   return {
@@ -237,37 +241,121 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
       });
       
       if (hasTransactions) {
-        // User has transaction history, generate smart budget
-        const smartBudget = await generateSmartBudget(userId);
-        const newBudget = await prisma.budgets.create({
-          data: {
-            id: crypto.randomUUID(),
-            user_id: userId,
-            name: 'Smart Monthly Budget',
-            description: 'AI-generated budget based on your spending patterns',
-            amount: smartBudget.totalBudget,
-            period: 'monthly',
-            start_date: new Date(),
-            is_active: true,
-            created_at: new Date(),
-            updated_at: new Date(),
-            budget_categories: {
-              create: smartBudget.categories.map(category => ({
-                id: crypto.randomUUID(),
-                category: category.category,
-                amount: category.amount,
-                created_at: new Date(),
-                updated_at: new Date()
-              }))
+        // For demo user, use the old simple generation
+        if (userId === DEMO_USER_ID) {
+          const smartBudget = await generateSmartBudget(userId);
+          const newBudget = await prisma.budgets.create({
+            data: {
+              id: crypto.randomUUID(),
+              user_id: userId,
+              name: 'Smart Monthly Budget',
+              description: 'AI-generated budget based on your spending patterns',
+              amount: smartBudget.totalBudget,
+              period: 'monthly',
+              start_date: new Date(),
+              is_active: true,
+              created_at: new Date(),
+              updated_at: new Date(),
+              budget_categories: {
+                create: smartBudget.categories.map(category => ({
+                  id: crypto.randomUUID(),
+                  category: category.category,
+                  amount: category.amount,
+                  created_at: new Date(),
+                  updated_at: new Date()
+                }))
+              }
+            },
+            include: {
+              budget_categories: {
+                orderBy: { created_at: 'asc' }
+              }
             }
-          },
-          include: {
-            budget_categories: {
-              orderBy: { created_at: 'asc' }
-            }
+          });
+          return NextResponse.json(newBudget);
+        }
+        
+        // For logged-in users, use the new AI budget generator
+        try {
+          const aiResult = await generateAIBudget(userId);
+          
+          if (aiResult.warnings && aiResult.warnings.length > 0) {
+            // If there are warnings (like no income), return null
+            return NextResponse.json({
+              budget: null,
+              warnings: aiResult.warnings,
+              insights: aiResult.insights
+            });
           }
-        });
-        return NextResponse.json(newBudget);
+          
+          const newBudget = await prisma.budgets.create({
+            data: {
+              id: crypto.randomUUID(),
+              user_id: userId,
+              name: `AI ${aiResult.framework} Budget`,
+              description: `AI-generated budget using ${aiResult.framework} framework`,
+              amount: aiResult.totalBudget,
+              period: 'monthly',
+              start_date: new Date(),
+              is_active: true,
+              created_at: new Date(),
+              updated_at: new Date(),
+              budget_categories: {
+                create: aiResult.categories.map(category => ({
+                  id: crypto.randomUUID(),
+                  category: category.category,
+                  amount: category.amount,
+                  created_at: new Date(),
+                  updated_at: new Date()
+                }))
+              }
+            },
+            include: {
+              budget_categories: {
+                orderBy: { created_at: 'asc' }
+              }
+            }
+          });
+          
+          return NextResponse.json({
+            ...newBudget,
+            insights: aiResult.insights,
+            framework: aiResult.framework
+          });
+        } catch (aiError) {
+          console.error('AI budget generation failed, falling back:', aiError);
+          // Fallback to simple generation if AI fails
+          const smartBudget = await generateSmartBudget(userId);
+          const newBudget = await prisma.budgets.create({
+            data: {
+              id: crypto.randomUUID(),
+              user_id: userId,
+              name: 'Smart Monthly Budget',
+              description: 'Budget based on your spending patterns',
+              amount: smartBudget.totalBudget,
+              period: 'monthly',
+              start_date: new Date(),
+              is_active: true,
+              created_at: new Date(),
+              updated_at: new Date(),
+              budget_categories: {
+                create: smartBudget.categories.map(category => ({
+                  id: crypto.randomUUID(),
+                  category: category.category,
+                  amount: category.amount,
+                  created_at: new Date(),
+                  updated_at: new Date()
+                }))
+              }
+            },
+            include: {
+              budget_categories: {
+                orderBy: { created_at: 'asc' }
+              }
+            }
+          });
+          return NextResponse.json(newBudget);
+        }
       }
       
       // Return null/empty budget for new users
@@ -275,29 +363,94 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
     }
     const totalBudgetAmount = budget.budget_categories.reduce((sum, cat) => sum + Number(cat.amount), 0);
     if (totalBudgetAmount === 0) {
-      const smartBudget = await generateSmartBudget(userId);
-      await prisma.budget_categories.deleteMany({
-        where: { budget_id: budget.id }
-      });
-      await prisma.budgets.update({
-        where: { id: budget.id },
-        data: {
-          amount: smartBudget.totalBudget,
-          updated_at: new Date()
-        }
-      });
-      for (const category of smartBudget.categories) {
-        await prisma.budget_categories.create({
+      // Regenerate budget if empty
+      if (userId === DEMO_USER_ID) {
+        // Use simple generation for demo user
+        const smartBudget = await generateSmartBudget(userId);
+        await prisma.budget_categories.deleteMany({
+          where: { budget_id: budget.id }
+        });
+        await prisma.budgets.update({
+          where: { id: budget.id },
           data: {
-            id: crypto.randomUUID(),
-            budget_id: budget.id,
-            category: category.category,
-            amount: category.amount,
-            created_at: new Date(),
+            amount: smartBudget.totalBudget,
             updated_at: new Date()
           }
         });
+        for (const category of smartBudget.categories) {
+          await prisma.budget_categories.create({
+            data: {
+              id: crypto.randomUUID(),
+              budget_id: budget.id,
+              category: category.category,
+              amount: category.amount,
+              created_at: new Date(),
+              updated_at: new Date()
+            }
+          });
+        }
+      } else {
+        // Use AI generation for logged-in users
+        try {
+          const aiResult = await generateAIBudget(userId);
+          
+          if (!aiResult.warnings || aiResult.warnings.length === 0) {
+            await prisma.budget_categories.deleteMany({
+              where: { budget_id: budget.id }
+            });
+            
+            await prisma.budgets.update({
+              where: { id: budget.id },
+              data: {
+                name: `AI ${aiResult.framework} Budget`,
+                description: `AI-generated budget using ${aiResult.framework} framework`,
+                amount: aiResult.totalBudget,
+                updated_at: new Date()
+              }
+            });
+            
+            for (const category of aiResult.categories) {
+              await prisma.budget_categories.create({
+                data: {
+                  id: crypto.randomUUID(),
+                  budget_id: budget.id,
+                  category: category.category,
+                  amount: category.amount,
+                  created_at: new Date(),
+                  updated_at: new Date()
+                }
+              });
+            }
+          }
+        } catch (aiError) {
+          console.error('AI budget regeneration failed:', aiError);
+          // Fallback to simple generation
+          const smartBudget = await generateSmartBudget(userId);
+          await prisma.budget_categories.deleteMany({
+            where: { budget_id: budget.id }
+          });
+          await prisma.budgets.update({
+            where: { id: budget.id },
+            data: {
+              amount: smartBudget.totalBudget,
+              updated_at: new Date()
+            }
+          });
+          for (const category of smartBudget.categories) {
+            await prisma.budget_categories.create({
+              data: {
+                id: crypto.randomUUID(),
+                budget_id: budget.id,
+                category: category.category,
+                amount: category.amount,
+                created_at: new Date(),
+                updated_at: new Date()
+              }
+            });
+          }
+        }
       }
+      
       const updatedBudget = await prisma.budgets.findFirst({
         where: { id: budget.id },
         include: {

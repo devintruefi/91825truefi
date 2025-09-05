@@ -45,3 +45,4 @@ Before making **any changes** to the codebase — including suggestions, refacto
 
 By following this structure, you ensure all contributions align with TrueFi’s mission of building a secure, scalable, and deeply personalized AI-native financial assistant.
 
+More context: I'm using pnpm dev to run the localhost and not npm run dev

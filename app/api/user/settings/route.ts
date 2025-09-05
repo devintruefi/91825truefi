@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import jwt from 'jsonwebtoken';
+import { getUserFromRequest } from '@/lib/auth';
 import { randomUUID } from 'crypto';
 
 // GET user settings
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const authUser = await getUserFromRequest(request);
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const token = authHeader.replace('Bearer ', '');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-    const userId = decoded.user_id || decoded.sub;
+    
+    const userId = authUser.id;
 
     // Get user basic info
     const user = await prisma.users.findUnique({
@@ -23,8 +21,6 @@ export async function GET(request: NextRequest) {
         email: true,
         first_name: true,
         last_name: true,
-        user_identity: true,
-        user_preferences: true,
       }
     });
 
@@ -33,7 +29,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Get additional settings from other tables
-    const [demographics, recurringIncome] = await Promise.all([
+    const [userIdentity, userPreferences, demographics, recurringIncome] = await Promise.all([
+      prisma.user_identity.findUnique({
+        where: { user_id: userId }
+      }),
+      prisma.user_preferences.findUnique({
+        where: { user_id: userId }
+      }),
       prisma.user_demographics.findUnique({
         where: { user_id: userId }
       }),
@@ -56,27 +58,27 @@ export async function GET(request: NextRequest) {
         firstName: user.first_name,
         lastName: user.last_name,
         email: user.email,
-        phone: user.user_identity?.phone_primary || '',
-        street: user.user_identity?.street || '',
-        city: user.user_identity?.city || '',
-        state: user.user_identity?.state || '',
-        postalCode: user.user_identity?.postal_code || '',
+        phone: userIdentity?.phone_primary || '',
+        street: userIdentity?.street || '',
+        city: userIdentity?.city || '',
+        state: userIdentity?.state || '',
+        postalCode: userIdentity?.postal_code || '',
         annualIncome: annualIncome,
         incomeRange: getIncomeRange(annualIncome),
         maritalStatus: demographics?.marital_status || '',
         dependents: demographics?.dependents || 0,
-        primaryGoals: user.user_preferences?.financial_goals || '',
+        primaryGoals: userPreferences?.financial_goals || '',
       },
       preferences: {
-        currency: user.user_preferences?.currency || 'USD',
-        timezone: user.user_preferences?.timezone || 'America/New_York',
-        language: user.user_preferences?.language || 'en',
-        riskTolerance: user.user_preferences?.risk_tolerance || 'moderate',
-        investmentHorizon: user.user_preferences?.investment_horizon || 'medium',
+        currency: userPreferences?.currency || 'USD',
+        timezone: userPreferences?.timezone || 'America/New_York',
+        language: userPreferences?.language || 'en',
+        riskTolerance: userPreferences?.risk_tolerance || 'moderate',
+        investmentHorizon: userPreferences?.investment_horizon || 'medium',
       },
       notifications: {
-        emailNotifications: user.user_preferences?.email_notifications ?? true,
-        pushNotifications: user.user_preferences?.push_notifications ?? true,
+        emailNotifications: userPreferences?.email_notifications ?? true,
+        pushNotifications: userPreferences?.push_notifications ?? true,
         weeklyFinancialSummary: true, // These could be stored in a JSON field
         goalMilestones: true,
         budgetAlerts: true,
@@ -97,23 +99,31 @@ export async function GET(request: NextRequest) {
         twoFactorEnabled: false, // This would need to be implemented
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching user settings:', error);
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
+    console.error('Error details:', error?.message, error?.stack);
+    
+    // Handle JWT errors
+    if (error?.name === 'JsonWebTokenError' || error?.name === 'TokenExpiredError') {
+      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    }
+    
+    return NextResponse.json({ 
+      error: 'Failed to fetch settings',
+      details: process.env.NODE_ENV === 'development' ? error?.message : undefined 
+    }, { status: 500 });
   }
 }
 
 // PUT update user settings
 export async function PUT(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const authUser = await getUserFromRequest(request);
+    if (!authUser) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const token = authHeader.replace('Bearer ', '');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-    const userId = decoded.user_id || decoded.sub;
+    
+    const userId = authUser.id;
 
     const body = await request.json();
     const { section, data } = body;
@@ -162,8 +172,7 @@ export async function PUT(request: NextRequest) {
               updated_at: new Date(),
             },
             create: {
-              id: randomUUID(),
-              user_id: userId,
+              user_id: userId,  // user_id is the primary key, not id
               marital_status: data.maritalStatus,
               dependents: data.dependents,
               created_at: new Date(),

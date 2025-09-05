@@ -34,7 +34,7 @@ model accounts {
   plaid_connections                                                 plaid_connections?        @relation(fields: [plaid_item_id], references: [plaid_item_id], onDelete: Cascade, onUpdate: NoAction)
   users                                                             users                     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   plaid_connections_accounts_plaid_connection_idToplaid_connections plaid_connections?        @relation("accounts_plaid_connection_idToplaid_connections", fields: [plaid_connection_id], references: [id], onUpdate: NoAction, map: "fk_accounts_plaid_connection")
-  credit_card_aprs                                                  credit_card_aprs[]       @ignore
+  credit_card_aprs                                                  credit_card_aprs[] @ignore
   goal_accounts                                                     goal_accounts[]
   holdings                                                          holdings[]
   holdings_current                                                  holdings_current[]
@@ -618,6 +618,9 @@ model users {
   auto_allocation_enabled      Boolean?                    @default(true)
   allocation_refresh_frequency String?                     @default("daily") @db.VarChar(20)
   plaid_access_token           String?
+  country_code                 String?                     @default("US") @db.Char(2)
+  region_code                  String?                     @db.VarChar(10)
+  currency_preference          String?                     @default("USD") @db.VarChar(3)
   accounts                     accounts[]
   agent_run_log                agent_run_log[]
   allocation_history           allocation_history[]
@@ -639,6 +642,7 @@ model users {
   tax_profile                  tax_profile?
   transaction_categories       transaction_categories[]
   transactions                 transactions[]
+  user_demographics            user_demographics?
   user_identity                user_identity?
   user_onboarding_responses    user_onboarding_responses[]
   user_passwords               user_passwords?
@@ -924,6 +928,20 @@ model user_two_factor_auth {
   users             users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
+model user_demographics {
+  user_id          String   @id @db.Uuid
+  age              Int?
+  household_income Decimal? @db.Decimal(18, 2)
+  marital_status   String?  @db.VarChar(50)
+  dependents       Int?
+  life_stage       String?  @db.VarChar(50)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  users            users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_user_demographics_user_id")
+}
+
 model vehicle_assets_old {
   id              String        @id(map: "vehicle_assets_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   manual_asset_id String        @db.Uuid
@@ -939,4 +957,25 @@ model vehicle_assets_old {
   created_at      DateTime?     @default(now()) @db.Timestamptz(6)
   updated_at      DateTime?     @default(now()) @db.Timestamptz(6)
   manual_assets   manual_assets @relation(fields: [manual_asset_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "vehicle_assets_manual_asset_id_fkey")
+}
+
+model waitlist_entries {
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name                String    @db.VarChar
+  last_name                 String    @db.VarChar
+  email                     String    @db.VarChar
+  phone                     String?   @db.VarChar
+  financial_goal            String?   @db.VarChar
+  current_situation         String?   @db.VarChar
+  interests                 Json?     @db.JsonB
+  money_management_methods  Json?     @db.JsonB
+  other_money_management    String?   @db.Text
+  must_have_features        String?   @db.Text
+  referral_source           String?   @db.VarChar
+  additional_comments       String?   @db.Text
+  newsletter_opt_in         Boolean?  @default(false)
+  updates_opt_in            Boolean?  @default(false)
+  created_at                DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime? @default(now()) @db.Timestamptz(6)
+  converted_to_user_id      String?   @db.Uuid
 }

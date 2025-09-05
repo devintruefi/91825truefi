@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import { OnboardingChatSessionManager } from '@/lib/onboarding/chat-session-manager';
 import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 // Complete onboarding with all database updates
 export async function POST(request: NextRequest) {
@@ -315,8 +313,6 @@ export async function POST(request: NextRequest) {
       { error: 'Failed to complete onboarding', details: error.message },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

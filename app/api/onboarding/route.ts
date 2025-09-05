@@ -1,3 +1,4 @@
+// retired: replaced by dashboard-guided onboarding
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { getUserFromRequest } from '@/lib/auth';
@@ -39,6 +40,11 @@ async function cleanupOldTempUsers() {
 }
 
 export async function POST(req: NextRequest) {
+  return NextResponse.json(
+    { error: 'Chat onboarding has been retired. Please use dashboard-guided onboarding.' },
+    { status: 410 }
+  );
+  /* Retired code below
   try {
     const { answers, userId } = await req.json();
     console.log('Onboarding POST request received:', { userId, answersCount: Object.keys(answers || {}).length });
@@ -146,4 +152,5 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+  */
 } 

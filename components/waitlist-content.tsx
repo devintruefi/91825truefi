@@ -32,11 +32,55 @@ export function WaitlistContent() {
   })
 
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle form submission
-    setIsSubmitted(true)
+    setIsSubmitting(true)
+    setSubmitError("")
+
+    try {
+      const response = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to join waitlist')
+      }
+
+      // Success - show confirmation
+      setIsSubmitted(true)
+      
+      // Reset form data for next submission
+      setFormData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+        financialGoals: "",
+        currentSituation: "",
+        interests: [],
+        moneyManagement: [],
+        otherMoneyManagement: "",
+        mustHave: "",
+        hearAboutUs: "",
+        additionalComments: "",
+        newsletter: false,
+        updates: false,
+      })
+    } catch (error) {
+      console.error('Error submitting waitlist form:', error)
+      setSubmitError(error instanceof Error ? error.message : 'An error occurred. Please try again.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleInterestChange = (interest: string, checked: boolean) => {
@@ -116,7 +160,10 @@ export function WaitlistContent() {
                 for you to try.
               </p>
             </div>
-            <Button className="w-full bg-cyan-600 hover:bg-cyan-700" onClick={() => setIsSubmitted(false)}>
+            <Button className="w-full bg-cyan-600 hover:bg-cyan-700" onClick={() => {
+              setIsSubmitted(false)
+              setSubmitError("")
+            }}>
               Join Another Person
             </Button>
           </CardContent>
@@ -420,8 +467,19 @@ export function WaitlistContent() {
                       </div>
                     </div>
 
-                    <Button type="submit" className="w-full bg-cyan-600 hover:bg-cyan-700" size="lg">
-                      Join the Waitlist
+                    {submitError && (
+                      <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <p className="text-sm text-red-600 dark:text-red-400">{submitError}</p>
+                      </div>
+                    )}
+
+                    <Button 
+                      type="submit" 
+                      className="w-full bg-cyan-600 hover:bg-cyan-700" 
+                      size="lg"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? "Joining..." : "Join the Waitlist"}
                     </Button>
 
                     <p className="text-xs text-gray-500 dark:text-gray-400 text-center">

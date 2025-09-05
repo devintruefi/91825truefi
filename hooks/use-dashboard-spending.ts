@@ -7,11 +7,25 @@ interface DashboardSpendingData {
     'Lifestyle': number;
     'Savings': number;
   };
+  totalIncome: number;
+  totalSpending: number;
+  savingsRate: number;
+  cashFlow: number;
   month: string;
   transactionCount: number;
+  incomeSource?: 'recurring_income' | 'transactions';
+  incomeDetails?: {
+    recurring: number;
+    transactionBased: number;
+    incomeTransactionCount: number;
+  };
+  dateRange?: {
+    start: string;
+    end: string;
+  };
 }
 
-export function useDashboardSpending(userId: string | null) {
+export function useDashboardSpending(userId: string | null, dateRange: string = '30') {
   const [data, setData] = useState<DashboardSpendingData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +37,7 @@ export function useDashboardSpending(userId: string | null) {
     setError(null);
     
     try {
-      const response = await fetch(`/api/dashboard/spending/${userId}`);
+      const response = await fetch(`/api/dashboard/spending/${userId}?days=${dateRange}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch dashboard spending data');
@@ -40,7 +54,7 @@ export function useDashboardSpending(userId: string | null) {
 
   useEffect(() => {
     fetchData();
-  }, [userId]);
+  }, [userId, dateRange]); // Add dateRange as dependency
 
   const refresh = () => {
     fetchData();

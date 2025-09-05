@@ -270,19 +270,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const isOnAuthPage = window.location.pathname.startsWith('/auth') || window.location.pathname === '/auth'
         console.log('Is on auth page:', isOnAuthPage)
         if (isOnAuthPage) {
-          console.log('Redirecting to /chat for onboarding')
-          // Check if user has completed onboarding
-          // Skip onboarding check for demo users
-          if (user.email === 'demo@truefi.ai') {
-            window.location.href = '/dashboard'
-          } else {
-            const hasCompletedOnboarding = user.has_completed_onboarding || localStorage.getItem('onboarding_complete') === 'true'
-            if (!hasCompletedOnboarding) {
-              window.location.href = '/chat?onboarding=true'
-            } else {
-              window.location.href = '/dashboard'
-            }
-          }
+          console.log('Redirecting to dashboard')
+          // All users (new and existing) go to dashboard
+          // Dashboard will handle guided onboarding if needed
+          window.location.href = '/dashboard'
         }
       }
     }
@@ -449,9 +440,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('auth_token', newUser.token);
             console.log('Stored auth token from user creation');
           }
-          // Redirect to onboarding after successful user creation
+          // Redirect to dashboard after successful user creation
+          // Dashboard will handle guided onboarding for new users
           setTimeout(() => {
-            window.location.href = '/chat?onboarding=true';
+            window.location.href = '/dashboard';
           }, 100);
           return;
         } else {
@@ -501,9 +493,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         });
         localStorage.setItem('current_user_id', newUser.id);
         localStorage.setItem('current_user_data', JSON.stringify(newUser));
-        // Redirect to onboarding after successful local user creation
+        // Redirect to dashboard after successful local user creation
+        // Dashboard will handle guided onboarding for new users
         setTimeout(() => {
-          window.location.href = '/chat?onboarding=true';
+          window.location.href = '/dashboard';
         }, 100);
       }
     } catch (err) {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
+import { useUser } from "@/contexts/user-context"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -50,6 +51,7 @@ export function SettingsContent() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const { toast } = useToast()
+  const { user } = useUser()
   
   // Form states
   const [profileData, setProfileData] = useState({
@@ -84,6 +86,11 @@ export function SettingsContent() {
     smsPaymentReminders: false
   })
   
+  const [preferences, setPreferences] = useState({
+    currency: 'USD',
+    timezone: 'America/New_York',
+    language: 'en'
+  })
   
   const [privacySettings, setPrivacySettings] = useState({
     dataAnalytics: true,
@@ -116,7 +123,8 @@ export function SettingsContent() {
         return
       }
       
-      const response = await fetch('/api/user/settings', {
+      // Fetch from the About Me API which is the single source of truth
+      const response = await fetch('/api/profile/about-me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -141,60 +149,59 @@ export function SettingsContent() {
       
       const data = await response.json()
       
-      // Update profile data with safe access
-      if (data.profile) {
-        setProfileData({
-          firstName: data.profile.firstName || '',
-          lastName: data.profile.lastName || '',
-          email: data.profile.email || '',
-          phone: data.profile.phone || '',
-          street: data.profile.street || '',
-          city: data.profile.city || '',
-          state: data.profile.state || '',
-          postalCode: data.profile.postalCode || '',
-          incomeRange: data.profile.incomeRange || '50k-75k',
-          maritalStatus: data.profile.maritalStatus || '',
-          dependents: data.profile.dependents || 0,
-          primaryGoals: data.profile.primaryGoals || '',
-          riskTolerance: data.preferences?.riskTolerance || 'moderate',
-          investmentHorizon: data.preferences?.investmentHorizon || 'medium'
-        })
-      }
+      // Map About Me data to Settings format
+      setProfileData({
+        firstName: data.first_name || '',
+        lastName: data.last_name || '',
+        email: data.email || '',  // Now comes from About Me API
+        phone: '',  // Not available in About Me yet
+        street: '',  // Not available in About Me yet
+        city: data.city || '',
+        state: data.state || '',
+        postalCode: data.postal_code || '',
+        incomeRange: '50k-75k',  // Would need to calculate from income data
+        maritalStatus: data.marital_status || '',
+        dependents: data.dependents || 0,
+        primaryGoals: '',  // This could come from financial_goals
+        riskTolerance: data.risk_tolerance ? String(data.risk_tolerance) : 'moderate',
+        investmentHorizon: data.investment_horizon || 'medium'
+      })
       
-      // Update notification settings with safe access
-      if (data.notifications) {
-        setNotificationSettings({
-          emailNotifications: data.notifications.emailNotifications ?? true,
-          pushNotifications: data.notifications.pushNotifications ?? true,
-          weeklyFinancialSummary: data.notifications.weeklyFinancialSummary ?? true,
-          goalMilestones: data.notifications.goalMilestones ?? true,
-          budgetAlerts: data.notifications.budgetAlerts ?? true,
-          marketUpdates: data.notifications.marketUpdates ?? false,
-          productUpdates: data.notifications.productUpdates ?? false,
-          dailyReminders: data.notifications.dailyReminders ?? true,
-          pennyMessages: data.notifications.pennyMessages ?? true,
-          urgentAlerts: data.notifications.urgentAlerts ?? true,
-          smsSecurityAlerts: data.notifications.smsSecurityAlerts ?? true,
-          smsPaymentReminders: data.notifications.smsPaymentReminders ?? false
-        })
-      }
+      // Update notification settings
+      setNotificationSettings({
+        emailNotifications: data.notifications_enabled ?? true,
+        pushNotifications: false,  // Not in About Me yet
+        weeklyFinancialSummary: true,
+        goalMilestones: true,
+        budgetAlerts: true,
+        marketUpdates: false,
+        productUpdates: false,
+        dailyReminders: true,
+        pennyMessages: true,
+        urgentAlerts: true,
+        smsSecurityAlerts: true,
+        smsPaymentReminders: false
+      })
       
-      // Update privacy settings with safe access
-      if (data.privacy) {
-        setPrivacySettings({
-          dataAnalytics: data.privacy.dataAnalytics ?? true,
-          personalizedRecommendations: data.privacy.personalizedRecommendations ?? true,
-          marketingCommunications: data.privacy.marketingCommunications ?? false
-        })
-      }
+      // Update preferences from About Me data
+      setPreferences({
+        currency: data.currency || 'USD',
+        timezone: data.timezone || 'America/New_York',
+        language: data.language || 'en'
+      })
       
-      // Update security settings with safe access
-      if (data.security) {
-        setSecuritySettings(prev => ({
-          ...prev,
-          twoFactorEnabled: data.security.twoFactorEnabled ?? false
-        }))
-      }
+      // Update privacy settings (defaults for now)
+      setPrivacySettings({
+        dataAnalytics: true,
+        personalizedRecommendations: true,
+        marketingCommunications: false
+      })
+      
+      // Update security settings (defaults for now)
+      setSecuritySettings(prev => ({
+        ...prev,
+        twoFactorEnabled: false
+      }))
       
     } catch (error) {
       console.error('Error fetching settings:', error)
@@ -221,13 +228,40 @@ export function SettingsContent() {
         return
       }
       
-      const response = await fetch('/api/user/settings', {
+      // Map settings data to About Me format and save to About Me API
+      let aboutMeData: any = {}
+      
+      if (section === 'profile') {
+        aboutMeData = {
+          first_name: data.firstName,
+          last_name: data.lastName,
+          city: data.city,
+          state: data.state,
+          postal_code: data.postalCode,
+          marital_status: data.maritalStatus,
+          dependents: data.dependents,
+          risk_tolerance: data.riskTolerance ? parseInt(data.riskTolerance) : undefined,
+          investment_horizon: data.investmentHorizon
+        }
+      } else if (section === 'preferences') {
+        aboutMeData = {
+          currency: data.currency,
+          timezone: data.timezone,
+          language: data.language
+        }
+      } else if (section === 'notifications') {
+        aboutMeData = {
+          notifications_enabled: data.emailNotifications
+        }
+      }
+      
+      const response = await fetch('/api/profile/about-me', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ section, data })
+        body: JSON.stringify(aboutMeData)
       })
       
       if (!response.ok) {

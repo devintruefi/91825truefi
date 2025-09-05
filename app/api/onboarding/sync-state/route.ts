@@ -1,11 +1,15 @@
+// retired: replaced by dashboard-guided onboarding
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 // Sync onboarding state to database
 export async function POST(request: NextRequest) {
+  return NextResponse.json(
+    { error: 'Chat onboarding has been retired. Please use dashboard-guided onboarding.' },
+    { status: 410 }
+  );
+  /* Retired code below
   try {
     const body = await request.json();
     const { state, version } = body;
@@ -232,7 +236,6 @@ export async function POST(request: NextRequest) {
       { error: 'Failed to sync state', details: error.message },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
+  */
 }

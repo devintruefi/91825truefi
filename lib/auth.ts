@@ -31,17 +31,31 @@ export async function getUserFromRequest(request: Request): Promise<{ id: string
   const token = authHeader.split(' ')[1];
   
   // Handle local user tokens (base64 encoded)
-  if (token.startsWith('local:')) {
-    try {
-      const decoded = Buffer.from(token, 'base64').toString();
+  try {
+    const decoded = Buffer.from(token, 'base64').toString();
+    
+    // Handle format: local:userId:timestamp
+    if (decoded.startsWith('local:')) {
       const parts = decoded.split(':');
       if (parts[0] === 'local' && parts[1]) {
-        // For local users, just return the user ID without database lookup
         return { id: parts[1] };
       }
-    } catch (e) {
-      console.error('Failed to decode local token:', e);
     }
+    
+    // Handle format: JSON object with userId or id field
+    try {
+      const jsonData = JSON.parse(decoded);
+      if (jsonData.userId) {
+        return { id: jsonData.userId };
+      }
+      if (jsonData.id) {
+        return { id: jsonData.id };
+      }
+    } catch (jsonError) {
+      // Not JSON, continue to JWT handling
+    }
+  } catch (base64Error) {
+    // Not base64 encoded, try JWT
   }
   
   // Handle JWT tokens

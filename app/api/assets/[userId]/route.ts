@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-// GET - Fetch all assets for a user
+// GET - Fetch all assets for a user (manual assets + Plaid account balances)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
@@ -9,7 +9,8 @@ export async function GET(
   try {
     const { userId } = await params
 
-    const assets = await prisma.manual_assets.findMany({
+    // Fetch manual assets (user-entered)
+    const manualAssets = await prisma.manual_assets.findMany({
       where: { user_id: userId },
       include: {
         business_ownership_details: true,
@@ -23,9 +24,64 @@ export async function GET(
       orderBy: { created_at: 'desc' }
     })
 
-    return NextResponse.json(assets)
+    // Fetch Plaid-connected asset accounts (depository + investment)
+    const plaidAccounts = await prisma.accounts.findMany({
+      where: { 
+        user_id: userId,
+        is_active: true,
+        // Only include asset-type accounts, not liabilities
+        type: {
+          in: ['depository', 'investment']
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        subtype: true,
+        balance: true,
+        institution_name: true,
+        updated_at: true
+      }
+    })
+
+    // Transform Plaid accounts into asset format to match manual assets structure
+    const plaidAsAssets = plaidAccounts.map(account => ({
+      id: account.id,
+      name: account.name || 'Bank Account',
+      asset_class: account.type === 'investment' ? 'Investment Account' : 'Cash & Cash Equivalents',
+      value: account.balance || 0,
+      notes: `${account.institution_name || 'Bank'} - ${account.subtype || account.type}`,
+      source: 'plaid' as const,
+      user_id: userId,
+      created_at: account.updated_at,
+      updated_at: account.updated_at,
+      // Set detail tables to null since these are Plaid accounts
+      business_ownership_details: null,
+      collectible_details: null,
+      other_manual_asset_details: null,
+      other_manual_assets: null,
+      real_estate_details: null,
+      vehicle_assets: null,
+      vehicle_details: null,
+    }))
+
+    // Combine manual assets and Plaid assets
+    const allAssets = [
+      ...manualAssets.map(asset => ({ ...asset, source: 'manual' as const })),
+      ...plaidAsAssets
+    ]
+
+    // Sort by value descending to show largest assets first
+    allAssets.sort((a, b) => {
+      const aValue = typeof a.value === 'object' && a.value?.toNumber ? a.value.toNumber() : (parseFloat(a.value?.toString() || '0') || 0)
+      const bValue = typeof b.value === 'object' && b.value?.toNumber ? b.value.toNumber() : (parseFloat(b.value?.toString() || '0') || 0)
+      return bValue - aValue
+    })
+
+    return NextResponse.json(allAssets)
   } catch (error) {
-    console.error('Error fetching assets:', error)
+    console.error('Error fetching combined assets:', error)
     return NextResponse.json(
       { error: 'Failed to fetch assets' },
       { status: 500 }

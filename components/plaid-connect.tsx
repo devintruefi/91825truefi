@@ -86,12 +86,18 @@ export function PlaidConnect({ onSuccess, onError, variant = "default", classNam
           if (result.success) {
             setSuccess(`Successfully connected ${result.accounts_count} accounts!`)
             setLinkToken(null)
+            
+            // Dispatch event for guided onboarding to detect
+            window.dispatchEvent(new CustomEvent('plaid-success', { 
+              detail: { accounts_count: result.accounts_count }
+            }))
+            
             // Call onSuccess callback if provided, passing the data
             if (onSuccess) {
               setTimeout(() => onSuccess(public_token, metadata), 1000)
             } else {
-              // Refresh the page to show new data
-              setTimeout(() => window.location.reload(), 2000)
+              // Don't refresh immediately - let guided tour handle it
+              // setTimeout(() => window.location.reload(), 2000)
             }
           } else {
             setError('Failed to link account')
@@ -170,12 +176,18 @@ export function PlaidConnect({ onSuccess, onError, variant = "default", classNam
           if (result.success) {
             setSuccess(`Successfully connected ${result.accounts_count} accounts!`)
             setLinkToken(null)
+            
+            // Dispatch event for guided onboarding to detect
+            window.dispatchEvent(new CustomEvent('plaid-success', { 
+              detail: { accounts_count: result.accounts_count }
+            }))
+            
             // Call onSuccess callback if provided, passing the data
             if (onSuccess) {
               setTimeout(() => onSuccess(public_token, metadata), 1000)
             } else {
-              // Refresh the page to show new data
-              setTimeout(() => window.location.reload(), 2000)
+              // Don't refresh immediately - let guided tour handle it
+              // setTimeout(() => window.location.reload(), 2000)
             }
           } else {
             setError('Failed to link account')

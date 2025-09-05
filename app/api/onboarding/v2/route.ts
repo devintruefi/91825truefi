@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import * as jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
 import {
@@ -17,8 +17,6 @@ import {
   STEP_CONFIG_V2
 } from '@/lib/onboarding/canonical-v2';
 import { detectMonthlyIncomeV2, persistDetectedIncome } from '@/lib/income-detection-v2';
-
-const prisma = new PrismaClient();
 
 // Redis or in-memory cache for state (use Redis in production)
 const stateCache = new Map<string, OnboardingStateV2>();

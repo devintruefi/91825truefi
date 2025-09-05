@@ -487,7 +487,7 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   const fetchInvestmentData = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}`)
+      const response = await fetch(`/api/investments/${userId}`)
       if (response.ok) {
         const data = await response.json()
         setAccounts(data.accounts || [])
@@ -508,24 +508,40 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
     
     try {
       const url = investment.id 
-        ? `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}/${investment.id}`
-        : `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}`
+        ? `/api/investments/${userId}/${investment.id}`
+        : `/api/investments/${userId}`
       
       const method = investment.id ? "PUT" : "POST"
+      const authToken = localStorage.getItem('auth_token')
+      
+      if (!authToken) {
+        alert("Please sign in to manage your investments")
+        return
+      }
       
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        },
         body: JSON.stringify(investment)
       })
 
       if (response.ok) {
+        const result = await response.json()
+        console.log("Investment saved successfully:", result)
         await fetchInvestmentData()
         setShowAddInvestment(false)
         setEditingInvestment(null)
+      } else {
+        const errorData = await response.json()
+        console.error("API Error:", errorData)
+        alert(`Failed to save investment: ${errorData.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error("Failed to save investment:", error)
+      alert("Failed to save investment. Please try again.")
     }
   }, [userId, fetchInvestmentData])
 
@@ -538,15 +554,32 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
     if (!confirm("Are you sure you want to delete this investment?")) return
     
     try {
+      const authToken = localStorage.getItem('auth_token')
+      
+      if (!authToken) {
+        alert("Please sign in to manage your investments")
+        return
+      }
+      
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/investments/${userId}/${id}`,
-        { method: "DELETE" }
+        `/api/investments/${userId}/${id}`,
+        { 
+          method: "DELETE",
+          headers: {
+            "Authorization": `Bearer ${authToken}`
+          }
+        }
       )
       if (response.ok) {
         await fetchInvestmentData()
+      } else {
+        const errorData = await response.json()
+        console.error("Delete API Error:", errorData)
+        alert(`Failed to delete investment: ${errorData.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error("Failed to delete investment:", error)
+      alert("Failed to delete investment. Please try again.")
     }
   }, [userId, fetchInvestmentData])
 
@@ -586,6 +619,38 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
     a.download = `investments_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
   }, [filteredInvestments])
+
+  const importPlaidHoldings = useCallback(async () => {
+    if (!userId) {
+      alert("Please sign in to import holdings")
+      return
+    }
+    
+    try {
+      setLoading(true)
+      const response = await fetch(`/api/plaid/import-holdings/${userId}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : ''}`
+        }
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        alert(`Successfully imported ${result.imported_count || 0} holdings from your connected accounts!`)
+        await fetchInvestmentData() // Refresh the data
+      } else {
+        const error = await response.json()
+        alert(`Failed to import holdings: ${error.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Import error:', error)
+      alert('Failed to import holdings. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }, [userId, fetchInvestmentData])
 
   if (loading) {
     return (
@@ -733,21 +798,22 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
 
       {/* Controls Bar */}
       <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
-        <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <div className="relative flex-1 md:w-64">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search investments..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-              
+        <CardContent className="p-4 space-y-4">
+          {/* Top Row - Search and Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search investments..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            
+            <div className="flex gap-2 flex-wrap sm:flex-nowrap">
               <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-full sm:w-36">
                   <SelectValue placeholder="All Accounts" />
                 </SelectTrigger>
                 <SelectContent>
@@ -761,7 +827,7 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
               </Select>
 
               <Select value={selectedType} onValueChange={setSelectedType}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-full sm:w-32">
                   <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
@@ -779,25 +845,31 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
               </Select>
 
               <Select value={selectedRisk} onValueChange={setSelectedRisk}>
-                <SelectTrigger className="w-32">
-                  <SelectValue placeholder="All Risk Levels" />
+                <SelectTrigger className="w-full sm:w-32">
+                  <SelectValue placeholder="Risk Level" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Risk</SelectItem>
-                  <SelectItem value="low">Low Risk</SelectItem>
-                  <SelectItem value="medium">Medium Risk</SelectItem>
-                  <SelectItem value="high">High Risk</SelectItem>
-                  <SelectItem value="very_high">Very High Risk</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="very_high">Very High</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+          </div>
 
+          {/* Bottom Row - Actions and View Controls */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">
+                View:
+              </span>
               <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
                 <Button
                   variant={config.layout === "grid" ? "secondary" : "ghost"}
                   size="sm"
-                  className="h-7 w-7 p-0"
+                  className="h-8 w-8 p-0"
                   onClick={() => setConfig({...config, layout: "grid"})}
                 >
                   <Grid3x3 className="h-4 w-4" />
@@ -805,7 +877,7 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
                 <Button
                   variant={config.layout === "list" ? "secondary" : "ghost"}
                   size="sm"
-                  className="h-7 w-7 p-0"
+                  className="h-8 w-8 p-0"
                   onClick={() => setConfig({...config, layout: "list"})}
                 >
                   <List className="h-4 w-4" />
@@ -813,15 +885,29 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
                 <Button
                   variant={config.layout === "kanban" ? "secondary" : "ghost"}
                   size="sm"
-                  className="h-7 w-7 p-0"
+                  className="h-8 w-8 p-0"
                   onClick={() => setConfig({...config, layout: "kanban"})}
                 >
                   <Layers className="h-4 w-4" />
                 </Button>
               </div>
+            </div>
 
+            <div className="flex gap-2 flex-col sm:flex-row">
+              {userId && (
+                <Button
+                  variant="outline"
+                  onClick={() => importPlaidHoldings()}
+                  disabled={loading}
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200 whitespace-nowrap"
+                  size="sm"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import Holdings
+                </Button>
+              )}
               <Button
-                className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
+                className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 whitespace-nowrap"
                 onClick={() => {
                   if (!userId) {
                     alert("Please sign in to add investments")
@@ -830,9 +916,10 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
                   setEditingInvestment(null)
                   setShowAddInvestment(true)
                 }}
+                size="sm"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                {userId ? "Add Investment" : "Sign In to Add"}
+                Add Investment
               </Button>
             </div>
           </div>

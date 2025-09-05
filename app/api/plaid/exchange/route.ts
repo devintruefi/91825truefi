@@ -45,51 +45,51 @@ export async function POST(req: NextRequest) {
     const accounts = accountsResponse.data.accounts;
     for (const account of accounts) {
       try {
-        // Use upsert for idempotent operation
-        await prisma.accounts.upsert({
-          where: { 
-            plaid_account_id: account.account_id 
-          },
-          update: {
+        // Manual upsert to avoid unique constraint issues
+        const existing = await prisma.accounts.findFirst({
+          where: {
             user_id: user.id,
-            name: account.name || 'Linked Account',
-            type: account.type || 'unknown',
-            subtype: account.subtype || null,
-            mask: account.mask || null,
-            institution_name: account.official_name || account.name || 'Unknown Institution',
-            balance: account.balances?.current || 0,
-            available_balance: account.balances?.available || null,
-            currency: account.balances?.iso_currency_code || 'USD',
-            plaid_item_id: item_id,
-            plaid_connection_id: plaidConnection.id,
-            is_active: true,
-            updated_at: new Date(),
-            balances_last_updated: new Date(),
-            unofficial_currency_code: account.balances?.unofficial_currency_code || null,
-          },
-          create: {
-            id: randomUUID(),
-            user_id: user.id,
-            plaid_account_id: account.account_id,
-            plaid_item_id: item_id,
-            plaid_connection_id: plaidConnection.id,
-            name: account.name || 'Linked Account',
-            type: account.type || 'unknown',
-            subtype: account.subtype || null,
-            mask: account.mask || null,
-            institution_name: account.official_name || account.name || 'Unknown Institution',
-            balance: account.balances?.current || 0,
-            available_balance: account.balances?.available || null,
-            currency: account.balances?.iso_currency_code || 'USD',
-            unofficial_currency_code: account.balances?.unofficial_currency_code || null,
-            is_active: true,
-            created_at: new Date(),
-            updated_at: new Date(),
-            balances_last_updated: new Date(),
+            plaid_account_id: account.account_id
           }
         });
+
+        const accountData = {
+          user_id: user.id,
+          name: account.name || 'Linked Account',
+          type: account.type || 'unknown',
+          subtype: account.subtype || null,
+          mask: account.mask || null,
+          institution_name: account.official_name || account.name || 'Unknown Institution',
+          balance: account.balances?.current || 0,
+          available_balance: account.balances?.available || null,
+          currency: account.balances?.iso_currency_code || 'USD',
+          plaid_item_id: item_id,
+          plaid_connection_id: plaidConnection.id,
+          is_active: true,
+          updated_at: new Date(),
+          balances_last_updated: new Date(),
+          unofficial_currency_code: account.balances?.unofficial_currency_code || null,
+        };
+
+        if (existing) {
+          // Update existing account
+          await prisma.accounts.update({
+            where: { id: existing.id },
+            data: accountData
+          });
+        } else {
+          // Create new account
+          await prisma.accounts.create({
+            data: {
+              id: randomUUID(),
+              plaid_account_id: account.account_id,
+              created_at: new Date(),
+              ...accountData
+            }
+          });
+        }
       } catch (accountError) {
-        console.error('Failed to upsert account:', account.account_id, accountError);
+        console.error('Failed to process account:', account.account_id, accountError);
         // Continue processing other accounts even if one fails
       }
     }
@@ -123,10 +123,12 @@ export async function POST(req: NextRequest) {
 
         if (existingTransaction) {
           // Update existing transaction
+          // Plaid returns positive amounts for debits (expenses) and negative for credits (income)
+          // We need to negate to match our convention: negative for expenses, positive for income
           await prisma.transactions.update({
             where: { id: existingTransaction.id },
             data: {
-              amount: tx.amount,
+              amount: -tx.amount,  // Negate Plaid's amount
               date: new Date(tx.date),
               category: tx.category ? tx.category.join(', ') : null,
               name: tx.name,
@@ -137,13 +139,15 @@ export async function POST(req: NextRequest) {
           });
         } else {
           // Create new transaction
+          // Plaid returns positive amounts for debits (expenses) and negative for credits (income)
+          // We need to negate to match our convention: negative for expenses, positive for income
           await prisma.transactions.create({
             data: {
               id: randomUUID(),
               user_id: user.id,
               account_id: account.id, // Use the account's UUID, not Plaid account_id
               plaid_transaction_id: tx.transaction_id,
-              amount: tx.amount,
+              amount: -tx.amount,  // Negate Plaid's amount
               date: new Date(tx.date),
               category: tx.category ? tx.category.join(', ') : null,
               name: tx.name,
@@ -167,6 +171,31 @@ export async function POST(req: NextRequest) {
       expenseCategories: Object.keys(detectedProfile.monthlyExpenses).length,
       budgetSuggestions: Object.keys(detectedProfile.suggestedBudget).length
     });
+
+    // Update onboarding progress to mark income as confirmed if we detected it
+    if (detectedProfile.monthlyIncome > 0) {
+      const onboardingProgress = await prisma.onboarding_progress.findUnique({
+        where: { user_id: user.id }
+      });
+      
+      if (onboardingProgress) {
+        // Store the detected income amount
+        await prisma.user_onboarding_responses.create({
+          data: {
+            user_id: user.id,
+            question: 'detected_income',
+            answer: JSON.stringify({
+              amount: detectedProfile.monthlyIncome,
+              source: 'plaid_detection',
+              confirmed: true
+            }),
+            created_at: new Date()
+          }
+        });
+        
+        console.log('Stored detected income in onboarding responses:', detectedProfile.monthlyIncome);
+      }
+    }
 
     // Kick off async sync and suggest
     if (process.env.TEST_MODE === 'true') {

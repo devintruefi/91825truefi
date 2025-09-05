@@ -348,7 +348,7 @@ export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
     onAnswer: async (value: any, ctx: any) => {
       // TODO: Upsert user_demographics with household data
     },
-    next: (state: any) => state.hasPlaidData ? 'income_confirmation' : 'income_capture'
+    next: (state: any) => state.hasPlaidData ? 'income_confirmation' : 'plaid_connection'
   },
 
   income_capture: {

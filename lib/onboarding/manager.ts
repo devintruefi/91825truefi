@@ -826,11 +826,12 @@ export class OnboardingManager {
 
       case 'risk_tolerance':
         const investmentHorizon = value > 7 ? 'long' : value > 4 ? 'medium' : 'short';
+        const riskToleranceStr = String(value); // Convert to string for database
         
         await prisma.user_preferences.upsert({
           where: { user_id: userId },
           update: {
-            risk_tolerance: value,
+            risk_tolerance: riskToleranceStr,
             investment_horizon: investmentHorizon,
             updated_at: new Date()
           },
@@ -844,7 +845,7 @@ export class OnboardingManager {
             currency: 'USD',
             timezone: 'America/New_York',
             language: 'en',
-            risk_tolerance: value,
+            risk_tolerance: riskToleranceStr,
             investment_horizon: investmentHorizon,
             created_at: new Date(),
             updated_at: new Date()

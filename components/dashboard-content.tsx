@@ -2,9 +2,13 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useUser } from "@/contexts/user-context"
+import { DynamicInsights } from "@/components/dynamic-insights"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { InteractiveGoalChart } from "@/components/interactive-goal-chart"
@@ -15,7 +19,8 @@ import {
   Home, Car, Briefcase, Heart, ShoppingBag, Utensils, Plane, Zap,
   BarChart3, PieChart, Activity, Sparkles, ChevronRight, ChevronDown,
   Eye, EyeOff, Download, Upload, MoreVertical, Info, AlertCircle,
-  AlertTriangle, CheckCircle, Smartphone, Star, Pin
+  AlertTriangle, CheckCircle, Smartphone, Star, Pin, Award, LineChart,
+  User, MapPin, Shield, Globe, Lock
 } from "lucide-react"
 
 // Enhanced styling classes for the premium dashboard experience
@@ -169,8 +174,13 @@ const sampleCategories = [
 ];
 
 export function DashboardContent() {
+  const { user } = useUser()
   const [activeTab, setActiveTab] = useState("overview")
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
+  
+  // Check if user is authenticated and not a demo user
+  const DEMO_USER_ID = '123e4567-e89b-12d3-a456-426614174000'
+  const isAuthenticatedRealUser = user && user.id && user.id !== DEMO_USER_ID
 
   // Calculate derived data
   const totalBalance = sampleAccounts.reduce((sum, acc) => sum + (acc.balance < 0 ? 0 : acc.balance), 0)
@@ -200,7 +210,7 @@ export function DashboardContent() {
         {/* Navigation tabs */}
         <div className="mb-4">
           <nav className="flex space-x-2 sm:space-x-1 overflow-x-auto pb-2 scrollbar-hide">
-            {["overview", "transactions", "assets", "budget", "goals", "investments"].map((tab) => (
+            {["overview", "about", "transactions", "assets", "budget", "goals", "investments"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -421,50 +431,58 @@ export function DashboardContent() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
-                      <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center flex-shrink-0">
-                        <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Spending Alert</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          Food & Dining spending increased 15% this month. Consider setting a budget limit.
-                        </p>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-yellow-700 dark:text-yellow-300">🔥 AI Detected</span>
+                    {isAuthenticatedRealUser ? (
+                      // Dynamic insights for authenticated real users
+                      <DynamicInsights userId={user.id} />
+                    ) : (
+                      // Hardcoded insights for demo/non-authenticated users
+                      <>
+                        <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
+                          <div className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center flex-shrink-0">
+                            <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Spending Alert</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                              Food & Dining spending increased 15% this month. Consider setting a budget limit.
+                            </p>
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-yellow-700 dark:text-yellow-300">🔥 AI Detected</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
 
-                    <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-800">
-                      <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center flex-shrink-0">
-                        <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Savings Opportunity</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          You could save an additional $200/month by optimizing your subscription services.
-                        </p>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-green-700 dark:text-green-300">✅ AI Suggestion</span>
+                        <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                          <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center flex-shrink-0">
+                            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Savings Opportunity</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                              You could save an additional $200/month by optimizing your subscription services.
+                            </p>
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-green-700 dark:text-green-300">✅ AI Suggestion</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
 
-                    <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-                      <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0">
-                        <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Investment Tip</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          Consider increasing your 401(k) contribution by 2% to maximize employer matching.
-                        </p>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-blue-700 dark:text-blue-300">🧠 AI Recommendation</span>
+                        <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+                            <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm text-gray-900 dark:text-white mb-1">Investment Tip</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                              Consider increasing your 401(k) contribution by 2% to maximize employer matching.
+                            </p>
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-blue-700 dark:text-blue-300">🧠 AI Recommendation</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -818,53 +836,750 @@ export function DashboardContent() {
           {/* Investments Tab */}
           {activeTab === "investments" && (
             <div className="space-y-6">
-              <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
-                <CardHeader>
-                  <CardTitle className="text-xl font-bold">Investment Portfolio</CardTitle>
-                  <Badge variant="outline" className="text-xs">Sample Data</Badge>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    <div className="text-center">
-                      <div className="text-4xl font-bold text-gray-900 dark:text-white mb-1">
-                        {formatCurrency(sampleInvestments.reduce((sum, inv) => sum + inv.value, 0))}
+              {/* Portfolio Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Total Value</p>
+                        <p className="text-2xl font-bold">$247,589.42</p>
+                        <p className="text-sm text-green-600 flex items-center mt-1">
+                          <TrendingUp className="h-3 w-3 mr-1" />
+                          +12.4% YTD
+                        </p>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Total portfolio value</p>
+                      <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+                        <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                      </div>
                     </div>
-                    
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Investment</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead className="text-right">Value</TableHead>
-                            <TableHead className="text-right">Performance</TableHead>
-                            <TableHead className="text-right">Allocation</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {sampleInvestments.map((investment) => (
-                            <TableRow key={investment.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                              <TableCell className="font-medium">{investment.name}</TableCell>
-                              <TableCell>{investment.type}</TableCell>
-                              <TableCell className="text-right font-bold">{formatCurrency(investment.value)}</TableCell>
-                              <TableCell className={`text-right font-medium ${investment.performance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {investment.performance >= 0 ? '+' : ''}{investment.performance}%
-                              </TableCell>
-                              <TableCell className="text-right">{investment.allocation}%</TableCell>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Day Change</p>
+                        <p className="text-2xl font-bold">+$2,458.23</p>
+                        <p className="text-sm text-green-600 flex items-center mt-1">
+                          <ArrowUpRight className="h-3 w-3 mr-1" />
+                          +1.0%
+                        </p>
+                      </div>
+                      <div className="h-12 w-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
+                        <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Total Gain</p>
+                        <p className="text-2xl font-bold">$47,589.42</p>
+                        <p className="text-sm text-green-600 flex items-center mt-1">
+                          <TrendingUp className="h-3 w-3 mr-1" />
+                          +23.8%
+                        </p>
+                      </div>
+                      <div className="h-12 w-12 bg-emerald-100 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
+                        <Activity className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Dividends (YTD)</p>
+                        <p className="text-2xl font-bold">$3,254.00</p>
+                        <p className="text-sm text-gray-600 flex items-center mt-1">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          Next: Dec 15
+                        </p>
+                      </div>
+                      <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
+                        <Award className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Investment Tabs */}
+              <Tabs defaultValue="holdings" className="space-y-6">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="holdings">Holdings</TabsTrigger>
+                  <TabsTrigger value="performance">Performance</TabsTrigger>
+                  <TabsTrigger value="analysis">Analysis</TabsTrigger>
+                </TabsList>
+
+                {/* Holdings Tab */}
+                <TabsContent value="holdings" className="space-y-4">
+                  <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <div>
+                        <CardTitle className="text-xl font-bold">Portfolio Holdings</CardTitle>
+                        <Badge variant="outline" className="text-xs mt-2">Sample Data</Badge>
+                      </div>
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4 mr-2" />
+                        Export
+                      </Button>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Symbol</TableHead>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead className="text-right">Shares</TableHead>
+                              <TableHead className="text-right">Price</TableHead>
+                              <TableHead className="text-right">Value</TableHead>
+                              <TableHead className="text-right">Gain/Loss</TableHead>
+                              <TableHead className="text-right">% of Portfolio</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                          </TableHeader>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell className="font-medium">AAPL</TableCell>
+                              <TableCell>Apple Inc.</TableCell>
+                              <TableCell><Badge variant="secondary">Stock</Badge></TableCell>
+                              <TableCell className="text-right">150</TableCell>
+                              <TableCell className="text-right">$195.89</TableCell>
+                              <TableCell className="text-right font-bold">$29,383.50</TableCell>
+                              <TableCell className="text-right text-green-600">+$5,383.50 (+22.4%)</TableCell>
+                              <TableCell className="text-right">11.9%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">VOO</TableCell>
+                              <TableCell>Vanguard S&P 500 ETF</TableCell>
+                              <TableCell><Badge variant="secondary">ETF</Badge></TableCell>
+                              <TableCell className="text-right">85</TableCell>
+                              <TableCell className="text-right">$482.55</TableCell>
+                              <TableCell className="text-right font-bold">$41,016.75</TableCell>
+                              <TableCell className="text-right text-green-600">+$8,016.75 (+24.3%)</TableCell>
+                              <TableCell className="text-right">16.6%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">MSFT</TableCell>
+                              <TableCell>Microsoft Corporation</TableCell>
+                              <TableCell><Badge variant="secondary">Stock</Badge></TableCell>
+                              <TableCell className="text-right">100</TableCell>
+                              <TableCell className="text-right">$429.68</TableCell>
+                              <TableCell className="text-right font-bold">$42,968.00</TableCell>
+                              <TableCell className="text-right text-green-600">+$12,968.00 (+43.2%)</TableCell>
+                              <TableCell className="text-right">17.3%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">BND</TableCell>
+                              <TableCell>Vanguard Total Bond Market ETF</TableCell>
+                              <TableCell><Badge variant="secondary">Bond ETF</Badge></TableCell>
+                              <TableCell className="text-right">200</TableCell>
+                              <TableCell className="text-right">$71.23</TableCell>
+                              <TableCell className="text-right font-bold">$14,246.00</TableCell>
+                              <TableCell className="text-right text-red-600">-$754.00 (-5.0%)</TableCell>
+                              <TableCell className="text-right">5.8%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">GOOGL</TableCell>
+                              <TableCell>Alphabet Inc.</TableCell>
+                              <TableCell><Badge variant="secondary">Stock</Badge></TableCell>
+                              <TableCell className="text-right">120</TableCell>
+                              <TableCell className="text-right">$178.45</TableCell>
+                              <TableCell className="text-right font-bold">$21,414.00</TableCell>
+                              <TableCell className="text-right text-green-600">+$3,414.00 (+19.0%)</TableCell>
+                              <TableCell className="text-right">8.6%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">TSLA</TableCell>
+                              <TableCell>Tesla Inc.</TableCell>
+                              <TableCell><Badge variant="secondary">Stock</Badge></TableCell>
+                              <TableCell className="text-right">50</TableCell>
+                              <TableCell className="text-right">$389.22</TableCell>
+                              <TableCell className="text-right font-bold">$19,461.00</TableCell>
+                              <TableCell className="text-right text-green-600">+$7,461.00 (+62.2%)</TableCell>
+                              <TableCell className="text-right">7.9%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">AMZN</TableCell>
+                              <TableCell>Amazon.com Inc.</TableCell>
+                              <TableCell><Badge variant="secondary">Stock</Badge></TableCell>
+                              <TableCell className="text-right">80</TableCell>
+                              <TableCell className="text-right">$218.16</TableCell>
+                              <TableCell className="text-right font-bold">$17,452.80</TableCell>
+                              <TableCell className="text-right text-green-600">+$4,452.80 (+34.3%)</TableCell>
+                              <TableCell className="text-right">7.0%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">VTI</TableCell>
+                              <TableCell>Vanguard Total Stock Market ETF</TableCell>
+                              <TableCell><Badge variant="secondary">ETF</Badge></TableCell>
+                              <TableCell className="text-right">125</TableCell>
+                              <TableCell className="text-right">$278.92</TableCell>
+                              <TableCell className="text-right font-bold">$34,865.00</TableCell>
+                              <TableCell className="text-right text-green-600">+$6,865.00 (+24.5%)</TableCell>
+                              <TableCell className="text-right">14.1%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">NVDA</TableCell>
+                              <TableCell>NVIDIA Corporation</TableCell>
+                              <TableCell><Badge variant="secondary">Stock</Badge></TableCell>
+                              <TableCell className="text-right">25</TableCell>
+                              <TableCell className="text-right">$145.52</TableCell>
+                              <TableCell className="text-right font-bold">$3,638.00</TableCell>
+                              <TableCell className="text-right text-green-600">+$1,138.00 (+45.5%)</TableCell>
+                              <TableCell className="text-right">1.5%</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">BTC</TableCell>
+                              <TableCell>Bitcoin</TableCell>
+                              <TableCell><Badge variant="secondary">Crypto</Badge></TableCell>
+                              <TableCell className="text-right">0.5</TableCell>
+                              <TableCell className="text-right">$88,468.74</TableCell>
+                              <TableCell className="text-right font-bold">$44,234.37</TableCell>
+                              <TableCell className="text-right text-green-600">+$24,234.37 (+121.2%)</TableCell>
+                              <TableCell className="text-right">17.9%</TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Performance Tab */}
+                <TabsContent value="performance" className="space-y-4">
+                  <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-bold">Portfolio Performance</CardTitle>
+                      <div className="flex gap-2 mt-2">
+                        <Button variant="outline" size="sm">1D</Button>
+                        <Button variant="outline" size="sm">1W</Button>
+                        <Button variant="outline" size="sm">1M</Button>
+                        <Button variant="outline" size="sm">3M</Button>
+                        <Button variant="default" size="sm">YTD</Button>
+                        <Button variant="outline" size="sm">1Y</Button>
+                        <Button variant="outline" size="sm">All</Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {/* Simplified chart representation */}
+                      <div className="h-64 bg-gradient-to-br from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 rounded-lg flex items-center justify-center">
+                        <div className="text-center">
+                          <LineChart className="h-12 w-12 text-green-600 dark:text-green-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Performance Chart</p>
+                          <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-2">+23.8%</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Year to Date</p>
+                        </div>
+                      </div>
+                      
+                      {/* Performance Metrics */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                        <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Best Performer</p>
+                          <p className="font-bold">BTC</p>
+                          <p className="text-sm text-green-600">+121.2%</p>
+                        </div>
+                        <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Worst Performer</p>
+                          <p className="font-bold">BND</p>
+                          <p className="text-sm text-red-600">-5.0%</p>
+                        </div>
+                        <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Sharpe Ratio</p>
+                          <p className="font-bold">1.42</p>
+                          <p className="text-sm text-gray-600">Good</p>
+                        </div>
+                        <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Beta</p>
+                          <p className="font-bold">1.18</p>
+                          <p className="text-sm text-gray-600">Moderate Risk</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Analysis Tab */}
+                <TabsContent value="analysis" className="space-y-4">
+                  <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                    <CardHeader>
+                      <CardTitle className="text-xl font-bold">Portfolio Analysis</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Asset Allocation */}
+                      <div>
+                        <h3 className="font-semibold mb-3">Asset Allocation</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm">Stocks</span>
+                              <span className="text-sm font-bold">55%</span>
+                            </div>
+                            <Progress value={55} className="h-2" />
+                          </div>
+                          <div>
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm">ETFs</span>
+                              <span className="text-sm font-bold">31%</span>
+                            </div>
+                            <Progress value={31} className="h-2" />
+                          </div>
+                          <div>
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm">Bonds</span>
+                              <span className="text-sm font-bold">6%</span>
+                            </div>
+                            <Progress value={6} className="h-2" />
+                          </div>
+                          <div>
+                            <div className="flex justify-between mb-1">
+                              <span className="text-sm">Crypto</span>
+                              <span className="text-sm font-bold">18%</span>
+                            </div>
+                            <Progress value={18} className="h-2" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Sector Allocation */}
+                      <div>
+                        <h3 className="font-semibold mb-3">Sector Allocation</h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <span className="text-sm">Technology</span>
+                            <span className="text-sm font-bold">42%</span>
+                          </div>
+                          <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <span className="text-sm">Consumer</span>
+                            <span className="text-sm font-bold">18%</span>
+                          </div>
+                          <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <span className="text-sm">Healthcare</span>
+                            <span className="text-sm font-bold">12%</span>
+                          </div>
+                          <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <span className="text-sm">Financial</span>
+                            <span className="text-sm font-bold">10%</span>
+                          </div>
+                          <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <span className="text-sm">Energy</span>
+                            <span className="text-sm font-bold">8%</span>
+                          </div>
+                          <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <span className="text-sm">Other</span>
+                            <span className="text-sm font-bold">10%</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Risk Analysis */}
+                      <div>
+                        <h3 className="font-semibold mb-3">Risk Analysis</h3>
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="font-semibold text-amber-900 dark:text-amber-200">Moderate-High Risk Portfolio</p>
+                              <p className="text-sm text-amber-800 dark:text-amber-300 mt-1">
+                                Your portfolio has a beta of 1.18, indicating higher volatility than the market average. 
+                                Consider adding more bonds or defensive stocks to reduce risk.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+
+          {/* About Tab */}
+          {activeTab === "about" && (
+            <div className="w-full max-w-4xl mx-auto space-y-6">
+              {/* Privacy Notice */}
+              <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                <div className="flex items-start gap-3">
+                  <Lock className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-green-900 dark:text-green-200 font-medium">Your Privacy is Our Priority</p>
+                    <p className="text-sm text-green-800 dark:text-green-300 mt-1">
+                      All user information in TrueFi.ai is encrypted, private, and secure. Only you can see your own information. 
+                      We never share or sell your data.
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+
+              {/* Progress indicator */}
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">About Me</h2>
+                <Badge variant="default" className="px-3 py-1">
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Sample Profile
+                </Badge>
+              </div>
+
+              <Tabs defaultValue="identity" className="w-full">
+                <TabsList className="grid w-full grid-cols-7">
+                  <TabsTrigger value="identity">
+                    <User className="h-4 w-4 mr-1 hidden sm:inline" />
+                    <span className="text-xs">Identity</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="taxes">
+                    <Shield className="h-4 w-4 mr-1 hidden sm:inline" />
+                    <span className="text-xs">Taxes</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="risk">
+                    <DollarSign className="h-4 w-4 mr-1 hidden sm:inline" />
+                    <span className="text-xs">Risk</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="budgeting">
+                    <Heart className="h-4 w-4 mr-1 hidden sm:inline" />
+                    <span className="text-xs">Budget</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="debt">
+                    <AlertCircle className="h-4 w-4 mr-1 hidden sm:inline" />
+                    <span className="text-xs">Debt</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="investing">
+                    <Globe className="h-4 w-4 mr-1 hidden sm:inline" />
+                    <span className="text-xs">Invest</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="preferences">
+                    <Settings className="h-4 w-4 mr-1 hidden sm:inline" />
+                    <span className="text-xs">Prefs</span>
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Identity & Locale Tab */}
+                <TabsContent value="identity" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Identity & Location</CardTitle>
+                      <CardDescription>Basic information for personalized recommendations</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>First Name</Label>
+                          <p className="font-medium mt-1">Sample</p>
+                        </div>
+                        <div>
+                          <Label>Last Name</Label>
+                          <p className="font-medium mt-1">User</p>
+                        </div>
+                        <div>
+                          <Label>Country</Label>
+                          <p className="font-medium mt-1">United States</p>
+                        </div>
+                        <div>
+                          <Label>State/Province</Label>
+                          <p className="font-medium mt-1">California</p>
+                        </div>
+                        <div>
+                          <Label>City</Label>
+                          <p className="font-medium mt-1">San Francisco</p>
+                        </div>
+                        <div>
+                          <Label>Postal Code</Label>
+                          <p className="font-medium mt-1">94105</p>
+                        </div>
+                        <div>
+                          <Label>Marital Status</Label>
+                          <p className="font-medium mt-1">Married</p>
+                        </div>
+                        <div>
+                          <Label>Dependents</Label>
+                          <p className="font-medium mt-1">2</p>
+                        </div>
+                        <div>
+                          <Label>Currency</Label>
+                          <p className="font-medium mt-1">USD ($)</p>
+                        </div>
+                        <div>
+                          <Label>Language</Label>
+                          <p className="font-medium mt-1">English</p>
+                        </div>
+                        <div>
+                          <Label>Timezone</Label>
+                          <p className="font-medium mt-1">Pacific Time (PT)</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Taxes Tab */}
+                <TabsContent value="taxes" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Tax Information</CardTitle>
+                      <CardDescription>Tax filing details for accurate calculations</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Filing Status</Label>
+                          <p className="font-medium mt-1">Married Filing Jointly</p>
+                        </div>
+                        <div>
+                          <Label>Tax State</Label>
+                          <p className="font-medium mt-1">California</p>
+                        </div>
+                        <div>
+                          <Label>Federal Tax Rate</Label>
+                          <p className="font-medium mt-1">24%</p>
+                        </div>
+                        <div>
+                          <Label>State Tax Rate</Label>
+                          <p className="font-medium mt-1">9.3%</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Risk & Goals Tab */}
+                <TabsContent value="risk" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Risk Tolerance & Financial Goals</CardTitle>
+                      <CardDescription>Your investment profile and objectives</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label>Risk Tolerance</Label>
+                        <div className="flex items-center gap-3 mt-2">
+                          <Progress value={70} className="flex-1" />
+                          <span className="font-medium">7/10</span>
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">Moderate-Aggressive</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Investment Horizon</Label>
+                          <p className="font-medium mt-1">Long-term (10+ years)</p>
+                        </div>
+                        <div>
+                          <Label>Emergency Fund Target</Label>
+                          <p className="font-medium mt-1">6 months of expenses</p>
+                        </div>
+                        <div>
+                          <Label>Job Stability</Label>
+                          <p className="font-medium mt-1">Very Stable</p>
+                        </div>
+                        <div>
+                          <Label>Income Sources</Label>
+                          <p className="font-medium mt-1">2 sources</p>
+                        </div>
+                        <div>
+                          <Label>Liquid Cushion</Label>
+                          <p className="font-medium mt-1">3-6 months</p>
+                        </div>
+                        <div>
+                          <Label>Engagement Frequency</Label>
+                          <p className="font-medium mt-1">Weekly</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Budgeting Tab */}
+                <TabsContent value="budgeting" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Budgeting & Cash Flow</CardTitle>
+                      <CardDescription>Income and spending management preferences</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Pay Schedule</Label>
+                          <p className="font-medium mt-1">Bi-weekly</p>
+                        </div>
+                        <div>
+                          <Label>Paycheck Day</Label>
+                          <p className="font-medium mt-1">15th & 30th</p>
+                        </div>
+                        <div>
+                          <Label>Budget Framework</Label>
+                          <p className="font-medium mt-1">50/30/20 Rule</p>
+                        </div>
+                        <div>
+                          <Label>Target Savings Rate</Label>
+                          <p className="font-medium mt-1">25% of income</p>
+                        </div>
+                        <div>
+                          <Label>Checking Buffer</Label>
+                          <p className="font-medium mt-1">$2,000</p>
+                        </div>
+                        <div>
+                          <Label>Auto-Budget</Label>
+                          <p className="font-medium mt-1">Enabled</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Debt & Housing Tab */}
+                <TabsContent value="debt" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Debt & Housing Profile</CardTitle>
+                      <CardDescription>Housing status and debt management strategy</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Housing Status</Label>
+                          <p className="font-medium mt-1">Homeowner</p>
+                        </div>
+                        <div>
+                          <Label>Monthly Payment</Label>
+                          <p className="font-medium mt-1">$3,500</p>
+                        </div>
+                        <div>
+                          <Label>Debt Strategy</Label>
+                          <p className="font-medium mt-1">Avalanche Method</p>
+                        </div>
+                        <div>
+                          <Label>Extra Payment Target</Label>
+                          <p className="font-medium mt-1">$500/month</p>
+                        </div>
+                        <div>
+                          <Label>Student Loans</Label>
+                          <p className="font-medium mt-1">In Repayment</p>
+                        </div>
+                        <div>
+                          <Label>Prepay Mortgage</Label>
+                          <p className="font-medium mt-1">Yes, when possible</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Investing Tab */}
+                <TabsContent value="investing" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Investment Preferences</CardTitle>
+                      <CardDescription>Your investing values and strategy</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label>Investment Style</Label>
+                        <p className="font-medium mt-1">Growth-oriented with value picks</p>
+                      </div>
+                      <div>
+                        <Label>Investment Values</Label>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <Badge variant="secondary">ESG Investing</Badge>
+                          <Badge variant="secondary">Real Estate</Badge>
+                          <Badge variant="secondary">Index Funds</Badge>
+                          <Badge variant="secondary">Domestic Only</Badge>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 mt-4">
+                        <div>
+                          <Label>Account Priority</Label>
+                          <p className="font-medium mt-1">401(k) → IRA → Taxable</p>
+                        </div>
+                        <div>
+                          <Label>Dividend Preference</Label>
+                          <p className="font-medium mt-1">Reinvest automatically</p>
+                        </div>
+                        <div>
+                          <Label>Rebalance Frequency</Label>
+                          <p className="font-medium mt-1">Quarterly</p>
+                        </div>
+                        <div>
+                          <Label>Rebalance Threshold</Label>
+                          <p className="font-medium mt-1">5% deviation</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Preferences Tab */}
+                <TabsContent value="preferences" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>System Preferences</CardTitle>
+                      <CardDescription>Notifications and interaction settings</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Advice Style</Label>
+                          <p className="font-medium mt-1">Detailed explanations</p>
+                        </div>
+                        <div>
+                          <Label>Auto Allocation</Label>
+                          <p className="font-medium mt-1">Enabled</p>
+                        </div>
+                        <div>
+                          <Label>Allocation Frequency</Label>
+                          <p className="font-medium mt-1">Monthly</p>
+                        </div>
+                        <div>
+                          <Label>Notifications</Label>
+                          <p className="font-medium mt-1">All enabled</p>
+                        </div>
+                      </div>
+                      <div className="border-t pt-4">
+                        <h4 className="font-medium mb-3">Notification Channels</h4>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Email Notifications</span>
+                            <Badge variant="secondary">Enabled</Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Push Notifications</span>
+                            <Badge variant="secondary">Enabled</Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">SMS Alerts</span>
+                            <Badge variant="outline">Disabled</Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+
+              {/* Note about sample data */}
+              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-blue-900 dark:text-blue-200 font-medium">Sample Profile Data</p>
+                    <p className="text-sm text-blue-800 dark:text-blue-300 mt-1">
+                      This is example data showing what your complete profile will look like once you've connected your accounts and completed onboarding.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
       </div>
+
 
       {/* Call to Action Section - Premium Apple Design */}
       <div className="relative bg-white dark:bg-black py-32 overflow-hidden">
@@ -911,7 +1626,7 @@ export function DashboardContent() {
                   className="group relative overflow-hidden px-10 py-5 bg-black dark:bg-white text-white dark:text-black rounded-[28px] font-medium text-lg transition-all duration-500 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <span className="relative z-10 flex items-center gap-2">
-                    Start Free Trial
+                    Get Started
                     <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
                   </span>
                   {/* Gradient hover effect */}
@@ -931,10 +1646,6 @@ export function DashboardContent() {
                 </Link>
               </div>
               
-              {/* Trust text */}
-              <p className="text-sm text-gray-500 dark:text-gray-600">
-                No credit card required • 30-day free trial • Cancel anytime
-              </p>
             </div>
           </div>
           

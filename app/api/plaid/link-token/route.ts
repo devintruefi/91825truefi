@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { plaidClient } from '@/lib/plaid';
+import { CountryCode, Products } from 'plaid';
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,24 +9,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing user_id or user_email' }, { status: 400 });
     }
     
-    // Proxy to backend API
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    const response = await fetch(`${backendUrl}/api/plaid/link-token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    // Create link token directly using Plaid client
+    const response = await plaidClient.linkTokenCreate({
+      user: {
+        client_user_id: user_id,
+        email_address: user_email,
       },
-      body: JSON.stringify({ user_id, user_email }),
+      client_name: 'TrueFi',
+      products: [Products.Transactions, Products.Auth],
+      country_codes: [CountryCode.Us],
+      language: 'en',
     });
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Backend Plaid error:', error);
-      return NextResponse.json({ error: 'Failed to create link token' }, { status: 500 });
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json({ link_token: response.data.link_token });
   } catch (err: any) {
     console.error('Failed to create Plaid link token:', err?.message || err);
     return NextResponse.json({ error: 'Failed to create link token' }, { status: 500 });

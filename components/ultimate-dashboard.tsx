@@ -26,15 +26,22 @@ import {
   Bell, Settings, RefreshCw, Plus, Edit2, Trash2, Check, X, Loader2,
   Home, Car, Briefcase, Heart, ShoppingBag, Utensils, Plane, Zap,
   BarChart3, PieChart, Activity, Sparkles, ChevronRight, ChevronDown,
-  Eye, EyeOff, Download, Upload, MoreVertical, Info, AlertCircle
+  Eye, EyeOff, Download, Upload, MoreVertical, Info, AlertCircle,
+  User, CheckCircle2, Circle, ExternalLink
 } from "lucide-react"
 import { useUser } from "@/contexts/user-context"
 import { useFinancialData } from "@/hooks/use-financial-data"
 import { usePaginatedTransactions } from "@/hooks/use-transactions"
 import { useBudget } from "@/hooks/use-budget"
 import { useDashboardSpending } from "@/hooks/use-dashboard-spending"
+import { useNotifications } from "@/hooks/use-notifications"
 import { CATEGORY_META } from "@/utils/category-meta"
 import { Account, Transaction } from "@/lib/api-client"
+import { AboutMeForm } from "@/components/about-me-form"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useToast } from "@/components/ui/use-toast"
+import confetti from "canvas-confetti"
+import { GuidedOnboardingManager } from "@/components/guided-onboarding/GuidedOnboardingManager"
 
 // Utility functions
 const formatCurrency = (amount: number): string => {
@@ -101,9 +108,22 @@ interface Liability {
 export function UltimateDashboard() {
   const { user } = useUser()
   const router = useRouter()
+  
+  // State management (must come before hooks that use these values)
+  const [activeTab, setActiveTab] = useState("overview")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedCategory, setSelectedCategory] = useState("all")
+  const [dateRange, setDateRange] = useState("30")
+  
   const { data, loading, error, refresh } = useFinancialData(user?.id || null)
   const { budget, loading: budgetLoading, updateBudget } = useBudget()
-  const { data: spendingData } = useDashboardSpending(user?.id || null)
+  const { data: spendingData, refresh: refreshSpending } = useDashboardSpending(user?.id || null, dateRange)
+  const { 
+    notifications, 
+    unreadCount, 
+    markAsRead: markNotificationAsRead,
+    markAllAsRead: markAllNotificationsAsRead 
+  } = useNotifications(user?.id || null)
   const {
     transactions,
     loading: transactionsLoading,
@@ -115,11 +135,12 @@ export function UltimateDashboard() {
     refresh: refreshTransactions
   } = usePaginatedTransactions(user?.id || null)
 
-  // State management
-  const [activeTab, setActiveTab] = useState("overview")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("all")
-  const [dateRange, setDateRange] = useState("30")
+  // Onboarding state
+  const [onboardingStatus, setOnboardingStatus] = useState<any>(null)
+  const [isGuidedMode, setIsGuidedMode] = useState(false)
+  const [loadingOnboarding, setLoadingOnboarding] = useState(true)
+  const [dismissedBanners, setDismissedBanners] = useState<Set<string>>(new Set())
+  const { toast } = useToast()
 
   const [editingBudget, setEditingBudget] = useState(false)
   const [assetsLiabilities, setAssetsLiabilities] = useState<any>(null)
@@ -129,9 +150,9 @@ export function UltimateDashboard() {
   const [showAddAsset, setShowAddAsset] = useState(false)
   const [showAddLiability, setShowAddLiability] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [autoBudgetEnabled, setAutoBudgetEnabled] = useState(true)
+  const [autoBudgetEnabled, setAutoBudgetEnabled] = useState(false)
+  const [loadingAutoBudget, setLoadingAutoBudget] = useState(false)
   const [showManageAccounts, setShowManageAccounts] = useState(false)
-  const [notifications, setNotifications] = useState<any[]>([])
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState<any>(null)
   const [editingTransaction, setEditingTransaction] = useState<string | null>(null)
@@ -148,23 +169,24 @@ export function UltimateDashboard() {
   console.log('Total assets from state:', assetsLiabilities?.total_assets)
   console.log('Total liabilities from state:', assetsLiabilities?.total_liabilities)
   
-  // Calculate monthly metrics
+  // Calculate monthly metrics - use API data when available, fallback to local calculation
   const monthlyTransactions = transactions.filter((t: Transaction) => {
     const date = new Date(t.date)
     const daysAgo = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24)
     return daysAgo <= parseInt(dateRange)
   })
 
-  const monthlySpending = monthlyTransactions
+  // Use API data if available, otherwise calculate locally
+  const monthlySpending = spendingData?.totalSpending || monthlyTransactions
     .filter((t: Transaction) => t.amount < 0)
     .reduce((sum: number, t: Transaction) => sum + Math.abs(t.amount), 0)
   
-  const monthlyIncome = monthlyTransactions
+  const monthlyIncome = spendingData?.totalIncome || monthlyTransactions
     .filter((t: Transaction) => t.amount > 0)
     .reduce((sum: number, t: Transaction) => sum + t.amount, 0)
 
-  const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlySpending) / monthlyIncome) * 100 : 0
-  const cashFlow = monthlyIncome - monthlySpending
+  const savingsRate = spendingData?.savingsRate ?? (monthlyIncome > 0 ? ((monthlyIncome - monthlySpending) / monthlyIncome) * 100 : 0)
+  const cashFlow = spendingData?.cashFlow ?? (monthlyIncome - monthlySpending)
 
   // Fetch assets and liabilities
   useEffect(() => {
@@ -172,8 +194,42 @@ export function UltimateDashboard() {
     if (user?.id) {
       console.log('Calling fetchAssetsLiabilities for user:', user.id)
       fetchAssetsLiabilities()
+      fetchOnboardingStatus()
     }
   }, [user])
+
+  const fetchOnboardingStatus = async () => {
+    if (!user?.id) return
+    
+    setLoadingOnboarding(true)
+    try {
+      const response = await fetch(`/api/dashboard-onboarding/status?userId=${user.id}`)
+      
+      if (response.ok) {
+        const status = await response.json()
+        setOnboardingStatus(status)
+        setIsGuidedMode(!status.complete)
+        
+        // If onboarding just completed, show celebration
+        if (status.complete && status.percent === 100 && !localStorage.getItem('onboarding_celebrated')) {
+          localStorage.setItem('onboarding_celebrated', 'true')
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 }
+          })
+          toast({
+            title: "Congratulations! 🎉",
+            description: "You've completed your financial profile setup!",
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching onboarding status:', error)
+    } finally {
+      setLoadingOnboarding(false)
+    }
+  }
 
   const fetchAssetsLiabilities = async () => {
     if (!user?.id) return
@@ -252,6 +308,162 @@ export function UltimateDashboard() {
     }
   }
 
+  // Load auto-budget preference from database
+  useEffect(() => {
+    const loadAutoBudgetPreference = async () => {
+      if (!user?.id || user.id === '123e4567-e89b-12d3-a456-426614174000') return
+      
+      try {
+        const response = await fetch(`/api/profile/about-me`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setAutoBudgetEnabled(data.auto_budget_enabled || false)
+        }
+      } catch (error) {
+        console.error('Failed to load auto-budget preference:', error)
+      }
+    }
+    
+    loadAutoBudgetPreference()
+  }, [user?.id])
+
+  // Monitor budget performance when auto-budget is enabled
+  useEffect(() => {
+    if (!autoBudgetEnabled || !user?.id || user.id === '123e4567-e89b-12d3-a456-426614174000') {
+      return
+    }
+    
+    const checkBudgetPerformance = async () => {
+      try {
+        const response = await fetch(`/api/budgets/${user.id}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ autoAdjust: true })
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          
+          if (result.adjusted) {
+            // Budget was automatically adjusted
+            console.log('Budget automatically adjusted')
+            
+            // Trigger a re-fetch of onboarding status which includes budget data
+            await fetchOnboardingStatus()
+            
+            // Show notification (you could add a toast notification here)
+            console.log('Budget has been automatically adjusted based on your spending patterns')
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check budget performance:', error)
+      }
+    }
+    
+    // Check immediately when enabled
+    checkBudgetPerformance()
+    
+    // Check daily
+    const interval = setInterval(checkBudgetPerformance, 24 * 60 * 60 * 1000) // Daily
+    
+    return () => clearInterval(interval)
+  }, [autoBudgetEnabled, user?.id, fetchOnboardingStatus])
+
+  // Re-analyze budget when transactions change
+  useEffect(() => {
+    if (!autoBudgetEnabled || !user?.id || user.id === '123e4567-e89b-12d3-a456-426614174000') {
+      return
+    }
+    
+    // Trigger budget analysis when transactions update
+    const checkBudget = async () => {
+      try {
+        const response = await fetch(`/api/budgets/${user.id}/analyze`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.analysis?.needsAdjustment) {
+            console.log('Budget may need adjustment:', result.analysis.recommendations)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to analyze budget:', error)
+      }
+    }
+    
+    // Debounce check after transactions load
+    const timeout = setTimeout(checkBudget, 5000) // Wait 5 seconds after transactions load
+    
+    return () => clearTimeout(timeout)
+  }, [transactions, autoBudgetEnabled, user?.id])
+
+  // Save auto-budget preference to database
+  const toggleAutoBudget = async () => {
+    if (!user?.id || user.id === '123e4567-e89b-12d3-a456-426614174000') {
+      // Just toggle local state for demo user
+      setAutoBudgetEnabled(!autoBudgetEnabled)
+      return
+    }
+    
+    setLoadingAutoBudget(true)
+    const newValue = !autoBudgetEnabled
+    
+    try {
+      const response = await fetch(`/api/profile/about-me`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({ auto_budget_enabled: newValue })
+      })
+      
+      if (response.ok) {
+        setAutoBudgetEnabled(newValue)
+        
+        // If enabling, trigger automatic budget analysis
+        if (newValue) {
+          await applyAutoBudget()
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update auto-budget preference:', error)
+    } finally {
+      setLoadingAutoBudget(false)
+    }
+  }
+
+  // Apply AI-generated budget automatically
+  const applyAutoBudget = async () => {
+    if (!user?.id || user.id === '123e4567-e89b-12d3-a456-426614174000') return
+    
+    try {
+      // Trigger budget regeneration with AI
+      const response = await fetch(`/api/budgets/${user.id}/auto-apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        if (result.budget) {
+          // Refresh onboarding status which includes budget data
+          await fetchOnboardingStatus()
+          
+          // Show insights if available
+          if (result.insights && result.insights.length > 0) {
+            console.log('Budget insights:', result.insights)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to apply auto-budget:', error)
+    }
+  }
+
   // Auto-calculate budget based on income and spending patterns
   const calculateSmartBudget = useCallback(() => {
     if (!monthlyIncome) return
@@ -283,10 +495,39 @@ export function UltimateDashboard() {
     await Promise.all([
       refresh(),
       refreshTransactions(),
-      fetchAssetsLiabilities()
+      fetchAssetsLiabilities(),
+      fetchOnboardingStatus()
     ])
     setRefreshing(false)
   }
+  
+  // Check and complete onboarding if all tasks done
+  const checkAndCompleteOnboarding = async () => {
+    if (onboardingStatus?.percent === 100 && !onboardingStatus?.complete) {
+      try {
+        const response = await fetch('/api/dashboard-onboarding/complete', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          if (result.complete) {
+            fetchOnboardingStatus()
+          }
+        }
+      } catch (error) {
+        console.error('Error completing onboarding:', error)
+      }
+    }
+  }
+  
+  // Watch for onboarding completion
+  useEffect(() => {
+    checkAndCompleteOnboarding()
+  }, [onboardingStatus?.percent])
 
   // Handle search
   const handleSearch = (query: string) => {
@@ -342,6 +583,8 @@ export function UltimateDashboard() {
       })
       
       if (response.ok) {
+        const result = await response.json()
+        
         // Update local state
         const updatedTransactions = transactions.map((t: Transaction) => 
           t.id === transactionId 
@@ -349,10 +592,15 @@ export function UltimateDashboard() {
             : t
         )
         
-        // Update the transactions in the hook
-        // Note: This is a simplified approach - in a real app you'd want to update the hook properly
-        // For now, we'll refresh the data
+        // Refresh all relevant data
         refreshTransactions()
+        
+        // If this category change affects income status, refresh spending data
+        if (result.incomeStatusChanged) {
+          refreshSpending()
+        }
+        
+        fetchOnboardingStatus()
       } else {
         console.error('Failed to update transaction category')
       }
@@ -372,9 +620,10 @@ export function UltimateDashboard() {
         {/* Add the navigation tabs here since we removed the header */}
         <div className="mb-4">
           <nav className="flex space-x-2 sm:space-x-1 overflow-x-auto pb-2 scrollbar-hide">
-            {["overview", "transactions", "assets", "budget", "goals", "investments"].map((tab) => (
+            {["overview", "about", "transactions", "assets", "budget", "goals", "investments"].map((tab) => (
               <button
                 key={tab}
+                id={`tab-${tab}`}
                 onClick={() => setActiveTab(tab)}
                 className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
                   activeTab === tab
@@ -404,7 +653,11 @@ export function UltimateDashboard() {
             </div>
             <div className="flex items-center space-x-4">
               <Button 
-                onClick={() => router.push('/accounts/manage')}
+                id="onb-connect-accounts-btn"
+                onClick={() => {
+                  router.push('/accounts/manage')
+                  // Note: fetchOnboardingStatus will be called when user returns and accounts are connected
+                }}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
               >
                 Connect Bank Accounts
@@ -521,71 +774,271 @@ export function UltimateDashboard() {
 
         {/* Main Content Area */}
         <div className="space-y-8">
+          {/* Inline Helper Banners for Guided Mode */}
+          {isGuidedMode && !dismissedBanners.has(activeTab) && (
+            <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="flex items-center justify-between">
+                <span className="text-sm">
+                  {activeTab === 'overview' && "Welcome! Start by connecting your accounts to unlock automated insights."}
+                  {activeTab === 'about' && "Complete your profile so Penny can personalize recommendations for your unique situation."}
+                  {activeTab === 'transactions' && "Review the last 60-90 days and fix any incorrect categories."}
+                  {activeTab === 'assets' && "Add or edit any assets and liabilities that weren't imported automatically."}
+                  {activeTab === 'budget' && "We created a baseline budget from your activity — tweak amounts, then save."}
+                  {activeTab === 'goals' && "Add your top 1-3 financial goals to get personalized guidance."}
+                  {activeTab === 'investments' && "Review imported holdings and learn how to add or exclude accounts."}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDismissedBanners(prev => new Set([...prev, activeTab]))}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Overview Tab */}
           {activeTab === "overview" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Accounts Section */}
               <div className="lg:col-span-2 space-y-6">
-                <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle className="text-xl font-bold">Connected Accounts</CardTitle>
-                    <div className="flex items-center space-x-2">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Dynamic To-Do Card */}
+                  <Card id="onb-checklist-card" className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle className="text-xl font-bold">Setup Checklist</CardTitle>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant={onboardingStatus?.complete ? "default" : "secondary"} className="px-2 py-1">
+                          {onboardingStatus?.percent || 0}% Complete
+                        </Badge>
+                        {onboardingStatus?.complete && (
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {loadingOnboarding ? (
+                        <div className="text-center py-4">
+                          <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {/* Connect Accounts */}
+                          <button
+                            onClick={() => router.push('/accounts/manage')}
+                            className="w-full flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                          >
+                            {onboardingStatus?.checklist?.connectAccounts ? (
+                              <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle className="mt-0.5 h-5 w-5 text-gray-400 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${onboardingStatus?.checklist?.connectAccounts ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                                Connect bank accounts
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {onboardingStatus?.checklist?.connectAccounts ? 'Complete' : 'Link your financial accounts'}
+                              </p>
+                            </div>
+                            <ExternalLink className="h-4 w-4 text-gray-400" />
+                          </button>
+
+                          {/* Review Transactions */}
+                          <button
+                            onClick={() => setActiveTab('transactions')}
+                            className="w-full flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                          >
+                            {onboardingStatus?.checklist?.reviewTransactions ? (
+                              <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle className="mt-0.5 h-5 w-5 text-gray-400 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${onboardingStatus?.checklist?.reviewTransactions ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                                Review transactions
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {onboardingStatus?.checklist?.reviewTransactions ? 'Complete' : 'Categorize recent spending'}
+                              </p>
+                            </div>
+                          </button>
+
+                          {/* Verify Assets & Liabilities */}
+                          <button
+                            onClick={() => setActiveTab('assets')}
+                            className="w-full flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                          >
+                            {onboardingStatus?.checklist?.verifyAssetsLiabilities ? (
+                              <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle className="mt-0.5 h-5 w-5 text-gray-400 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${onboardingStatus?.checklist?.verifyAssetsLiabilities ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                                Verify assets & liabilities
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {onboardingStatus?.checklist?.verifyAssetsLiabilities ? 'Complete' : 'Add missing items'}
+                              </p>
+                            </div>
+                          </button>
+
+                          {/* Set up Budget */}
+                          <button
+                            onClick={() => setActiveTab('budget')}
+                            className="w-full flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                          >
+                            {onboardingStatus?.checklist?.budget ? (
+                              <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle className="mt-0.5 h-5 w-5 text-gray-400 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${onboardingStatus?.checklist?.budget ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                                Set up budget
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {onboardingStatus?.checklist?.budget ? 'Complete' : 'Review and adjust'}
+                              </p>
+                            </div>
+                          </button>
+
+                          {/* Add Goals */}
+                          <button
+                            onClick={() => setActiveTab('goals')}
+                            className="w-full flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                          >
+                            {onboardingStatus?.checklist?.goals ? (
+                              <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle className="mt-0.5 h-5 w-5 text-gray-400 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${onboardingStatus?.checklist?.goals ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                                Add goals
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {onboardingStatus?.checklist?.goals ? 'Complete' : 'Set your top priorities'}
+                              </p>
+                            </div>
+                          </button>
+
+                          {/* Review Investments */}
+                          <button
+                            onClick={() => setActiveTab('investments')}
+                            className="w-full flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                          >
+                            {onboardingStatus?.checklist?.investments ? (
+                              <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle className="mt-0.5 h-5 w-5 text-gray-400 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${onboardingStatus?.checklist?.investments ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                                Review investments
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {onboardingStatus?.checklist?.investments ? 'Complete' : 'Check holdings'}
+                              </p>
+                            </div>
+                          </button>
+
+                          {/* Fill out About Me */}
+                          <button
+                            onClick={() => setActiveTab('about')}
+                            className="w-full flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                          >
+                            {onboardingStatus?.checklist?.aboutMe ? (
+                              <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle className="mt-0.5 h-5 w-5 text-gray-400 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`text-sm font-medium ${onboardingStatus?.checklist?.aboutMe ? 'text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                                Complete profile
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {onboardingStatus?.checklist?.aboutMe ? 'Complete' : 'Tell us about yourself'}
+                              </p>
+                            </div>
+                          </button>
+
+                          {/* Progress bar */}
+                          <div className="pt-3 border-t">
+                            <Progress value={onboardingStatus?.percent || 0} className="h-2" />
+                            <p className="text-xs text-gray-500 mt-2 text-center">
+                              {Object.values(onboardingStatus?.checklist || {}).filter(Boolean).length} of 7 tasks complete
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Connected Accounts Card */}
+                  <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle className="text-xl font-bold">Connected Accounts</CardTitle>
                       <Button 
                         variant="outline" 
                         size="sm"
                         onClick={handleManageAccounts}
                       >
-                        Manage Accounts
+                        <Settings className="h-4 w-4" />
                       </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {accounts.length > 0 ? (
-                      <div className="space-y-3 max-h-80 overflow-y-auto pr-2 accounts-scrollbar">
-                        {accounts.length > 4 && (
-                          <div className="text-xs text-gray-500 dark:text-gray-400 text-center pb-2 border-b border-gray-200 dark:border-gray-700">
-                            Scroll to see all {accounts.length} accounts
-                          </div>
-                        )}
-                        {accounts.map((account: Account) => (
-                          <div key={account.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                            <div className="flex items-center space-x-4">
-                              <div className="p-3 bg-white dark:bg-gray-900 rounded-full">
-                                <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                    </CardHeader>
+                    <CardContent>
+                      {accounts.length > 0 ? (
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+                          {accounts.slice(0, 3).map((account: Account) => (
+                            <div key={account.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900 dark:text-white">{account.name}</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">{account.type}</p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="font-semibold text-gray-900 dark:text-white">{account.name}</p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">{account.type}</p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xl font-bold text-gray-900 dark:text-white">
+                              <p className="text-sm font-bold text-gray-900 dark:text-white">
                                 {formatCurrency(account.current_balance || 0)}
                               </p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                Available: {formatCurrency(account.available_balance || 0)}
-                              </p>
                             </div>
+                          ))}
+                          {accounts.length > 3 && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="w-full text-xs"
+                              onClick={handleManageAccounts}
+                            >
+                              View all {accounts.length} accounts
+                              <ChevronRight className="h-3 w-3 ml-1" />
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6">
+                          <Building2 className="h-10 w-10 mx-auto mb-3 text-gray-400" />
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                            No accounts connected
+                          </p>
+                          <div id="onb-connect-accounts-btn">
+                            <PlaidConnect 
+                              onSuccess={() => {
+                                refresh()
+                                fetchAssetsLiabilities()
+                                fetchOnboardingStatus()
+                              }}
+                            />
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8">
-                        <Building2 className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                        <h3 className="text-lg font-semibold mb-2">No accounts connected</h3>
-                        <p className="text-gray-600 dark:text-gray-400 mb-4">
-                          Connect your bank accounts to get started
-                        </p>
-                        <PlaidConnect 
-                          onSuccess={() => {
-                            refresh()
-                            fetchAssetsLiabilities()
-                          }}
-                        />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
 
                 {/* Spending by Category */}
                 <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
@@ -630,24 +1083,41 @@ export function UltimateDashboard() {
                         <span>Notifications</span>
                       </CardTitle>
                       <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 text-xs font-semibold rounded-full bg-secondary text-secondary-foreground">
-                        {notifications.length}
+                        {unreadCount || 0}
                       </span>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {notifications.length > 0 ? (
+                    {notifications && notifications.length > 0 ? (
                       <div className="space-y-2">
-                        {notifications.slice(0, 5).map((notif: any, index: number) => (
-                          <div key={`notif-${notif.id || index}`} className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        {notifications.slice(0, 5).map((notif: any) => (
+                          <div 
+                            key={notif.id} 
+                            className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                            onClick={() => markNotificationAsRead(notif.id)}
+                          >
                             <div className="flex items-start space-x-2">
                               <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5" />
                               <div className="flex-1">
                                 <p className="text-sm font-medium">{notif.title}</p>
                                 <p className="text-xs text-gray-500">{notif.message}</p>
                               </div>
+                              {!notif.isRead && (
+                                <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                              )}
                             </div>
                           </div>
                         ))}
+                        {notifications.length > 5 && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="w-full text-xs"
+                            onClick={() => setActiveTab('notifications')}
+                          >
+                            View all ({notifications.length})
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm text-gray-500">No new notifications</p>
@@ -727,6 +1197,19 @@ export function UltimateDashboard() {
                   </CardContent>
                 </Card>
               </div>
+            </div>
+          )}
+
+          {/* About Me Tab */}
+          {activeTab === "about" && (
+            <div className="w-full">
+              <AboutMeForm onComplete={() => {
+                fetchOnboardingStatus()
+                toast({
+                  title: "Profile Complete!",
+                  description: "Your profile has been saved successfully.",
+                })
+              }} />
             </div>
           )}
 
@@ -824,6 +1307,7 @@ export function UltimateDashboard() {
                                 <div className="flex items-center space-x-2 group">
                                   <span>{transaction.category || "Other"}</span>
                                   <Button
+                                    data-onb="tx-category-edit"
                                     size="sm"
                                     variant="ghost"
                                     onClick={() => startEditingCategory(transaction.id, transaction.category || "Other")}
@@ -912,6 +1396,7 @@ export function UltimateDashboard() {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="text-xl font-bold">Assets</CardTitle>
                   <Button 
+                    id="onb-add-asset-btn"
                     onClick={() => setShowAddAsset(true)}
                     className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
                   >
@@ -970,11 +1455,23 @@ export function UltimateDashboard() {
 
                         return (
                           <TableRow key={uniqueKey}>
-                            <TableCell className="font-medium">{asset.name}</TableCell>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {asset.name}
+                                {asset.source === 'plaid' && (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                    Connected
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>{asset.asset_class || asset.type || "Other"}</TableCell>
                             <TableCell className="font-bold text-green-600">{formatCurrency(asset.value)}</TableCell>
                             <TableCell>
-                              {actionButtons}
+                              {/* Only show edit/delete actions for manual assets, not Plaid-connected ones */}
+                              {asset.source === 'manual' ? actionButtons : (
+                                <span className="text-sm text-gray-500">Auto-synced</span>
+                              )}
                             </TableCell>
                           </TableRow>
                         )
@@ -989,6 +1486,7 @@ export function UltimateDashboard() {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="text-xl font-bold">Liabilities</CardTitle>
                   <Button 
+                    id="onb-add-liability-btn"
                     onClick={() => setShowAddLiability(true)}
                     className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600"
                   >
@@ -1048,12 +1546,24 @@ export function UltimateDashboard() {
 
                         return (
                           <TableRow key={uniqueKey}>
-                            <TableCell className="font-medium">{liability.name}</TableCell>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {liability.name}
+                                {liability.source === 'plaid' && (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                    Connected
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>{liability.liability_class || liability.type || "Other"}</TableCell>
                             <TableCell className="font-bold text-red-600">{formatCurrency(liability.balance)}</TableCell>
                             <TableCell>{liability.interest_rate ? `${liability.interest_rate}%` : "-"}</TableCell>
                             <TableCell>
-                              {actionButtons}
+                              {/* Only show edit/delete actions for manual liabilities, not Plaid-connected ones */}
+                              {liability.source === 'manual' ? actionButtons : (
+                                <span className="text-sm text-gray-500">Auto-synced</span>
+                              )}
                             </TableCell>
                           </TableRow>
                         )
@@ -1080,19 +1590,21 @@ export function UltimateDashboard() {
                     <Label htmlFor="auto-budget">Auto-Budget</Label>
                     <button
                       id="auto-budget"
-                      onClick={() => setAutoBudgetEnabled(!autoBudgetEnabled)}
+                      onClick={toggleAutoBudget}
+                      disabled={loadingAutoBudget}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         autoBudgetEnabled ? "bg-cyan-500" : "bg-gray-300"
-                      }`}
+                      } ${loadingAutoBudget ? "opacity-50" : ""}`}
                     >
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                         autoBudgetEnabled ? "translate-x-6" : "translate-x-1"
                       }`} />
                     </button>
+                    {loadingAutoBudget && <span className="text-xs text-gray-500">Updating...</span>}
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <BudgetEditor />
+                  <BudgetEditor onSave={fetchOnboardingStatus} />
                 </CardContent>
               </Card>
             </div>
@@ -1105,9 +1617,16 @@ export function UltimateDashboard() {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="text-xl font-bold">Financial Goals</CardTitle>
                   <Button 
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600"
+                    id="onb-add-goal-btn"
                     onClick={() => {
-                      setEditingGoal(null)
+                      setEditingGoal({
+                        name: '',
+                        target_amount: '',
+                        current_amount: 0,
+                        target_date: '',
+                        priority: 'medium'
+                      })
                       setShowGoalModal(true)
                     }}
                   >
@@ -1218,6 +1737,7 @@ export function UltimateDashboard() {
           <AssetForm 
             onSuccess={() => {
               fetchAssetsLiabilities()
+              fetchOnboardingStatus()
               setShowAddAsset(false)
             }}
             onCancel={() => setShowAddAsset(false)}
@@ -1234,6 +1754,7 @@ export function UltimateDashboard() {
             asset={editingAsset}
             onSuccess={() => {
               fetchAssetsLiabilities()
+              fetchOnboardingStatus()
               setEditingAsset(null)
             }}
             onCancel={() => setEditingAsset(null)}
@@ -1249,6 +1770,7 @@ export function UltimateDashboard() {
           <LiabilityForm 
             onSuccess={() => {
               fetchAssetsLiabilities()
+              fetchOnboardingStatus()
               setShowAddLiability(false)
             }}
             onCancel={() => setShowAddLiability(false)}
@@ -1265,6 +1787,7 @@ export function UltimateDashboard() {
             liability={editingLiability}
             onSuccess={() => {
               fetchAssetsLiabilities()
+              fetchOnboardingStatus()
               setEditingLiability(null)
             }}
             onCancel={() => setEditingLiability(null)}
@@ -1317,10 +1840,13 @@ export function UltimateDashboard() {
               />
             </div>
             <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setShowGoalModal(false)}>
+              <Button variant="outline" onClick={() => {
+                setShowGoalModal(false)
+                setEditingGoal(null)
+              }}>
                 Cancel
               </Button>
-              <Button onClick={() => {
+              <Button onClick={async () => {
                 // Handle save logic here
                 // Ensure numeric values are properly converted before saving
                 const goalToSave = {
@@ -1328,9 +1854,37 @@ export function UltimateDashboard() {
                   target_amount: editingGoal?.target_amount === '' ? 0 : editingGoal?.target_amount,
                   current_amount: editingGoal?.current_amount === '' ? 0 : editingGoal?.current_amount
                 }
-                // TODO: Implement actual save logic with goalToSave
-                refresh()
-                setShowGoalModal(false)
+                
+                // Save goal to database
+                try {
+                  const response = await fetch('/api/goals', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                    },
+                    body: JSON.stringify({ 
+                      goal: goalToSave,
+                      replaceAll: false  // Add single goal, don't replace all
+                    })
+                  })
+                  
+                  if (response.ok) {
+                    const result = await response.json()
+                    console.log('Goal saved:', result)
+                    
+                    // Refresh data and close modal
+                    refresh()
+                    fetchOnboardingStatus()
+                    setShowGoalModal(false)
+                    setEditingGoal(null)
+                  } else {
+                    const errorData = await response.text()
+                    console.error('Failed to save goal:', response.status, errorData)
+                  }
+                } catch (error) {
+                  console.error('Error saving goal:', error)
+                }
               }}>
                 {editingGoal ? "Update" : "Add"} Goal
               </Button>
@@ -1338,6 +1892,13 @@ export function UltimateDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Guided Onboarding Manager */}
+      <GuidedOnboardingManager
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        fetchOnboardingStatus={fetchOnboardingStatus}
+      />
     </div>
   )
 }

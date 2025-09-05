@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { ONBOARDING_STEPS, OnboardingStep } from '@/lib/onboarding/steps';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 // Map legacy phase names to new canonical step IDs
 const PHASE_TO_STEP_MAP: Record<string, OnboardingStep> = {

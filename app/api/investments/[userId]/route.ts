@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
+import { getUserFromRequest } from '@/lib/auth'
 
 const prisma = new PrismaClient()
 
@@ -28,53 +29,57 @@ export async function GET(
       orderBy: { balance: "desc" }
     })
 
-    // Fetch manual investment assets and convert them to the Investment format
-    const manualAssets = await prisma.manual_assets.findMany({
+    // Note: Manual holdings have account_id = null, but we need to filter by user somehow
+    // Since the current schema doesn't have user_id on holdings table directly,
+    // we'll need to add a user_holdings table or modify the approach
+    
+    // For now, let's get all manual holdings (account_id = null) and Plaid holdings for this user
+    const holdings = await prisma.holdings.findMany({
       where: {
-        user_id: userId,
-        asset_class: {
-          in: ["stocks", "bonds", "etfs", "mutual_funds", "commodities", "crypto", "investment", "securities", "stock", "bond", "etf", "mutual_fund", "commodity", "real_estate"]
-        }
+        OR: [
+          // Manual holdings (account_id is NULL) - these need better user association
+          { account_id: null },
+          // Plaid holdings from user's accounts
+          { 
+            accounts: {
+              user_id: userId
+            }
+          }
+        ]
       },
       include: {
-        business_ownership_details: true,
-        collectible_details: true,
-        real_estate_details: true,
-        vehicle_assets: true,
-        vehicle_details: true
+        securities: true,
+        accounts: true
       },
-      orderBy: { value: "desc" }
+      orderBy: [
+        { institution_value: { sort: "desc", nulls: "last" } },
+        { created_at: "desc" }
+      ]
     })
 
-    // Transform manual assets into investment format
-    const investments = manualAssets.map(asset => {
-      // Parse notes field for structured data if it exists
-      let parsedData: any = {}
-      try {
-        if (asset.notes && asset.notes.startsWith('{')) {
-          parsedData = JSON.parse(asset.notes)
-        }
-      } catch (e) {
-        // If notes isn't JSON, ignore
-      }
-
+    // Transform holdings into investment format
+    const investments = holdings.map(holding => {
+      const security = holding.securities
+      const account = holding.accounts
+      
       return {
-        id: asset.id,
-        name: asset.name,
-        symbol: parsedData.symbol || undefined,
-        type: mapAssetClassToType(asset.asset_class),
-        quantity: parsedData.quantity || 1,
-        purchase_price: parsedData.purchase_price || parseFloat(asset.value?.toString() || "0"),
-        current_price: parseFloat(asset.value?.toString() || "0"),
-        purchase_date: parsedData.purchase_date || asset.created_at?.toISOString().split('T')[0],
-        account_id: parsedData.account_id || undefined,
-        notes: typeof asset.notes === 'string' && !asset.notes.startsWith('{') ? asset.notes : parsedData.notes,
-        tags: parsedData.tags || [],
-        dividends: parsedData.dividends || 0,
-        expense_ratio: parsedData.expense_ratio || undefined,
-        target_allocation: parsedData.target_allocation || undefined,
-        risk_level: parsedData.risk_level || getRiskLevel(asset.asset_class),
-        is_favorite: parsedData.is_favorite || false
+        id: holding.id,
+        name: security?.name || 'Unknown Security',
+        symbol: security?.ticker || undefined,
+        type: mapSecurityTypeToType(security?.security_type),
+        quantity: parseFloat(holding.quantity?.toString() || "0"),
+        purchase_price: parseFloat(holding.cost_basis?.toString() || "0") / parseFloat(holding.quantity?.toString() || "1"),
+        current_price: parseFloat(holding.institution_price?.toString() || "0"),
+        purchase_date: holding.created_at?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+        account_id: holding.account_id || undefined,
+        notes: undefined, // Notes could be added to holdings table if needed
+        tags: [], // Tags could be added as a separate relation
+        dividends: 0, // Would need dividend tracking
+        expense_ratio: undefined, // Could be added to securities table
+        target_allocation: undefined, // Could be user preference
+        risk_level: getRiskLevelFromType(mapSecurityTypeToType(security?.security_type)),
+        is_favorite: false, // Could be added as user preference
+        source: holding.account_id ? 'plaid' : 'manual'
       }
     })
 
@@ -121,8 +126,9 @@ export async function GET(
     })
   } catch (error) {
     console.error("Error fetching investment data:", error)
+    console.error("Error details:", JSON.stringify(error, null, 2))
     return NextResponse.json(
-      { error: "Failed to fetch investment data" },
+      { error: "Failed to fetch investment data", details: error.message || 'Unknown error' },
       { status: 500 }
     )
   } finally {
@@ -136,112 +142,200 @@ export async function POST(
   { params }: { params: { userId: string } }
 ) {
   try {
-    const userId = params.userId
-    const body = await request.json()
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 })
+    const user = await getUserFromRequest(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Store investment data as a manual asset with structured notes
-    const investmentData = {
-      symbol: body.symbol,
-      quantity: body.quantity,
-      purchase_price: body.purchase_price,
-      purchase_date: body.purchase_date,
-      account_id: body.account_id,
-      notes: body.notes,
-      tags: body.tags,
-      dividends: body.dividends,
-      expense_ratio: body.expense_ratio,
-      target_allocation: body.target_allocation,
-      risk_level: body.risk_level,
-      is_favorite: body.is_favorite
+    const userId = params.userId;
+    if (!userId || userId !== user.id) {
+      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
     }
 
-    const newAsset = await prisma.manual_assets.create({
-      data: {
-        user_id: userId,
-        name: body.name,
-        asset_class: mapTypeToAssetClass(body.type),
-        value: body.current_price * (body.quantity || 1),
-        notes: JSON.stringify(investmentData),
-        created_at: new Date(),
-        updated_at: new Date()
+    const body = await request.json();
+
+    // Validate required fields
+    if (!body.name || !body.quantity || body.quantity < 0 || body.purchase_price < 0) {
+      return NextResponse.json({ error: "Missing or invalid required fields" }, { status: 400 });
+    }
+
+    // Validate purchase date is not in future
+    const purchaseDate = new Date(body.purchase_date);
+    if (purchaseDate > new Date()) {
+      return NextResponse.json({ error: "Purchase date cannot be in the future" }, { status: 400 });
+    }
+
+    // First, create or find the security
+    let security;
+    if (body.symbol && ['stock', 'etf', 'mutual_fund', 'bond'].includes(body.type)) {
+      // For securities with symbols, try to find existing first
+      security = await prisma.securities.findFirst({
+        where: { 
+          ticker: body.symbol,
+          security_type: body.type
+        }
+      });
+      
+      if (!security) {
+        // Create new security record
+        security = await prisma.securities.create({
+          data: {
+            name: body.name,
+            ticker: body.symbol,
+            security_type: body.type,
+            currency: body.currency || 'USD',
+            created_at: new Date()
+          }
+        });
       }
-    })
+    } else {
+      // For securities without symbols (like "Other"), always create new security record
+      security = await prisma.securities.create({
+        data: {
+          name: body.name,
+          ticker: body.symbol || null,
+          security_type: body.type || 'other',
+          currency: body.currency || 'USD',
+          created_at: new Date()
+        }
+      });
+    }
+
+    // Check for existing manual holding for this security to prevent duplicates
+    const existingHolding = await prisma.holdings.findFirst({
+      where: {
+        security_id: security.id,
+        account_id: null, // Manual holdings have NULL account_id
+        // For user-specific holdings, we'd need a user_id column or link through accounts
+      }
+    });
+
+    let holding;
+    if (existingHolding) {
+      // Update existing manual holding
+      holding = await prisma.holdings.update({
+        where: { id: existingHolding.id },
+        data: {
+          quantity: body.quantity,
+          cost_basis: body.purchase_price * body.quantity,
+          institution_price: body.current_price,
+          institution_value: body.current_price * body.quantity,
+          updated_at: new Date(),
+          institution_price_datetime: new Date(),
+          position_iso_currency_code: body.currency || 'USD'
+        }
+      });
+    } else {
+      // Create new manual holding
+      holding = await prisma.holdings.create({
+        data: {
+          security_id: security.id,
+          account_id: null, // Manual holdings have NULL account_id
+          quantity: body.quantity,
+          cost_basis: body.purchase_price * body.quantity,
+          institution_price: body.current_price,
+          institution_value: body.current_price * body.quantity,
+          created_at: new Date(),
+          updated_at: new Date(),
+          institution_price_datetime: new Date(),
+          position_iso_currency_code: body.currency || 'USD'
+        }
+      });
+    }
+
+    // Mark investments onboarding as complete after first successful save
+    try {
+      await prisma.onboarding_progress.upsert({
+        where: { user_id: userId },
+        update: {},
+        create: { user_id: userId }
+      });
+      
+      // Update the specific investments step
+      const progressData = await prisma.onboarding_progress.findUnique({
+        where: { user_id: userId }
+      });
+      
+      if (progressData) {
+        const currentData = typeof progressData.data === 'object' ? progressData.data as any : {};
+        await prisma.onboarding_progress.update({
+          where: { user_id: userId },
+          data: {
+            data: {
+              ...currentData,
+              investments_completed: true
+            },
+            updated_at: new Date()
+          }
+        });
+      }
+    } catch (onboardingError) {
+      console.error('Failed to update onboarding:', onboardingError);
+      // Don't fail the whole request for onboarding errors
+    }
 
     return NextResponse.json({
       success: true,
+      saved: true,
+      id: holding.id,
       investment: {
-        id: newAsset.id,
-        ...body
+        id: holding.id,
+        name: security.name,
+        symbol: security.ticker,
+        type: security.security_type,
+        quantity: parseFloat(holding.quantity?.toString() || "0"),
+        purchase_price: body.purchase_price,
+        current_price: parseFloat(holding.institution_price?.toString() || "0"),
+        purchase_date: body.purchase_date,
+        notes: body.notes,
+        source: 'manual'
       }
-    })
+    });
   } catch (error) {
-    console.error("Error creating investment:", error)
+    console.error("Error creating investment:", error);
     return NextResponse.json(
-      { error: "Failed to create investment" },
+      { error: "Failed to create investment", details: error.message },
       { status: 500 }
-    )
+    );
   } finally {
-    await prisma.$disconnect()
+    await prisma.$disconnect();
   }
 }
 
 // Helper functions
-function mapAssetClassToType(assetClass?: string | null): string {
+function mapSecurityTypeToType(securityType?: string | null): string {
   const mapping: Record<string, string> = {
-    "stocks": "stock",
     "stock": "stock",
-    "bonds": "bond",
-    "bond": "bond",
-    "etfs": "etf",
+    "equity": "stock",
     "etf": "etf",
-    "mutual_funds": "mutual_fund",
-    "mutual_fund": "mutual_fund",
-    "commodities": "commodity",
+    "mutual fund": "mutual_fund",
+    "bond": "bond",
+    "fixed income": "bond",
+    "derivative": "other",
     "commodity": "commodity",
     "crypto": "crypto",
-    "real_estate": "real_estate",
-    "securities": "stock",
-    "investment": "other",
-    "cash": "cash"
-  }
-  
-  return mapping[assetClass?.toLowerCase() || ""] || "other"
-}
-
-function mapTypeToAssetClass(type: string): string {
-  const mapping: Record<string, string> = {
-    "stock": "stocks",
-    "bond": "bonds",
-    "etf": "etfs",
-    "mutual_fund": "mutual_funds",
-    "crypto": "crypto",
-    "commodity": "commodities",
-    "real_estate": "real_estate",
+    "cryptocurrency": "crypto",
     "cash": "cash",
-    "other": "investment"
+    "other": "other"
   }
   
-  return mapping[type] || "investment"
+  return mapping[securityType?.toLowerCase() || ""] || "other"
 }
 
-function getRiskLevel(assetClass?: string | null): "low" | "medium" | "high" | "very_high" {
+function getRiskLevelFromType(type: string): "low" | "medium" | "high" | "very_high" {
   const riskMap: Record<string, "low" | "medium" | "high" | "very_high"> = {
-    "stocks": "high",
-    "bonds": "low",
-    "etfs": "medium",
-    "mutual_funds": "medium",
-    "commodities": "high",
+    "stock": "high",
+    "bond": "low", 
+    "etf": "medium",
+    "mutual_fund": "medium",
+    "commodity": "high",
     "crypto": "very_high",
     "real_estate": "medium",
     "cash": "low",
-    "securities": "high"
+    "other": "medium"
   }
   
-  return riskMap[assetClass?.toLowerCase() || ""] || "medium"
+  return riskMap[type?.toLowerCase() || ""] || "medium"
 }
 
 function getTaxStatus(subtype?: string | null): "taxable" | "tax_deferred" | "tax_free" {
