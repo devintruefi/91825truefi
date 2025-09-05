@@ -1,6 +1,8 @@
 options:
   logging: CLOUD_LOGGING_ONLY
 
+serviceAccount: projects/river-sky-455001-j1/serviceAccounts/118529284371@cloudbuild.gserviceaccount.com
+
 steps:
   # Build Docker image from TRUEFIBACKEND/Dockerfile
   - name: 'gcr.io/cloud-builders/docker'
