@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { authenticatedFetch } from '@/lib/api-helpers'
 
 const DEMO_USER_ID = '123e4567-e89b-12d3-a456-426614174000'
 
@@ -31,7 +32,7 @@ export function useFinancialInsights(userId: string | null) {
     setError(null)
     
     try {
-      const response = await fetch(`/api/insights/${userId}`)
+      const response = await authenticatedFetch(`/api/insights/${userId}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch insights')
@@ -61,11 +62,8 @@ export function useFinancialInsights(userId: string | null) {
     )
     
     try {
-      const response = await fetch(`/api/insights/${userId}`, {
+      const response = await authenticatedFetch(`/api/insights/${userId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ insightId })
       })
       

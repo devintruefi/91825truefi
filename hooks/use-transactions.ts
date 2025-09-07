@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Transaction } from '@/lib/api-client';
+import { authenticatedFetch } from '@/lib/api-helpers';
 
 interface PaginationInfo {
   total: number;
@@ -46,7 +47,7 @@ export function usePaginatedTransactions(userId: string | null) {
     setError(null);
     
     try {
-      const response = await fetch(`/api/financial-data/${userId}?limit=10&offset=${offset}&includeTransactions=true`);
+      const response = await authenticatedFetch(`/api/financial-data/${userId}?limit=10&offset=${offset}&includeTransactions=true`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch transactions');

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { authenticatedFetch } from '@/lib/api-helpers'
 
 const DEMO_USER_ID = '123e4567-e89b-12d3-a456-426614174000'
 
@@ -32,7 +33,7 @@ export function useNotifications(userId: string | null) {
     setError(null)
     
     try {
-      const response = await fetch(`/api/notifications/${userId}`)
+      const response = await authenticatedFetch(`/api/notifications/${userId}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch notifications')
@@ -65,11 +66,8 @@ export function useNotifications(userId: string | null) {
     setUnreadCount(prev => Math.max(0, prev - 1))
     
     try {
-      const response = await fetch(`/api/notifications/${userId}`, {
+      const response = await authenticatedFetch(`/api/notifications/${userId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ notificationId })
       })
       
@@ -108,11 +106,8 @@ export function useNotifications(userId: string | null) {
     setUnreadCount(0)
     
     try {
-      const response = await fetch(`/api/notifications/${userId}`, {
+      const response = await authenticatedFetch(`/api/notifications/${userId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ markAllAsRead: true })
       })
       

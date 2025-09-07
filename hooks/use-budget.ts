@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@/contexts/user-context';
+import { authenticatedFetch } from '@/lib/api-helpers';
 
 interface BudgetCategory {
   id: string;
@@ -48,7 +49,7 @@ export function useBudget(): UseBudgetReturn {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`/api/budgets/${user.id}`);
+      const response = await authenticatedFetch(`/api/budgets/${user.id}`);
       if (!response.ok) {
         throw new Error('Failed to fetch budget');
       }
@@ -72,9 +73,8 @@ export function useBudget(): UseBudgetReturn {
     try {
       setError(null);
       
-      const response = await fetch(`/api/budgets/${user.id}`, {
+      const response = await authenticatedFetch(`/api/budgets/${user.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           budget: { ...budget, ...updates },
           categories: budget.budget_categories
@@ -99,9 +99,8 @@ export function useBudget(): UseBudgetReturn {
     try {
       setError(null);
       
-      const response = await fetch(`/api/budgets/${user.id}/categories/${categoryId}`, {
+      const response = await authenticatedFetch(`/api/budgets/${user.id}/categories/${categoryId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       });
 
@@ -129,9 +128,8 @@ export function useBudget(): UseBudgetReturn {
     try {
       setError(null);
       
-      const response = await fetch(`/api/budgets/${user.id}/categories`, {
+      const response = await authenticatedFetch(`/api/budgets/${user.id}/categories`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(category)
       });
 
@@ -157,7 +155,7 @@ export function useBudget(): UseBudgetReturn {
     try {
       setError(null);
       
-      const response = await fetch(`/api/budgets/${user.id}/categories/${categoryId}`, {
+      const response = await authenticatedFetch(`/api/budgets/${user.id}/categories/${categoryId}`, {
         method: 'DELETE'
       });
 

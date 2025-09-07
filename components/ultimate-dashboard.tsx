@@ -42,6 +42,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
 import confetti from "canvas-confetti"
 import { GuidedOnboardingManager } from "@/components/guided-onboarding/GuidedOnboardingManager"
+import { authenticatedFetch } from "@/lib/api-helpers"
 
 // Utility functions
 const formatCurrency = (amount: number): string => {
@@ -152,6 +153,7 @@ export function UltimateDashboard() {
   const [refreshing, setRefreshing] = useState(false)
   const [autoBudgetEnabled, setAutoBudgetEnabled] = useState(false)
   const [loadingAutoBudget, setLoadingAutoBudget] = useState(false)
+  const [budgetRefreshKey, setBudgetRefreshKey] = useState(0)
   const [showManageAccounts, setShowManageAccounts] = useState(false)
   const [showGoalModal, setShowGoalModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState<any>(null)
@@ -203,7 +205,7 @@ export function UltimateDashboard() {
     
     setLoadingOnboarding(true)
     try {
-      const response = await fetch(`/api/dashboard-onboarding/status?userId=${user.id}`)
+      const response = await authenticatedFetch(`/api/dashboard-onboarding/status?userId=${user.id}`)
       
       if (response.ok) {
         const status = await response.json()
@@ -240,8 +242,8 @@ export function UltimateDashboard() {
       // Fetch assets and liabilities separately from new API endpoints
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
       const [assetsResponse, liabilitiesResponse] = await Promise.all([
-        fetch(`${baseUrl}/assets/${user.id}`),
-        fetch(`${baseUrl}/liabilities/${user.id}`)
+        authenticatedFetch(`${baseUrl}/assets/${user.id}`),
+        authenticatedFetch(`${baseUrl}/liabilities/${user.id}`)
       ])
       
       let assets = []
@@ -314,11 +316,7 @@ export function UltimateDashboard() {
       if (!user?.id || user.id === '123e4567-e89b-12d3-a456-426614174000') return
       
       try {
-        const response = await fetch(`/api/profile/about-me`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-          }
-        })
+        const response = await authenticatedFetch(`/api/profile/about-me`)
         if (response.ok) {
           const data = await response.json()
           setAutoBudgetEnabled(data.auto_budget_enabled || false)
@@ -339,9 +337,8 @@ export function UltimateDashboard() {
     
     const checkBudgetPerformance = async () => {
       try {
-        const response = await fetch(`/api/budgets/${user.id}/analyze`, {
+        const response = await authenticatedFetch(`/api/budgets/${user.id}/analyze`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ autoAdjust: true })
         })
         
@@ -350,13 +347,14 @@ export function UltimateDashboard() {
           
           if (result.adjusted) {
             // Budget was automatically adjusted
-            console.log('Budget automatically adjusted')
+            toast({
+              title: "Budget Optimized",
+              description: result.message || "Your budget has been automatically adjusted based on recent spending patterns.",
+            })
             
-            // Trigger a re-fetch of onboarding status which includes budget data
+            // Refresh budget data
             await fetchOnboardingStatus()
-            
-            // Show notification (you could add a toast notification here)
-            console.log('Budget has been automatically adjusted based on your spending patterns')
+            setBudgetRefreshKey(prev => prev + 1)
           }
         }
       } catch (error) {
@@ -364,14 +362,17 @@ export function UltimateDashboard() {
       }
     }
     
-    // Check immediately when enabled
-    checkBudgetPerformance()
+    // Check after a delay when first enabled (not immediately)
+    const initialTimeout = setTimeout(checkBudgetPerformance, 10000) // 10 seconds
     
-    // Check daily
-    const interval = setInterval(checkBudgetPerformance, 24 * 60 * 60 * 1000) // Daily
+    // Then check periodically (every 6 hours instead of daily for better UX)
+    const interval = setInterval(checkBudgetPerformance, 6 * 60 * 60 * 1000)
     
-    return () => clearInterval(interval)
-  }, [autoBudgetEnabled, user?.id, fetchOnboardingStatus])
+    return () => {
+      clearTimeout(initialTimeout)
+      clearInterval(interval)
+    }
+  }, [autoBudgetEnabled, user?.id, fetchOnboardingStatus, toast])
 
   // Re-analyze budget when transactions change
   useEffect(() => {
@@ -382,7 +383,7 @@ export function UltimateDashboard() {
     // Trigger budget analysis when transactions update
     const checkBudget = async () => {
       try {
-        const response = await fetch(`/api/budgets/${user.id}/analyze`)
+        const response = await authenticatedFetch(`/api/budgets/${user.id}/analyze`)
         if (response.ok) {
           const result = await response.json()
           if (result.analysis?.needsAdjustment) {
@@ -403,35 +404,61 @@ export function UltimateDashboard() {
   // Save auto-budget preference to database
   const toggleAutoBudget = async () => {
     if (!user?.id || user.id === '123e4567-e89b-12d3-a456-426614174000') {
-      // Just toggle local state for demo user
-      setAutoBudgetEnabled(!autoBudgetEnabled)
+      // Show info for demo user
+      toast({
+        title: "Demo Mode",
+        description: "Auto-budget is not available in demo mode. Please sign up to use this feature.",
+        variant: "default"
+      })
       return
     }
     
-    setLoadingAutoBudget(true)
     const newValue = !autoBudgetEnabled
     
+    // Optimistically update UI
+    setAutoBudgetEnabled(newValue)
+    setLoadingAutoBudget(true)
+    
     try {
-      const response = await fetch(`/api/profile/about-me`, {
+      const response = await authenticatedFetch(`/api/profile/about-me`, {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
         body: JSON.stringify({ auto_budget_enabled: newValue })
       })
       
       if (response.ok) {
-        setAutoBudgetEnabled(newValue)
-        
-        // If enabling, trigger automatic budget analysis
+        // If enabling, trigger automatic budget generation
         if (newValue) {
+          toast({
+            title: "Generating Budget",
+            description: "Analyzing your spending patterns...",
+          })
           await applyAutoBudget()
+        } else {
+          toast({
+            title: "Auto-Budget Disabled",
+            description: "You can now manage your budget manually.",
+          })
+          setLoadingAutoBudget(false)
         }
+      } else {
+        // Revert on error
+        setAutoBudgetEnabled(!newValue)
+        toast({
+          title: "Error",
+          description: "Failed to update auto-budget setting. Please try again.",
+          variant: "destructive"
+        })
+        setLoadingAutoBudget(false)
       }
     } catch (error) {
       console.error('Failed to update auto-budget preference:', error)
-    } finally {
+      // Revert on error
+      setAutoBudgetEnabled(!newValue)
+      toast({
+        title: "Error",
+        description: "Network error. Please check your connection.",
+        variant: "destructive"
+      })
       setLoadingAutoBudget(false)
     }
   }
@@ -440,27 +467,60 @@ export function UltimateDashboard() {
   const applyAutoBudget = async () => {
     if (!user?.id || user.id === '123e4567-e89b-12d3-a456-426614174000') return
     
+    setLoadingAutoBudget(true)
     try {
       // Trigger budget regeneration with AI
-      const response = await fetch(`/api/budgets/${user.id}/auto-apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+      const response = await authenticatedFetch(`/api/budgets/${user.id}/auto-apply`, {
+        method: 'POST'
       })
       
-      if (response.ok) {
-        const result = await response.json()
-        if (result.budget) {
-          // Refresh onboarding status which includes budget data
-          await fetchOnboardingStatus()
+      const result = await response.json()
+      
+      if (response.ok && result.success) {
+        // Show success notification
+        toast({
+          title: "Auto-Budget Applied",
+          description: result.insights?.length > 0 
+            ? result.insights[0] 
+            : `Your budget has been optimized using the ${result.framework || '50-30-20'} framework.`,
+        })
+        
+        // Refresh all budget-related data
+        await Promise.all([
+          fetchOnboardingStatus(),
+          // Trigger a refresh in BudgetEditor by passing a key prop
+        ])
+        
+        // Force re-render of BudgetEditor
+        setBudgetRefreshKey(prev => prev + 1)
+        
+      } else {
+        // Handle warnings or errors
+        const message = result.warnings?.length > 0 
+          ? result.warnings[0]
+          : result.error || 'Unable to generate auto-budget. Please ensure you have transaction data.'
           
-          // Show insights if available
-          if (result.insights && result.insights.length > 0) {
-            console.log('Budget insights:', result.insights)
-          }
+        toast({
+          title: "Auto-Budget Issue",
+          description: message,
+          variant: "destructive"
+        })
+        
+        // If there was an error, revert the toggle
+        if (!result.success) {
+          setAutoBudgetEnabled(false)
         }
       }
     } catch (error) {
       console.error('Failed to apply auto-budget:', error)
+      toast({
+        title: "Error",
+        description: "Failed to apply auto-budget. Please try again later.",
+        variant: "destructive"
+      })
+      setAutoBudgetEnabled(false)
+    } finally {
+      setLoadingAutoBudget(false)
     }
   }
 
@@ -1580,31 +1640,62 @@ export function UltimateDashboard() {
             <div className="space-y-6">
               <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-0 shadow-xl">
                 <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl font-bold">Budget Management</CardTitle>
+                  <div className="flex-1">
+                    <CardTitle className="text-xl font-bold flex items-center gap-2">
+                      Budget Management
+                      <button
+                        type="button"
+                        className="group relative"
+                        aria-label="Learn about auto-budget"
+                      >
+                        <Info className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                        <div className="absolute left-0 top-6 z-50 hidden group-hover:block w-72 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                            <strong className="text-cyan-600">Auto-Budget</strong> uses AI to:
+                          </p>
+                          <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1 list-disc list-inside">
+                            <li>Analyze your income and spending patterns</li>
+                            <li>Generate budgets using frameworks like 50-30-20</li>
+                            <li>Automatically adjust as your spending changes</li>
+                            <li>Provide insights and recommendations</li>
+                          </ul>
+                        </div>
+                      </button>
+                    </CardTitle>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      AI-powered budget recommendations based on your spending
+                      {autoBudgetEnabled 
+                        ? "✨ Auto-adjusting based on your spending patterns"
+                        : "AI-powered budget recommendations based on your spending"}
                     </p>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Label htmlFor="auto-budget">Auto-Budget</Label>
+                  <div className="flex items-center space-x-3">
+                    <Label htmlFor="auto-budget" className="cursor-pointer">Auto-Budget</Label>
                     <button
                       id="auto-budget"
                       onClick={toggleAutoBudget}
                       disabled={loadingAutoBudget}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 ${
                         autoBudgetEnabled ? "bg-cyan-500" : "bg-gray-300"
-                      } ${loadingAutoBudget ? "opacity-50" : ""}`}
+                      } ${loadingAutoBudget ? "opacity-50 cursor-wait" : "cursor-pointer hover:shadow-md"}`}
+                      aria-label={autoBudgetEnabled ? "Disable auto-budget" : "Enable auto-budget"}
                     >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        autoBudgetEnabled ? "translate-x-6" : "translate-x-1"
-                      }`} />
+                      {loadingAutoBudget ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-white absolute left-1/2 -translate-x-1/2" />
+                      ) : (
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${
+                          autoBudgetEnabled ? "translate-x-6" : "translate-x-1"
+                        }`} />
+                      )}
                     </button>
-                    {loadingAutoBudget && <span className="text-xs text-gray-500">Updating...</span>}
+                    {loadingAutoBudget && (
+                      <span className="text-xs text-cyan-600 font-medium animate-pulse">
+                        {autoBudgetEnabled ? "Generating budget..." : "Disabling..."}
+                      </span>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <BudgetEditor onSave={fetchOnboardingStatus} />
+                  <BudgetEditor key={budgetRefreshKey} onSave={fetchOnboardingStatus} />
                 </CardContent>
               </Card>
             </div>

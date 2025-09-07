@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@/contexts/user-context';
+import { authenticatedFetch } from '@/lib/api-helpers';
 
 export interface OnboardingData {
   [questionId: string]: string;
@@ -18,7 +19,7 @@ export function useOnboardingData() {
 
     const fetchOnboardingData = async () => {
       try {
-        const response = await fetch(`/api/onboarding/${user.id}`);
+        const response = await authenticatedFetch(`/api/onboarding/${user.id}`);
         if (response.ok) {
           const data = await response.json();
           setOnboardingData(data.responses);

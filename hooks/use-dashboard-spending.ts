@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authenticatedFetch } from '@/lib/api-helpers';
 
 interface DashboardSpendingData {
   spentByMain: {
@@ -37,7 +38,7 @@ export function useDashboardSpending(userId: string | null, dateRange: string = 
     setError(null);
     
     try {
-      const response = await fetch(`/api/dashboard/spending/${userId}?days=${dateRange}`);
+      const response = await authenticatedFetch(`/api/dashboard/spending/${userId}?days=${dateRange}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch dashboard spending data');
