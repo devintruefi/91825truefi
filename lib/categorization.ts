@@ -1,3 +1,52 @@
+import prisma from '@/lib/db';
+
+// New DB-backed resolver for budget categories
+export async function resolveBudgetCategory(
+  userId: string,
+  plaidCategoryId: string | null | undefined,
+  plaidCategoryString: string | null
+): Promise<string> {
+  // Check if feature flag is enabled
+  if (process.env.BUDGETS_DB_MAPPING !== 'true') {
+    return categorizeBudgetTransaction(plaidCategoryString);
+  }
+
+  try {
+    // 1. Check for user-specific override
+    if (plaidCategoryId) {
+      const userOverride = await prisma.transaction_categories.findFirst({
+        where: {
+          user_id: userId,
+          plaid_category_id: plaidCategoryId,
+          is_system_defined: false
+        }
+      });
+      if (userOverride) {
+        return userOverride.category_name;
+      }
+    }
+
+    // 2. Check for system default
+    if (plaidCategoryId) {
+      const systemDefault = await prisma.transaction_categories.findFirst({
+        where: {
+          plaid_category_id: plaidCategoryId,
+          is_system_defined: true
+        }
+      });
+      if (systemDefault) {
+        return systemDefault.category_name;
+      }
+    }
+  } catch (error) {
+    console.error('Error resolving budget category from DB:', error);
+    // Fall through to keyword-based logic on error
+  }
+
+  // 3. Fallback to existing keyword-based logic
+  return categorizeBudgetTransaction(plaidCategoryString);
+}
+
 // Enhanced transaction categorization that works with Plaid's detailed taxonomy
 export function categorizeTransaction(plaidCategory: string | null): string {
   if (!plaidCategory) return 'Lifestyle';

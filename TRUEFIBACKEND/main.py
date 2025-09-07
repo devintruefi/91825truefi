@@ -83,7 +83,7 @@ except ImportError as e:
 # Config
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+JWT_SECRET = os.getenv("JWT_SECRET", "6f7b0f47c27a44b0a0fc781c2e3e84b50a0f6f7a1c9d8c25b7d0fa492ce2a35b")
 
 # Async OpenAI
 client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)

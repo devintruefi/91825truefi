@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getUserFromRequest } from '@/lib/auth'
 
 // GET - Fetch all assets for a user (manual assets + Plaid account balances)
 export async function GET(
@@ -8,6 +9,12 @@ export async function GET(
 ) {
   try {
     const { userId } = await params
+
+    // Check authentication
+    const user = await getUserFromRequest(request);
+    if (!user || user.id !== userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     // Fetch manual assets (user-entered)
     const manualAssets = await prisma.manual_assets.findMany({
@@ -98,6 +105,12 @@ export async function GET(
       const { userId } = await params
       console.log('Creating asset for user:', userId)
       
+      // Check authentication
+      const user = await getUserFromRequest(request);
+      if (!user || user.id !== userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      
       const body = await request.json()
       console.log('Request body:', body)
 
@@ -129,6 +142,13 @@ export async function PUT(
 ) {
   try {
     const { userId } = await params
+    
+    // Check authentication
+    const user = await getUserFromRequest(request);
+    if (!user || user.id !== userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
     const body = await request.json()
 
     const asset = await prisma.manual_assets.update({

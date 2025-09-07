@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '@/lib/db';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret'; // Uses your .env var
+const JWT_SECRET = process.env.JWT_SECRET || '6f7b0f47c27a44b0a0fc781c2e3e84b50a0f6f7a1c9d8c25b7d0fa492ce2a35b'; // Uses your .env var
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -27,8 +27,10 @@ export function verifyToken(token: string): { userId: string } | null {
 // Middleware for protected routes (use in API handlers)
 export async function getUserFromRequest(request: Request): Promise<{ id: string } | null> {
   const authHeader = request.headers.get('Authorization');
+  console.log('Auth header received:', authHeader?.substring(0, 50));
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.split(' ')[1];
+  console.log('Token extracted:', token.substring(0, 20) + '...');
   
   // Handle local user tokens (base64 encoded)
   try {
@@ -59,8 +61,14 @@ export async function getUserFromRequest(request: Request): Promise<{ id: string
   }
   
   // Handle JWT tokens
+  console.log('Attempting JWT verification...');
   const decoded = verifyToken(token);
-  if (!decoded) return null;
+  if (!decoded) {
+    console.log('JWT verification failed');
+    return null;
+  }
+  console.log('JWT decoded successfully:', { userId: decoded.userId });
   const user = await prisma.users.findUnique({ where: { id: decoded.userId } }); // Assumes your users table is 'users'
+  console.log('User found in database:', !!user, user?.id);
   return user ? { id: user.id } : null;
 } 

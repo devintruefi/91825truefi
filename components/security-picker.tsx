@@ -65,15 +65,26 @@ export function SecurityPicker({
 
     setLoading(true)
     try {
-      const response = await fetch(`/api/securities/search?q=${encodeURIComponent(searchQuery)}&limit=8`)
+      const authToken = localStorage.getItem('auth_token') || localStorage.getItem('token')
+      const response = await fetch(`/api/securities/search?q=${encodeURIComponent(searchQuery)}&limit=20`, {
+        headers: {
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
+          'Content-Type': 'application/json'
+        }
+      })
       const data = await response.json()
       
       if (response.ok) {
+        console.log(`Security search results for "${searchQuery}":`, {
+          total: data.total,
+          source: data.source,
+          results: data.results?.length || 0
+        })
         setResults(data.results || [])
         setShowResults(true)
         setSelectedIndex(-1)
       } else {
-        console.error('Search failed:', data.error)
+        console.error('Search failed:', data.error, `Status: ${response.status}`)
         setResults([])
         setShowResults(false)
       }
@@ -258,16 +269,6 @@ export function SecurityPicker({
                       <span>{security.sector}</span>
                     </div>
                   </div>
-                  
-                  <div className="text-right ml-3">
-                    <div className="font-semibold text-gray-900">
-                      {formatPrice(security.current_price)}
-                    </div>
-                    <div className="text-xs text-gray-500 flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      Live
-                    </div>
-                  </div>
                 </div>
               </button>
             ))}
@@ -285,7 +286,7 @@ export function SecurityPicker({
                 <div>
                   <div className="font-medium text-gray-900">{value.name}</div>
                   <div className="text-xs text-gray-600">
-                    {value.symbol} • {value.exchange} • {formatPrice(value.current_price)}
+                    {value.symbol} • {value.exchange}
                   </div>
                 </div>
               </div>

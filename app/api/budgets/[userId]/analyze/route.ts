@@ -62,14 +62,27 @@ export async function POST(
     const analysis = await analyzeBudgetPerformance(userId);
     
     let adjusted = false;
+    let message = '';
+    
     if (autoAdjust && analysis.needsAdjustment) {
       adjusted = await adjustBudgetAutomatically(userId);
+      
+      if (adjusted) {
+        // Generate a helpful message based on the adjustments
+        const recommendations = analysis.recommendations || [];
+        if (recommendations.length > 0) {
+          message = recommendations[0];
+        } else {
+          message = 'Your budget has been optimized based on your recent spending patterns.';
+        }
+      }
     }
     
     return NextResponse.json({
       success: true,
       analysis,
       adjusted,
+      message,
       timestamp: new Date().toISOString()
     });
   } catch (error) {

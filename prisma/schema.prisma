@@ -252,6 +252,7 @@ model goals {
 
   @@index([user_id], map: "idx_goals_user_id")
   @@index([allocation_priority], map: "idx_goals_allocation_priority")
+  @@index([user_id, is_active], map: "idx_goals_active")
 }
 
 model holdings {
@@ -910,6 +911,7 @@ model transaction_categories {
   transactions                 transactions[]
 
   @@index([user_id], map: "idx_transaction_categories_user_id")
+  @@index([user_id, plaid_category_id], map: "idx_transaction_categories_lookup")
 }
 
 model user_passwords {

@@ -34,7 +34,14 @@
       "Read(/C:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components/**)",
       "Read(/C:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\components/**)",
       "Read(/C:\\Users\\Devin Patel\\Documents\\Projects\\truefi72625\\hooks/**)",
-      "Bash(pnpm dev:*)"
+      "Bash(pnpm dev:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(pnpm tsc:*)",
+      "Bash(pnpm build:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": [],

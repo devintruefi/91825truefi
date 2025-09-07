@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
+import { getUserFromRequest } from '@/lib/auth';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const { userId } = await params;
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+  }
+
+  // Check authentication
+  const user = await getUserFromRequest(req);
+  if (!user || user.id !== userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   // Get pagination parameters from query string

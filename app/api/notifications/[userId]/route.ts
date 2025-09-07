@@ -5,10 +5,10 @@ const DEMO_USER_ID = '123e4567-e89b-12d3-a456-426614174000'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId } = params
+    const { userId } = await params
     
     // Don't return real notifications for demo user
     if (userId === DEMO_USER_ID) {

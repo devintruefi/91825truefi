@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest } from '@/lib/auth';
+import { polygonService } from '@/lib/polygon';
 
-// Mock data for securities search - in production this would come from a financial data provider
+// Mock data for securities search - used for non-logged-in users and fallback
 const MOCK_SECURITIES = [
   { symbol: 'AAPL', name: 'Apple Inc.', type: 'stock', exchange: 'NASDAQ', currency: 'USD', sector: 'Technology' },
   { symbol: 'GOOGL', name: 'Alphabet Inc. Class A', type: 'stock', exchange: 'NASDAQ', currency: 'USD', sector: 'Technology' },
@@ -40,19 +42,57 @@ const MOCK_SECURITIES = [
   { symbol: 'ETH', name: 'Ethereum', type: 'crypto', exchange: 'CRYPTO', currency: 'USD', sector: 'Cryptocurrency' },
   { symbol: 'ADA', name: 'Cardano', type: 'crypto', exchange: 'CRYPTO', currency: 'USD', sector: 'Cryptocurrency' },
   { symbol: 'SOL', name: 'Solana', type: 'crypto', exchange: 'CRYPTO', currency: 'USD', sector: 'Cryptocurrency' },
+  { symbol: 'DOGE', name: 'Dogecoin', type: 'crypto', exchange: 'CRYPTO', currency: 'USD', sector: 'Cryptocurrency' },
 ];
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('q')?.toLowerCase() || '';
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50); // Cap at 50 for better coverage
 
     if (query.length < 1) {
       return NextResponse.json({ results: [] });
     }
 
-    // Search by symbol or name
+    // Check if user is logged in
+    const user = await getUserFromRequest(request);
+    
+    console.log(`Securities search: query="${query}", user=${user?.id ? 'logged-in' : 'anonymous'}, polygon=${polygonService.isConfigured() ? 'configured' : 'not-configured'}`);
+    
+    // For logged-in users with Polygon API configured, use live search
+    if (user && polygonService.isConfigured()) {
+      try {
+        // Search via Polygon API
+        const polygonResults = await polygonService.searchTickers(query, limit);
+        
+        // DON'T enrich with prices during search - too many API calls!
+        // Users will see prices when they select a specific security
+        const enrichedResults = polygonResults.map(result => ({
+          symbol: result.symbol,
+          name: result.name,
+          type: result.type,
+          exchange: result.exchange,
+          currency: result.currency,
+          current_price: null, // Price will be fetched when selected
+          last_updated: new Date().toISOString(),
+          source: 'polygon'
+        }));
+        
+        return NextResponse.json({ 
+          results: enrichedResults,
+          query,
+          total: enrichedResults.length,
+          source: 'polygon'
+        });
+        
+      } catch (polygonError) {
+        console.error('Polygon search failed, using mock fallback:', polygonError);
+        // Fall through to mock search
+      }
+    }
+
+    // Fallback: Mock search for non-logged-in users or API failures
     const matchedSecurities = MOCK_SECURITIES
       .filter(security => 
         security.symbol.toLowerCase().includes(query) ||
@@ -60,43 +100,20 @@ export async function GET(request: NextRequest) {
       )
       .slice(0, limit);
 
-    // Fetch real prices for matched securities
+    // Enrich mock results with prices from internal quote endpoint
     const resultsWithPrices = await Promise.all(
       matchedSecurities.map(async (security) => {
-        let currentPrice = Math.round((Math.random() * 500 + 10) * 100) / 100; // fallback
-        
-        try {
-          // Fetch real price from our quote API
-          const quoteResponse = await fetch(
-            `${request.nextUrl.origin}/api/securities/quote?symbol=${security.symbol}`
-          );
-          
-          if (quoteResponse.ok) {
-            const quoteData = await quoteResponse.json();
-            currentPrice = quoteData.price || currentPrice;
-          }
-        } catch (error) {
-          console.error(`Failed to fetch quote for ${security.symbol}:`, error);
-        }
-        
-        return {
-          symbol: security.symbol,
-          name: security.name,
-          type: security.type,
-          exchange: security.exchange,
-          currency: security.currency,
-          sector: security.sector,
-          current_price: currentPrice,
-          last_updated: new Date().toISOString()
-        };
+        return await getEnrichedSecurity(security, request);
       })
     );
 
     return NextResponse.json({ 
       results: resultsWithPrices,
       query,
-      total: resultsWithPrices.length
+      total: resultsWithPrices.length,
+      source: 'mock'
     });
+    
   } catch (error) {
     console.error('Securities search error:', error);
     return NextResponse.json(
@@ -104,4 +121,40 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Helper function to enrich security with current price
+async function getEnrichedSecurity(security: any, request: NextRequest) {
+  let currentPrice = Math.round((Math.random() * 500 + 10) * 100) / 100; // fallback
+  
+  try {
+    // Fetch price from our internal quote API (which handles auth and fallback)
+    const quoteResponse = await fetch(
+      `${request.nextUrl.origin}/api/securities/quote?symbol=${security.symbol}`,
+      {
+        headers: {
+          'Authorization': request.headers.get('Authorization') || '',
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    if (quoteResponse.ok) {
+      const quoteData = await quoteResponse.json();
+      currentPrice = quoteData.price || currentPrice;
+    }
+  } catch (error) {
+    console.warn(`Failed to fetch quote for ${security.symbol}:`, error);
+  }
+  
+  return {
+    symbol: security.symbol,
+    name: security.name,
+    type: security.type,
+    exchange: security.exchange,
+    currency: security.currency,
+    sector: security.sector,
+    current_price: currentPrice,
+    last_updated: new Date().toISOString()
+  };
 }

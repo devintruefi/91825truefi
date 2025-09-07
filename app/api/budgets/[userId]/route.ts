@@ -1,131 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
-import { categorizeBudgetTransaction } from '@/lib/categorization';
+import { categorizeBudgetTransaction, resolveBudgetCategory } from '@/lib/categorization';
 import { generateAIBudget } from '@/lib/ai-budget-generator';
-
-// Keep these for demo user functionality
-const ESSENTIALS_CATEGORIES = [
-  'Housing', 'Transportation', 'Food & Dining', 'Utilities', 
-  'Healthcare', 'Insurance', 'Debt Payments', 'Basic Groceries'
-];
-
-const LIFESTYLE_CATEGORIES = [
-  'Entertainment', 'Shopping', 'Personal Care', 'Dining Out',
-  'Travel', 'Hobbies', 'Subscriptions', 'Fitness'
-];
-
-const SAVINGS_CATEGORIES = [
-  'Savings', 'Investments', 'Emergency Fund', 'Retirement',
-  'Education', 'Major Purchases'
-];
-
-const CATEGORY_MAPPING: Record<string, string> = {
-  'Food and Drink': 'Food & Dining',
-  'Restaurants': 'Dining Out',
-  'Fast Food': 'Dining Out',
-  'Coffee Shops': 'Dining Out',
-  'Bars': 'Entertainment',
-  'Transportation': 'Transportation',
-  'Public Transportation': 'Transportation',
-  'Ride Share': 'Transportation',
-  'Gas Stations': 'Transportation',
-  'Parking': 'Transportation',
-  'Shopping': 'Shopping',
-  'Online Shopping': 'Shopping',
-  'Department Stores': 'Shopping',
-  'Clothing Stores': 'Shopping',
-  'Electronics Stores': 'Shopping',
-  'Home Improvement': 'Housing',
-  'Furniture': 'Housing',
-  'Rent': 'Housing',
-  'Mortgage': 'Housing',
-  'Utilities': 'Utilities',
-  'Electric': 'Utilities',
-  'Water': 'Utilities',
-  'Internet': 'Utilities',
-  'Phone': 'Utilities',
-  'Healthcare': 'Healthcare',
-  'Doctors': 'Healthcare',
-  'Pharmacies': 'Healthcare',
-  'Insurance': 'Insurance',
-  'Entertainment': 'Entertainment',
-  'Movies': 'Entertainment',
-  'Gyms': 'Fitness',
-  'Personal Care': 'Personal Care',
-  'Salons': 'Personal Care',
-  'Travel': 'Travel',
-  'Hotels': 'Travel',
-  'Airlines': 'Travel',
-  'Savings': 'Savings',
-  'Investments': 'Investments',
-  'Education': 'Education',
-  'Student Loans': 'Debt Payments',
-  'Credit Cards': 'Debt Payments',
-  'Loans': 'Debt Payments'
-};
-
-const DEMO_USER_ID = '123e4567-e89b-12d3-a456-426614174000';
-
-function mapTransactionCategory(transactionCategory: string): string {
-  if (CATEGORY_MAPPING[transactionCategory]) {
-    return CATEGORY_MAPPING[transactionCategory];
-  }
-  const lowerCategory = transactionCategory.toLowerCase();
-  for (const [key, value] of Object.entries(CATEGORY_MAPPING)) {
-    if (lowerCategory.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerCategory)) {
-      return value;
-    }
-  }
-  if (lowerCategory.includes('food') || lowerCategory.includes('restaurant') || lowerCategory.includes('dining')) {
-    return 'Food & Dining';
-  }
-  if (lowerCategory.includes('transport') || lowerCategory.includes('uber') || lowerCategory.includes('lyft')) {
-    return 'Transportation';
-  }
-  if (lowerCategory.includes('shop') || lowerCategory.includes('store') || lowerCategory.includes('amazon')) {
-    return 'Shopping';
-  }
-  if (lowerCategory.includes('entertain') || lowerCategory.includes('movie') || lowerCategory.includes('netflix')) {
-    return 'Entertainment';
-  }
-  if (lowerCategory.includes('health') || lowerCategory.includes('medical') || lowerCategory.includes('doctor')) {
-    return 'Healthcare';
-  }
-  return 'Miscellaneous';
-}
-
-function getDefaultAmount(category: string): number {
-  const defaults: Record<string, number> = {
-    'Housing': 1500,
-    'Transportation': 400,
-    'Food & Dining': 600,
-    'Utilities': 200,
-    'Healthcare': 300,
-    'Insurance': 200,
-    'Debt Payments': 500,
-    'Basic Groceries': 400,
-    'Entertainment': 200,
-    'Shopping': 300,
-    'Personal Care': 100,
-    'Dining Out': 200,
-    'Travel': 100,
-    'Hobbies': 100,
-    'Subscriptions': 50,
-    'Fitness': 50,
-    'Savings': 500,
-    'Investments': 200,
-    'Emergency Fund': 200,
-    'Retirement': 300,
-    'Education': 100,
-    'Major Purchases': 100
-  };
-  return defaults[category] || 100;
-}
+import { getUserFromRequest } from '@/lib/auth';
+import { 
+  DEMO_USER_ID, 
+  DEMO_ESSENTIALS_CATEGORIES, 
+  DEMO_LIFESTYLE_CATEGORIES, 
+  DEMO_SAVINGS_CATEGORIES,
+  getDemoDefaultAmount 
+} from '@/lib/mock-data';
 
 async function analyzeUserSpending(userId: string, months: number = 3) {
   const endDate = new Date();
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
+  
+  // Get user preferences for pending transactions
+  const userPreferences = await prisma.user_preferences.findUnique({
+    where: { user_id: userId }
+  });
+  const financialGoals = userPreferences?.financial_goals as any;
+  const includePending = financialGoals?.['include_pending_transactions'] ?? false;
+  
   const transactions = await prisma.transactions.findMany({
     where: {
       user_id: userId,
@@ -133,21 +30,50 @@ async function analyzeUserSpending(userId: string, months: number = 3) {
         gte: startDate,
         lte: endDate
       },
-      amount: {
-        gt: 0
-      }
+      // Only include pending if user preference allows
+      ...(includePending ? {} : { pending: false })
     },
     orderBy: {
       date: 'desc'
+    },
+    select: {
+      amount: true,
+      category: true,
+      category_id: true,
+      pending: true
     }
   });
-  const totalSpending = transactions.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-  const averageMonthlySpending = totalSpending / months;
+  
   const spendingByCategory: Record<string, number> = {};
-  transactions.forEach(tx => {
-    const category = categorizeBudgetTransaction(tx.category);
-    spendingByCategory[category] = (spendingByCategory[category] || 0) + Math.abs(tx.amount);
-  });
+  let totalSpending = 0;
+  
+  for (const tx of transactions) {
+    // Use DB-backed categorization for real users, fallback for demo
+    const category = userId === DEMO_USER_ID 
+      ? categorizeBudgetTransaction(tx.category)
+      : await resolveBudgetCategory(userId, tx.category_id, tx.category);
+    
+    // Skip income and transfers
+    if (category === 'Income' || category === 'Transfer') {
+      continue;
+    }
+    
+    const amount = Number(tx.amount);
+    
+    // Handle refunds (negative amounts)
+    if (amount < 0) {
+      // Refund - subtract from category spending
+      spendingByCategory[category] = (spendingByCategory[category] || 0) - Math.abs(amount);
+      totalSpending -= Math.abs(amount);
+    } else {
+      // Normal expense - add to category spending
+      spendingByCategory[category] = (spendingByCategory[category] || 0) + amount;
+      totalSpending += amount;
+    }
+  }
+  
+  const averageMonthlySpending = totalSpending / months;
+  
   return {
     totalSpending,
     spendingByCategory,
@@ -156,21 +82,41 @@ async function analyzeUserSpending(userId: string, months: number = 3) {
   };
 }
 
-async function generateSmartBudget(userId: string) {
+// Only used for demo user now
+async function generateSmartBudgetForDemo(userId: string) {
   const analysis = await analyzeUserSpending(userId);
+  
+  // Get user preferences for budget targets
+  const user = await prisma.users.findUnique({
+    where: { id: userId },
+    select: { default_checking_buffer: true }
+  });
+  const userPreferences = await prisma.user_preferences.findUnique({
+    where: { user_id: userId }
+  });
+  
+  const checkingBuffer = Number(user?.default_checking_buffer || 2000);
+  const financialGoals = userPreferences?.financial_goals as any;
+  const savingsTarget = financialGoals?.['target_savings_percent'] || 20;
+  const budgetFramework = financialGoals?.['budget_framework'] || '50/30/20';
+  
   const suggestedTotalBudget = Math.max(
     analysis.averageMonthlySpending * 1.1,
     3000
   );
+  
   const budgetCategories: Array<{ category: string; amount: number; priority: string }> = [];
+  
   for (const [category, currentSpending] of Object.entries(analysis.spendingByCategory)) {
     const monthlySpending = currentSpending / 3;
     let suggestedAmount = monthlySpending;
     let priority = 'medium';
-    if (ESSENTIALS_CATEGORIES.includes(category)) {
+    
+    // For demo user, use the hardcoded category lists
+    if (DEMO_ESSENTIALS_CATEGORIES.includes(category)) {
       suggestedAmount = monthlySpending * 1.05;
       priority = 'high';
-    } else if (LIFESTYLE_CATEGORIES.includes(category)) {
+    } else if (DEMO_LIFESTYLE_CATEGORIES.includes(category)) {
       if (monthlySpending > suggestedTotalBudget * 0.15) {
         suggestedAmount = monthlySpending * 0.9;
         priority = 'high';
@@ -178,38 +124,44 @@ async function generateSmartBudget(userId: string) {
         suggestedAmount = monthlySpending * 1.02;
         priority = 'medium';
       }
-    } else if (SAVINGS_CATEGORIES.includes(category)) {
-      if (monthlySpending < suggestedTotalBudget * 0.1) {
-        suggestedAmount = suggestedTotalBudget * 0.15;
+    } else if (DEMO_SAVINGS_CATEGORIES.includes(category)) {
+      if (monthlySpending < suggestedTotalBudget * (savingsTarget / 100)) {
+        suggestedAmount = suggestedTotalBudget * (savingsTarget / 100);
         priority = 'high';
       } else {
         suggestedAmount = monthlySpending * 1.1;
         priority = 'medium';
       }
     }
+    
     budgetCategories.push({
       category,
       amount: Math.round(suggestedAmount),
       priority
     });
   }
+  
+  // Add missing essential categories for demo
   const existingCategories = budgetCategories.map(c => c.category);
-  for (const essential of ESSENTIALS_CATEGORIES) {
+  for (const essential of DEMO_ESSENTIALS_CATEGORIES) {
     if (!existingCategories.includes(essential)) {
       budgetCategories.push({
         category: essential,
-        amount: getDefaultAmount(essential),
+        amount: getDemoDefaultAmount(essential),
         priority: 'high'
       });
     }
   }
+  
+  // Ensure savings category exists
   if (!existingCategories.includes('Savings')) {
     budgetCategories.push({
       category: 'Savings',
-      amount: Math.round(suggestedTotalBudget * 0.15),
+      amount: Math.round(suggestedTotalBudget * (savingsTarget / 100)),
       priority: 'high'
     });
   }
+  
   return {
     totalBudget: Math.round(suggestedTotalBudget),
     categories: budgetCategories
@@ -221,6 +173,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
   if (!userId) {
     return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
   }
+
+  // Check authentication
+  const user = await getUserFromRequest(req);
+  console.log('Budget GET auth check:', { user, userId, match: user?.id === userId });
+  if (!user || user.id !== userId) {
+    console.error('Auth failed:', { userFromToken: user?.id, requestedUserId: userId });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const budget = await prisma.budgets.findFirst({
       where: { 
@@ -243,7 +204,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ user
       if (hasTransactions) {
         // For demo user, use the old simple generation
         if (userId === DEMO_USER_ID) {
-          const smartBudget = await generateSmartBudget(userId);
+          const smartBudget = await generateSmartBudgetForDemo(userId);
           const newBudget = await prisma.budgets.create({
             data: {
               id: crypto.randomUUID(),

@@ -69,9 +69,14 @@ class ApiClient {
     console.log('API Request URL:', url); // Debug log
     console.log('API Request options:', options); // Debug log
     
+    // Get token from localStorage if available
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    
     const response = await fetch(url, {
+      credentials: 'same-origin', // Include cookies
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         ...options.headers,
       },
       ...options,
@@ -79,6 +84,26 @@ class ApiClient {
 
     console.log('API Response status:', response.status); // Debug log
     console.log('API Response headers:', Object.fromEntries(response.headers.entries())); // Debug log
+
+    // Handle 401 Unauthorized - try public endpoint fallback
+    if (response.status === 401) {
+      // Check if we can fallback to a public endpoint
+      const publicEndpoint = this.getPublicEndpoint(endpoint);
+      if (publicEndpoint) {
+        console.log('Auth failed, falling back to public endpoint:', publicEndpoint);
+        const publicResponse = await fetch(`${this.baseUrl}${publicEndpoint}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers,
+          },
+          ...options,
+        });
+        
+        if (publicResponse.ok) {
+          return publicResponse.json();
+        }
+      }
+    }
 
     if (!response.ok) {
       // Try to get detailed error information
@@ -99,6 +124,8 @@ class ApiClient {
           }
         } else if (errorData.message) {
           errorMessage = `API request failed: ${errorData.message}`;
+        } else if (errorData.error) {
+          errorMessage = `API request failed: ${errorData.error}`;
         }
       } catch (e) {
         console.log('Could not parse error response:', e);
@@ -108,6 +135,21 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // Helper to map protected endpoints to public ones
+  private getPublicEndpoint(endpoint: string): string | null {
+    // Map protected endpoints to public equivalents
+    if (endpoint.match(/^\/financial-data\//)) {
+      return '/public/dashboard';
+    }
+    if (endpoint.match(/^\/securities\/search/)) {
+      return endpoint.replace('/securities/', '/public/securities/');
+    }
+    if (endpoint.match(/^\/securities\/quote/)) {
+      return endpoint.replace('/securities/', '/public/securities/');
+    }
+    return null;
   }
 
   // User Management

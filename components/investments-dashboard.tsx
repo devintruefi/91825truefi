@@ -14,9 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { 
-  TrendingUp, TrendingDown, DollarSign, PieChart, Activity, 
+  TrendingUp, TrendingDown, DollarSign, Activity, 
   ArrowUpRight, ArrowDownRight, ChevronRight, Eye, EyeOff,
-  Briefcase, Award, LineChart, Info, Plus, RefreshCw,
+  Briefcase, Award, Info, Plus, RefreshCw,
   Edit2, Trash2, Download, Upload, Settings, Filter,
   Calculator, BarChart3, Calendar, Search, X, Check,
   AlertCircle, Star, StarOff, Grid3x3, List, Layers,
@@ -26,6 +26,21 @@ import { cn } from "@/lib/utils"
 import { PlaidConnect } from "@/components/plaid-connect"
 import { InvestmentCard } from './investment-card'
 import { InvestmentForm } from './investment-form'
+import { 
+  ResponsiveContainer, 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  CartesianGrid, 
+  PieChart, 
+  Pie, 
+  Cell, 
+  Legend,
+  LineChart,
+  Line
+} from 'recharts'
 
 interface Investment {
   id: string
@@ -450,6 +465,13 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
   const [selectedAccount, setSelectedAccount] = useState<string>("all")
   const [selectedType, setSelectedType] = useState<string>("all")
   const [selectedRisk, setSelectedRisk] = useState<string>("all")
+  
+  // Chart and analysis state
+  const [selectedHolding, setSelectedHolding] = useState<Investment | null>(null)
+  const [timeRange, setTimeRange] = useState('1M')
+  const [chartData, setChartData] = useState([])
+  const [chartLoading, setChartLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Memoized metrics and filtered investments
   const metrics = usePortfolioMetrics(investments, accounts)
@@ -484,10 +506,74 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
     }
   }, [userId])
 
-  const fetchInvestmentData = useCallback(async () => {
+  // Set default selected holding for charts (largest by value)
+  useEffect(() => {
+    if (investments.length > 0 && !selectedHolding) {
+      const sortedByValue = [...investments]
+        .filter(inv => inv.symbol) // Only holdings with symbols can have charts
+        .sort((a, b) => (b.quantity * b.current_price) - (a.quantity * a.current_price))
+      
+      if (sortedByValue.length > 0) {
+        setSelectedHolding(sortedByValue[0])
+      }
+    }
+  }, [investments, selectedHolding])
+
+  // Fetch chart data for performance tab
+  const fetchChartData = useCallback(async () => {
+    if (!selectedHolding?.symbol || !userId) return
+    
+    setChartLoading(true)
+    try {
+      const response = await fetch(
+        `/api/securities/history?symbol=${selectedHolding.symbol}&range=${timeRange}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          }
+        }
+      )
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.log('User not logged in for live charts')
+          setChartData([])
+          return
+        }
+        throw new Error('Failed to fetch history')
+      }
+      
+      const data = await response.json()
+      
+      // Format data based on timeframe
+      const isIntraday = ['1D', '1W'].includes(timeRange)
+      const formatted = data.data?.map(point => ({
+        time: isIntraday 
+          ? new Date(point.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : new Date(point.t).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+        price: point.c,
+        volume: point.v
+      })) || []
+      
+      setChartData(formatted)
+    } catch (error) {
+      console.error('Failed to fetch chart data:', error)
+      setChartData([])
+    } finally {
+      setChartLoading(false)
+    }
+  }, [selectedHolding?.symbol, timeRange, userId])
+
+  // Fetch investment data
+  const fetchInvestmentData = useCallback(async (refresh = false) => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/investments/${userId}`)
+      const url = refresh ? `/api/investments/${userId}?refresh=true` : `/api/investments/${userId}`
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      })
       if (response.ok) {
         const data = await response.json()
         setAccounts(data.accounts || [])
@@ -499,6 +585,25 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
       setLoading(false)
     }
   }, [userId])
+
+  // Fetch chart data when selection changes
+  useEffect(() => {
+    if (selectedHolding?.symbol && userId) {
+      fetchChartData()
+    }
+  }, [selectedHolding?.symbol, timeRange, userId, fetchChartData])
+
+  // Refresh prices
+  const refreshPrices = useCallback(async () => {
+    if (!userId) return
+    
+    setRefreshing(true)
+    try {
+      await fetchInvestmentData(true)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [userId, fetchInvestmentData])
 
   const saveInvestment = useCallback(async (investment: Partial<Investment>) => {
     if (!userId) {
@@ -1212,13 +1317,137 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
 
         <TabsContent value="performance" className="mt-6">
           <Card className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-0 shadow-xl">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
               <CardTitle>Performance Analysis</CardTitle>
+              {userId && (
+                <Button 
+                  onClick={refreshPrices} 
+                  disabled={refreshing}
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                >
+                  <RefreshCw className={cn("h-4 w-4 mr-1", refreshing && "animate-spin")} />
+                  {refreshing ? "Refreshing..." : "Refresh Prices"}
+                </Button>
+              )}
             </CardHeader>
-            <CardContent>
-              <div className="h-64 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">Performance charts coming soon</p>
-              </div>
+            <CardContent className="space-y-4">
+              {!userId ? (
+                <div className="h-64 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-700 rounded-lg flex items-center justify-center">
+                  <p className="text-gray-500 text-center">
+                    Sign in to view live performance charts<br />
+                    <span className="text-sm">Charts show sample data for demo purposes</span>
+                  </p>
+                </div>
+              ) : investments.length === 0 ? (
+                <div className="h-64 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                  <p className="text-gray-500">Add some investments to see performance charts</p>
+                </div>
+              ) : (
+                <>
+                  {/* Timeframe selector */}
+                  <div className="flex gap-2 mb-4">
+                    {['1D', '1W', '1M', '3M', 'YTD', '1Y', 'ALL'].map(range => (
+                      <Button
+                        key={range}
+                        onClick={() => setTimeRange(range)}
+                        variant={timeRange === range ? "default" : "outline"}
+                        size="sm"
+                        className="h-8"
+                      >
+                        {range}
+                      </Button>
+                    ))}
+                  </div>
+                  
+                  {/* Holding selector */}
+                  <Select 
+                    value={selectedHolding?.id}
+                    onValueChange={(value) => {
+                      const holding = investments.find(h => h.id === value)
+                      setSelectedHolding(holding || null)
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a holding to view chart" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {investments
+                        .filter(inv => inv.symbol)
+                        .map(holding => (
+                          <SelectItem key={holding.id} value={holding.id}>
+                            {holding.symbol || holding.name} - {holding.quantity} shares
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  {/* Chart */}
+                  {chartLoading ? (
+                    <div className="h-80 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                      <div className="text-center">
+                        <RefreshCw className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">Loading chart data...</p>
+                      </div>
+                    </div>
+                  ) : chartData.length > 0 ? (
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData}>
+                          <defs>
+                            <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
+                              <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                          <XAxis 
+                            dataKey="time" 
+                            tick={{ fontSize: 12 }}
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis 
+                            tick={{ fontSize: 12 }}
+                            domain={['dataMin * 0.95', 'dataMax * 1.05']}
+                          />
+                          <Tooltip 
+                            formatter={(value: number) => [formatCurrency(value), 'Price']}
+                            labelStyle={{ color: 'var(--foreground)' }}
+                            contentStyle={{
+                              backgroundColor: 'var(--background)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '8px'
+                            }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="price" 
+                            stroke="#8884d8" 
+                            fillOpacity={1}
+                            fill="url(#colorPrice)"
+                            strokeWidth={2}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : selectedHolding ? (
+                    <div className="h-80 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                      <div className="text-center">
+                        <LineChart className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">No chart data available</p>
+                        <p className="text-sm text-gray-400 mt-1">
+                          Historical data may not be available for this security
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-80 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                      <p className="text-gray-500">Select a holding to view performance chart</p>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1228,21 +1457,200 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
             <CardHeader>
               <CardTitle>Portfolio Analysis</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <h4 className="font-semibold mb-2">Diversification Score: Good</h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Your portfolio is well-diversified across {Object.keys(metrics.allocation).length} asset types.
-                  Consider rebalancing quarterly to maintain optimal allocation.
-                </p>
-              </div>
-              
-              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                <h4 className="font-semibold mb-2">Risk Assessment</h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Your portfolio has a balanced risk profile. Consider your investment timeline and adjust risk levels accordingly.
-                </p>
-              </div>
+            <CardContent className="space-y-6">
+              {investments.length === 0 ? (
+                <div className="h-64 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                  <p className="text-gray-500">Add some investments to see portfolio analysis</p>
+                </div>
+              ) : (
+                <>
+                  {/* Portfolio Value */}
+                  <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                    <h3 className="text-lg font-semibold mb-2">Portfolio Value</h3>
+                    <p className="text-2xl font-bold">
+                      {formatCurrency(metrics.totalValue)}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Cost basis: {formatCurrency(metrics.totalCost)}
+                    </p>
+                    <p className={cn(
+                      "text-sm font-medium mt-1",
+                      metrics.totalGainLoss >= 0 ? "text-green-600" : "text-red-600"
+                    )}>
+                      {metrics.totalGainLoss >= 0 ? "+" : ""}{formatCurrency(metrics.totalGainLoss)} ({formatPercent(metrics.totalGainLossPercent)})
+                    </p>
+                  </div>
+
+                  {/* Allocation by Type */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Allocation by Type</h3>
+                    {Object.keys(metrics.allocation).length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={Object.entries(metrics.allocation).map(([key, value]) => ({
+                                  name: key.charAt(0).toUpperCase() + key.slice(1),
+                                  value,
+                                  percentage: ((value / metrics.totalValue) * 100).toFixed(1)
+                                }))}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={80}
+                                label={({name, percentage}) => `${name} ${percentage}%`}
+                              >
+                                {Object.entries(metrics.allocation).map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={`hsl(${index * 137.5 % 360}, 70%, 50%)`} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          {Object.entries(metrics.allocation)
+                            .sort(([,a], [,b]) => b - a)
+                            .map(([type, value]) => (
+                              <div key={type} className="flex justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                                <span className="font-medium capitalize">{type}</span>
+                                <span>{((value / metrics.totalValue) * 100).toFixed(1)}%</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-500">No allocation data available</p>
+                    )}
+                  </div>
+
+                  {/* Top 5 Holdings */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Top 5 Holdings by Value</h3>
+                    <div className="space-y-2">
+                      {[...investments]
+                        .sort((a, b) => (b.quantity * b.current_price) - (a.quantity * a.current_price))
+                        .slice(0, 5)
+                        .map(holding => {
+                          const value = holding.quantity * holding.current_price
+                          const weight = ((value / metrics.totalValue) * 100).toFixed(1)
+                          return (
+                            <div key={holding.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                              <div>
+                                <span className="font-medium">{holding.symbol || holding.name}</span>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  {holding.quantity} shares
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-medium">{weight}%</span>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  {formatCurrency(value)}
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  </div>
+
+                  {/* Portfolio Concentration */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Portfolio Concentration</h3>
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded">
+                      {(() => {
+                        const weights = investments.map(h => (h.quantity * h.current_price) / metrics.totalValue)
+                        const hhi = weights.reduce((sum, w) => sum + (w * w), 0)
+                        const top2Weight = weights
+                          .sort((a, b) => b - a)
+                          .slice(0, 2)
+                          .reduce((sum, w) => sum + w, 0) * 100
+                        
+                        return (
+                          <div>
+                            <p className="text-sm">
+                              <strong>HHI Score:</strong> {hhi.toFixed(4)}
+                            </p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                              Top 2 holdings represent {top2Weight.toFixed(0)}% of portfolio value.
+                              {hhi > 0.25 
+                                ? " Portfolio shows high concentration." 
+                                : hhi > 0.15 
+                                ? " Portfolio has moderate concentration." 
+                                : " Portfolio is well diversified."
+                              }
+                            </p>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Performance Contributors */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-3">Performance Contributors</h3>
+                    
+                    {(() => {
+                      const contributions = investments
+                        .map(h => {
+                          const currentValue = h.quantity * h.current_price
+                          const costBasis = h.quantity * h.purchase_price
+                          const contribution = currentValue - costBasis
+                          const returnPct = costBasis > 0 ? (contribution / costBasis) * 100 : 0
+                          return {
+                            name: h.symbol || h.name,
+                            contribution,
+                            returnPct
+                          }
+                        })
+                        .sort((a, b) => b.contribution - a.contribution)
+
+                      const topPerformers = contributions.slice(0, 3)
+                      const bottomPerformers = contributions.slice(-3).reverse()
+
+                      return (
+                        <div className="space-y-4">
+                          {topPerformers.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-medium mb-2 text-green-600">Top Performers</h4>
+                              <div className="space-y-1">
+                                {topPerformers.map(c => (
+                                  <div key={c.name} className="flex justify-between text-sm p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                                    <span>{c.name}</span>
+                                    <span className="text-green-600 font-medium">
+                                      {c.contribution >= 0 ? '+' : ''}{formatCurrency(c.contribution)} ({c.returnPct.toFixed(1)}%)
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {bottomPerformers.some(c => c.contribution < 0) && (
+                            <div>
+                              <h4 className="text-sm font-medium mb-2 text-red-600">Underperformers</h4>
+                              <div className="space-y-1">
+                                {bottomPerformers.filter(c => c.contribution < 0).map(c => (
+                                  <div key={c.name} className="flex justify-between text-sm p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                                    <span>{c.name}</span>
+                                    <span className="text-red-600 font-medium">
+                                      {formatCurrency(c.contribution)} ({c.returnPct.toFixed(1)}%)
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

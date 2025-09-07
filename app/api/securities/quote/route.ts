@@ -1,22 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest } from '@/lib/auth';
+import { polygonService } from '@/lib/polygon';
 
-// Fallback prices if API is unavailable
-const FALLBACK_PRICES: Record<string, number> = {
-  'AAPL': 233.20,
-  'GOOGL': 197.56,
-  'MSFT': 450.10,
-  'AMZN': 234.67,
-  'TSLA': 389.85,
-  'NVDA': 145.32,
-  'META': 575.89,
-  'JPM': 241.45,
-  'JNJ': 156.78,
-  'V': 309.23,
-  'WMT': 98.45,
-  'SPY': 587.45,
-  'QQQ': 527.89,
-  'BTC': 97845.32,
-  'ETH': 3456.78,
+// Fallback prices if API is unavailable (enhanced dataset)
+const FALLBACK_QUOTES: Record<string, { price: number; change: number; changePercent: number; volume: number }> = {
+  'AAPL': { price: 233.20, change: 2.45, changePercent: 1.06, volume: 45234567 },
+  'GOOGL': { price: 197.56, change: -1.23, changePercent: -0.62, volume: 23456789 },
+  'MSFT': { price: 450.10, change: 5.67, changePercent: 1.28, volume: 34567890 },
+  'AMZN': { price: 234.67, change: -3.21, changePercent: -1.35, volume: 28901234 },
+  'TSLA': { price: 389.85, change: 15.43, changePercent: 4.12, volume: 67890123 },
+  'NVDA': { price: 145.32, change: 8.92, changePercent: 6.54, volume: 89012345 },
+  'META': { price: 575.89, change: -7.65, changePercent: -1.31, volume: 21098765 },
+  'JPM': { price: 241.45, change: 1.87, changePercent: 0.78, volume: 15432109 },
+  'JNJ': { price: 156.78, change: 0.45, changePercent: 0.29, volume: 12345678 },
+  'V': { price: 309.23, change: 3.56, changePercent: 1.16, volume: 18765432 },
+  'WMT': { price: 98.45, change: -0.67, changePercent: -0.68, volume: 24681357 },
+  'SPY': { price: 587.45, change: 4.23, changePercent: 0.72, volume: 98765432 },
+  'QQQ': { price: 527.89, change: 6.78, changePercent: 1.30, volume: 56789012 },
+  'BTC': { price: 97845.32, change: -1234.56, changePercent: -1.25, volume: 0 },
+  'ETH': { price: 3456.78, change: 89.12, changePercent: 2.65, volume: 0 },
 };
 
 export async function GET(request: NextRequest) {
@@ -28,91 +30,67 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Symbol is required' }, { status: 400 });
     }
 
-    // Try to fetch from Alpha Vantage (free tier)
-    const apiKey = process.env.ALPHA_VANTAGE_API_KEY || 'demo';
+    // Check if user is logged in using existing auth system
+    const user = await getUserFromRequest(request);
     
-    if (apiKey && apiKey !== 'demo') {
+    // For logged-in users with Polygon API configured, use live data
+    if (user && polygonService.isConfigured()) {
       try {
-        const response = await fetch(
-          `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`,
-          { next: { revalidate: 60 } } // Cache for 1 minute
-        );
+        const quote = await polygonService.getQuote(symbol);
         
-        if (response.ok) {
-          const data = await response.json();
-          if (data['Global Quote'] && data['Global Quote']['05. price']) {
-            return NextResponse.json({
-              symbol,
-              price: parseFloat(data['Global Quote']['05. price']),
-              change: parseFloat(data['Global Quote']['09. change'] || 0),
-              changePercent: data['Global Quote']['10. change percent'] || '0%',
-              volume: parseInt(data['Global Quote']['06. volume'] || 0),
-              timestamp: new Date().toISOString()
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Alpha Vantage API error:', error);
-      }
-    }
-
-    // Try Yahoo Finance API (unofficial but free)
-    try {
-      const yahooResponse = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
-        { 
+        return NextResponse.json({
+          symbol: quote.symbol,
+          price: quote.price,
+          change: quote.change,
+          changePercent: `${quote.changePercent.toFixed(2)}%`,
+          volume: quote.volume,
+          timestamp: quote.timestamp.toISOString(),
+          source: 'polygon'
+        }, {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          next: { revalidate: 60 }
-        }
-      );
-      
-      if (yahooResponse.ok) {
-        const data = await yahooResponse.json();
-        const quote = data.chart?.result?.[0]?.meta;
+            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
+          }
+        });
         
-        if (quote?.regularMarketPrice) {
-          return NextResponse.json({
-            symbol,
-            price: quote.regularMarketPrice,
-            change: quote.regularMarketPrice - quote.previousClose,
-            changePercent: ((quote.regularMarketPrice - quote.previousClose) / quote.previousClose * 100).toFixed(2) + '%',
-            volume: quote.regularMarketVolume || 0,
-            timestamp: new Date().toISOString()
-          });
-        }
+      } catch (error) {
+        console.error('Polygon quote error, using fallback:', error);
+        // Fall through to fallback logic
       }
-    } catch (error) {
-      console.error('Yahoo Finance API error:', error);
     }
 
-    // Fallback to static prices with some variation
-    const basePrice = FALLBACK_PRICES[symbol];
-    if (basePrice) {
-      // Add some realistic variation (±2%)
-      const variation = (Math.random() - 0.5) * 0.04;
-      const price = basePrice * (1 + variation);
-      const change = price * variation;
+    // Fallback logic for non-logged-in users or API failures
+    const fallbackData = FALLBACK_QUOTES[symbol];
+    if (fallbackData) {
+      // Add small realistic variation to simulate market movement
+      const priceVariation = (Math.random() - 0.5) * 0.02; // ±1%
+      const adjustedPrice = fallbackData.price * (1 + priceVariation);
+      const adjustedChange = fallbackData.change + (fallbackData.price * priceVariation);
+      const adjustedChangePercent = fallbackData.price > 0 
+        ? (adjustedChange / fallbackData.price) * 100 
+        : 0;
       
       return NextResponse.json({
         symbol,
-        price: parseFloat(price.toFixed(2)),
-        change: parseFloat(change.toFixed(2)),
-        changePercent: (variation * 100).toFixed(2) + '%',
-        volume: Math.floor(Math.random() * 10000000),
+        price: parseFloat(adjustedPrice.toFixed(2)),
+        change: parseFloat(adjustedChange.toFixed(2)),
+        changePercent: `${adjustedChangePercent.toFixed(2)}%`,
+        volume: fallbackData.volume + Math.floor((Math.random() - 0.5) * fallbackData.volume * 0.1),
         timestamp: new Date().toISOString(),
         source: 'fallback'
       });
     }
 
-    // If symbol not found in fallback, return a generic price
+    // Generic fallback for unknown symbols
+    const randomPrice = Math.random() * 200 + 50;
+    const randomChange = (Math.random() - 0.5) * 10;
+    const randomChangePercent = (randomChange / randomPrice) * 100;
+    
     return NextResponse.json({
       symbol,
-      price: parseFloat((Math.random() * 200 + 50).toFixed(2)),
-      change: 0,
-      changePercent: '0%',
-      volume: 0,
+      price: parseFloat(randomPrice.toFixed(2)),
+      change: parseFloat(randomChange.toFixed(2)),
+      changePercent: `${randomChangePercent.toFixed(2)}%`,
+      volume: Math.floor(Math.random() * 5000000),
       timestamp: new Date().toISOString(),
       source: 'random'
     });

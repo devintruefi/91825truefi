@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     for (const [key, value] of Object.entries(assets)) {
       if (value && typeof value === 'number' && value > 0) {
         const assetId = uuidv4();
+        const assetValue = value as number;
         
         // Create the manual asset
         const asset = await prisma.manual_assets.create({
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
             user_id: user.id,
             name: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
             asset_class: getAssetClass(key),
-            value: value,
+            value: assetValue,
             notes: `Added during onboarding`,
             created_at: new Date(),
             updated_at: new Date()
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
               manual_asset_id: assetId,
               property_type: 'residential',
               is_primary_residence: key === 'home',
-              market_value: value,
+              market_value: assetValue,
               created_at: new Date(),
               updated_at: new Date()
             }
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
             data: {
               id: uuidv4(),
               manual_asset_id: assetId,
-              estimated_value: value,
+              estimated_value: assetValue,
               created_at: new Date(),
               updated_at: new Date()
             }

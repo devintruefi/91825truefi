@@ -122,15 +122,16 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
     }
   }
 
-  const handleSecuritySelect = (security: any) => {
+  const handleSecuritySelect = async (security: any) => {
     setSelectedSecurity(security)
     if (security) {
+      // Set basic info immediately (without price to avoid rate limits)
       setFormData({
         ...formData,
         name: security.name,
         symbol: security.symbol,
         type: security.type,
-        current_price: security.current_price,
+        current_price: 0, // Will fetch separately
         risk_level: getRiskLevelFromType(security.type)
       })
       // Clear name and symbol errors when security is selected
@@ -140,6 +141,28 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
         delete newErrors.symbol
         return newErrors
       })
+      
+      // Fetch current price separately (single API call when selected)
+      if (security.symbol) {
+        try {
+          const authToken = localStorage.getItem('auth_token') || localStorage.getItem('token')
+          const response = await fetch(`/api/securities/quote?symbol=${security.symbol}`, {
+            headers: {
+              'Authorization': authToken ? `Bearer ${authToken}` : ''
+            }
+          })
+          if (response.ok) {
+            const data = await response.json()
+            setFormData(prev => ({
+              ...prev,
+              current_price: data.price || 0,
+              purchase_price: prev.purchase_price || data.price || 0
+            }))
+          }
+        } catch (error) {
+          console.error('Failed to fetch price for', security.symbol, error)
+        }
+      }
     } else {
       setFormData({
         ...formData,
@@ -351,16 +374,46 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
             <Input
               type="date"
               value={formData.purchase_date || ""}
-              onChange={(e) => {
-                setFormData({...formData, purchase_date: e.target.value})
-                if (errors.purchase_date && new Date(e.target.value) <= new Date()) {
+              onChange={async (e) => {
+                const newDate = e.target.value
+                setFormData({...formData, purchase_date: newDate})
+                if (errors.purchase_date && new Date(newDate) <= new Date()) {
                   setErrors(prev => ({ ...prev, purchase_date: '' }))
+                }
+                
+                // Fetch historical price if we have a symbol and date
+                if (selectedSecurity?.symbol && newDate) {
+                  try {
+                    const authToken = localStorage.getItem('auth_token') || localStorage.getItem('token')
+                    const response = await fetch(`/api/securities/historical-price?symbol=${selectedSecurity.symbol}&date=${newDate}`, {
+                      headers: {
+                        'Authorization': authToken ? `Bearer ${authToken}` : ''
+                      }
+                    })
+                    if (response.ok) {
+                      const data = await response.json()
+                      if (data.price) {
+                        setFormData(prev => ({
+                          ...prev,
+                          purchase_price: data.price
+                        }))
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Failed to fetch historical price:', error)
+                  }
                 }
               }}
               max={new Date().toISOString().split('T')[0]}
               className={errors.purchase_date ? "border-red-500" : ""}
             />
             {errors.purchase_date && <p className="text-sm text-red-500">{errors.purchase_date}</p>}
+            {selectedSecurity && formData.purchase_date && (
+              <p className="text-xs text-gray-500">
+                <Info className="h-3 w-3 inline mr-1" />
+                Purchase price auto-filled with historical price for {formData.purchase_date}
+              </p>
+            )}
           </div>
         </div>
         
