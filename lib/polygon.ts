@@ -90,11 +90,19 @@ class RateLimiter {
   
   async waitForSlot(): Promise<void> {
     let waitCount = 0
+    const maxWaitSeconds = 10 // Maximum wait time
+    
     while (!this.canMakeRequest()) {
       if (waitCount === 0) {
         const remainingTime = Math.ceil((this.requests[0] + this.window - Date.now()) / 1000)
-        console.log(`Rate limit: waiting ${remainingTime}s for next available slot`)
+        console.log(`Rate limit: waiting ${Math.min(remainingTime, maxWaitSeconds)}s for next available slot`)
       }
+      
+      // If we've been waiting too long, throw an error instead of continuing to wait
+      if (waitCount >= maxWaitSeconds) {
+        throw new Error(`Rate limit timeout after ${maxWaitSeconds}s`)
+      }
+      
       await new Promise(resolve => setTimeout(resolve, 1000))
       waitCount++
     }

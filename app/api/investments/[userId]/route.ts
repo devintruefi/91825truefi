@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { PrismaClient } from "@prisma/client"
 import { getUserFromRequest } from '@/lib/auth'
 import { polygonService } from '@/lib/polygon'
+import crypto from 'crypto'
 
 const prisma = new PrismaClient()
 
@@ -226,10 +227,17 @@ export async function POST(
     
     if (body.symbol && marketTypes.includes(body.type) && polygonService.isConfigured()) {
       try {
-        // Fetch live price from Polygon, ignore client-provided current_price
-        const quote = await polygonService.getQuote(body.symbol);
-        currentPrice = quote.price;
+        // Fetch live price from Polygon with timeout, ignore client-provided current_price
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Price verification timeout')), 10000)
+        );
         
+        const quote = await Promise.race([
+          polygonService.getQuote(body.symbol),
+          timeoutPromise
+        ]) as any;
+        
+        currentPrice = quote.price;
         console.log(`Server-side price verification for ${body.symbol}: $${currentPrice}`);
       } catch (error: any) {
         console.warn(`Failed to fetch live price for ${body.symbol}, using purchase price:`, error?.message || error);
@@ -293,7 +301,9 @@ export async function POST(
       console.log('Creating manual investment account for user:', userId);
       manualAccount = await prisma.accounts.create({
         data: {
+          id: crypto.randomUUID(),
           user_id: userId,
+          plaid_account_id: `manual_${crypto.randomUUID()}`,
           name: 'Manual Investments',
           type: 'investment',
           subtype: 'manual',

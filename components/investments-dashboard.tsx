@@ -529,7 +529,7 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
         `/api/securities/history?symbol=${selectedHolding.symbol}&range=${timeRange}`,
         {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
           }
         }
       )
@@ -540,7 +540,14 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
           setChartData([])
           return
         }
-        throw new Error('Failed to fetch history')
+        if (response.status === 429) {
+          console.log('Rate limited - chart data temporarily unavailable')
+          setChartData([])
+          return
+        }
+        console.warn(`Chart data fetch failed with status ${response.status}`)
+        setChartData([])
+        return
       }
       
       const data = await response.json()
@@ -571,7 +578,7 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
       const url = refresh ? `/api/investments/${userId}?refresh=true` : `/api/investments/${userId}`
       const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         }
       })
       if (response.ok) {
