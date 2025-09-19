@@ -1724,7 +1724,7 @@ function AppleChatInterfaceInner() {
                   </p>
                 </div>
                 <Button
-                  onClick={() => window.location.href = '/signup'}
+                  onClick={() => window.location.href = '/auth'}
                   className="ml-4 bg-cyan-600 hover:bg-cyan-700 text-white text-sm"
                   size="sm"
                 >
