@@ -198,9 +198,18 @@ class MemoryManager:
                     # Reverse to get chronological order
                     messages.reverse()
 
-                    # Parse rich_content JSON field
+                    # Parse rich_content JSON field (handle both string and dict)
                     for msg in messages:
-                        rich_content = json.loads(msg['rich_content']) if msg['rich_content'] else {}
+                        rich_content = msg['rich_content']
+                        if rich_content:
+                            # Handle case where data is already parsed (dict) vs still JSON string
+                            if isinstance(rich_content, str):
+                                rich_content = json.loads(rich_content)
+                            elif not isinstance(rich_content, dict):
+                                rich_content = {}
+                        else:
+                            rich_content = {}
+
                         msg['intent'] = rich_content.get('intent')
                         msg['entities'] = rich_content.get('entities', {})
                         msg['metadata'] = rich_content.get('metadata', {})
@@ -348,9 +357,18 @@ class MemoryManager:
 
                     insights = cur.fetchall()
 
-                    # Parse JSON fields
+                    # Parse JSON fields (handle both string and dict)
                     for insight in insights:
-                        insight['insight_value'] = json.loads(insight['insight_value']) if insight['insight_value'] else {}
+                        insight_value = insight['insight_value']
+                        if insight_value:
+                            # Handle case where data is already parsed (dict) vs still JSON string
+                            if isinstance(insight_value, str):
+                                insight['insight_value'] = json.loads(insight_value)
+                            elif not isinstance(insight_value, dict):
+                                insight['insight_value'] = {}
+                        else:
+                            insight['insight_value'] = {}
+
                         insight['last_seen'] = insight['last_seen'].isoformat() if insight['last_seen'] else None
 
                     return insights

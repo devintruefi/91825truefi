@@ -237,5 +237,70 @@ INTENT_TO_ALLOWED: Dict[Intent, Dict[str, Any]] = {
             -- Example: "all coffee purchases over $5 last month"
             -- Will search by merchant, amount, date range, category
         """
+    },
+
+    # Analysis intents that don't need SQL - they use profile pack data directly
+    Intent.INVESTMENT_ANALYSIS: {
+        "tables": [],
+        "columns": [],
+        "notes": "Investment advice and analysis. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
+    },
+    Intent.SPENDING_ANALYSIS: {
+        "tables": [],
+        "columns": [],
+        "notes": "Spending analysis and advice. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
+    },
+    Intent.SAVINGS_ANALYSIS: {
+        "tables": [],
+        "columns": [],
+        "notes": "Savings analysis and advice. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
+    },
+    Intent.BUDGET_ANALYSIS: {
+        "tables": [],
+        "columns": [],
+        "notes": "Budget analysis and advice. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
+    },
+    Intent.DEBT_ANALYSIS: {
+        "tables": [],
+        "columns": [],
+        "notes": "Debt analysis and advice. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
+    },
+    Intent.TAX_PLANNING: {
+        "tables": [],
+        "columns": [],
+        "notes": "Tax planning and advice. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
+    },
+    Intent.RETIREMENT_PLANNING: {
+        "tables": [],
+        "columns": [],
+        "notes": "Retirement planning and advice. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
+    },
+    Intent.GOAL_PLANNING: {
+        "tables": [],
+        "columns": [],
+        "notes": "Goal planning and advice. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
+    },
+    Intent.NET_WORTH_ANALYSIS: {
+        "tables": [],
+        "columns": [],
+        "notes": "Net worth analysis and advice. Uses profile pack data directly, no SQL needed.",
+        "template_sql": None,
+        "skip_sql": True
     }
 }

@@ -37,9 +37,13 @@ def classify_intent(question: str) -> Intent:
     if re.search(r'\b(savings?\s*rate|how much.*saving|save.*percentage)\b', q):
         return Intent.SAVINGS_RATE
 
-    # Investment positions
-    if re.search(r'\b(investment|portfolio|holdings?|positions?|stocks?|securities|ticker)\b', q):
+    # Investment positions (current holdings)
+    if re.search(r'\b(investment|portfolio|holdings?|positions?|stocks?|securities|ticker)\b', q) and not re.search(r'\b(should|advice|recommend|what.*invest|types?.*invest|best.*invest)\b', q):
         return Intent.INVESTMENT_POSITIONS
+
+    # Investment advice/analysis
+    if re.search(r'\b(what.*invest|should.*invest|investment.*advice|investment.*recommend|types?.*invest|best.*invest|companies.*invest|sectors.*invest|what.*companies.*invest|types.*companies.*invest|etfs?.*fit)', q):
+        return Intent.INVESTMENT_ANALYSIS
 
     # Goals tracking
     if re.search(r'\b(goals?|target|progress|achieving)\b', q):

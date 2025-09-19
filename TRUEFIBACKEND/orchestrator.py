@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from agents import SQLAgent, ModelingAgent, CritiqueAgent
-from agents.router import classify_intent
+from agents.router import classify_intent, intent_contract
 from profile_pack import ProfilePackBuilder, TransactionSchemaCard
 from security import SQLSanitizer
 from db import execute_safe_query
@@ -78,6 +78,7 @@ class AgentOrchestrator:
         try:
             # Detect intent early for memory purposes
             intent = classify_intent(question)
+            intent_info, contract = intent_contract(question)
 
             # Step 0: Store user message in memory if available
             if USE_MEMORY and session_id:
@@ -112,13 +113,35 @@ class AgentOrchestrator:
                 except Exception as e:
                     logger.warning(f"Failed to build agent context: {e}")
 
-            # Step 2: SQL Generation and Validation Loop
-            sql_result, sql_logs = await self._execute_sql_loop(user_id, question, profile_pack)
+            # Step 2: SQL Generation and Validation Loop (or skip for analysis-only questions)
+            should_skip_sql = (
+                contract.get('skip_sql', False) or
+                intent_info.value == 'unknown' or
+                not contract.get('tables', [])
+            )
 
-            if 'error' in sql_result:
-                return {'error': sql_result['error'], 'logs': sql_logs}
+            if should_skip_sql:
+                reason = "Analysis only - no SQL needed"
+                if intent_info.value == 'unknown':
+                    reason = "Unknown intent - proceeding with modeling agent for personalized analysis"
+                elif not contract.get('tables', []):
+                    reason = "No allowed tables - proceeding with modeling agent for analysis"
 
-            run_logs.extend(sql_logs)
+                logger.info(f"Skipping SQL generation for intent '{intent_info.value}': {reason}")
+                # Create empty SQL result for analysis-only questions
+                sql_result = {
+                    'sql_plan': {'intent': intent_info.value, 'notes': reason},
+                    'sql_result': {'data': [], 'row_count': 0, 'columns': []},
+                    'skipped_sql': True
+                }
+                sql_logs = []
+            else:
+                sql_result, sql_logs = await self._execute_sql_loop(user_id, question, profile_pack)
+
+                if 'error' in sql_result:
+                    return {'error': sql_result['error'], 'logs': sql_logs}
+
+                run_logs.extend(sql_logs)
 
             # Step 3: Modeling and Validation Loop
             model_result, model_logs = await self._execute_model_loop(
