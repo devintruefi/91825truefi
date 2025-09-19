@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 // Chat components only - onboarding moved to dashboard
 import { DashboardPreview } from '@/components/chat/dashboard-preview'
+import { PennyResponseRenderer } from '@/components/chat/penny-response-renderer'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown, Edit2, Check, X } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
@@ -31,6 +32,11 @@ interface Message {
   sender: "user" | "penny"
   timestamp: Date
   feedback?: "positive" | "negative" | null
+  metadata?: {
+    ui_blocks?: any[]
+    computations?: any[]
+    assumptions?: string[]
+  }
   component?: {
     type: 'dashboardPreview' | string  // Keep generic for backward compatibility
     stepId?: string
@@ -46,14 +52,25 @@ interface ChatSession {
   lastMessage: string
 }
 
-const quickSuggestions = [
-  "📊 Show my budget analysis",
-  "💼 Investment portfolio review", 
-  "🎯 Savings goals progress",
-  "💳 Recent spending insights",
-  "💡 Financial recommendations",
-  "📈 Market trends & insights"
-]
+// Import demo data for non-logged in users
+import { DEMO_DATA, DEMO_QUESTIONS } from '@/lib/constants/demoData'
+
+// Dynamic suggestions based on authentication
+const getQuickSuggestions = (isAuthenticated: boolean) => {
+  if (!isAuthenticated) {
+    // Use demo-specific questions for non-logged in users
+    return DEMO_QUESTIONS
+  }
+  // Regular suggestions for logged in users
+  return [
+    "📊 Show my budget analysis",
+    "💼 Investment portfolio review",
+    "🎯 Savings goals progress",
+    "💳 Recent spending insights",
+    "💡 Financial recommendations",
+    "📈 Market trends & insights"
+  ]
+}
 
 // Enhanced markdown table renderer with theme-aware styling
 function renderMarkdownTable(content: string, theme: string) {
@@ -476,19 +493,13 @@ let messageIdCounter = 1000
 function AppleChatInterfaceInner() {
   const { user } = useUser()
   const { theme } = useTheme()
-  const searchParams = useSearchParams()
-  const isOnboarding = searchParams.get('onboarding') === 'true'
   
-  // Conditionally set initial messages based on authentication and onboarding
+  // Set initial messages based on authentication
   const getInitialMessages = (): Message[] => {
     // Use a fixed timestamp to avoid hydration mismatch
     const fixedTimestamp = new Date('2024-01-01T12:00:00')
     
-    // Don't show any hardcoded onboarding messages - let the backend drive it
-    if (user && isOnboarding) {
-      // Return empty array - will be populated by useEffect that fetches from backend
-      return []
-    } else if (user) {
+    if (user) {
       // For authenticated users, show a personalized welcome message
       return [{
         id: "1",
@@ -609,91 +620,6 @@ function AppleChatInterfaceInner() {
   }, [user]);
 
   // Removed onboarding initialization - handled by dashboard
-
-  /* Removed - onboarding handled by dashboard
-    const fetchInitialOnboardingState = async () => {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.error('No auth token for onboarding');
-        return;
-      }
-
-      try {
-        console.log('Fetching initial onboarding state from backend...');
-        console.log('Current messages length:', messages.length);
-        console.log('isOnboardingMode:', isOnboardingMode);
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            sessionId: sessionId || `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            isOnboarding: true,
-            onboardingProgress: onboardingProgress,
-            message: null,
-            componentResponse: null,
-            userId: user.id
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Initial onboarding response:', data);
-          console.log('Component present:', !!data.component);
-          console.log('Content present:', !!data.content);
-          
-          if (data.component && data.content) {
-            // Set the initial message with the component from backend
-            const initialMessage: Message = {
-              id: `initial_${Date.now()}`,
-              content: data.content,
-              sender: 'penny',
-              timestamp: new Date(),
-              component: data.component
-            };
-            
-            setMessages([initialMessage]);
-            console.log('Initial message set:', initialMessage);
-            
-            // Update onboarding progress
-            if (data.onboardingProgress) {
-              setOnboardingProgress(data.onboardingProgress);
-              setOnboardingPhase(data.onboardingProgress.currentStep || 'welcome');
-            }
-          } else {
-            console.error('Missing component or content in response:', {
-              hasComponent: !!data.component,
-              hasContent: !!data.content,
-              fullData: data
-            });
-            
-            // Fallback: Show a generic welcome message if we're missing data
-            if (data.onboardingProgress) {
-              const fallbackMessage: Message = {
-                id: `fallback_${Date.now()}`,
-                content: "Welcome to TrueFi! Let's get started with setting up your financial profile.",
-                sender: 'penny',
-                timestamp: new Date()
-              };
-              setMessages([fallbackMessage]);
-              setOnboardingProgress(data.onboardingProgress);
-              setOnboardingPhase(data.onboardingProgress.currentStep || 'welcome');
-            }
-          }
-        } else {
-          console.error('Failed to fetch initial onboarding state:', response.status);
-          const errorText = await response.text();
-          console.error('Error response:', errorText);
-        }
-      } catch (error) {
-        console.error('Error fetching initial onboarding state:', error);
-      }
-    };
-
-    // Fetch initial onboarding state
-  */
 
   // Load chat sessions for authenticated users
   useEffect(() => {
@@ -979,331 +905,7 @@ function AppleChatInterfaceInner() {
   }
   */
 
-  /* Removed - onboarding component responses handled by dashboard
-  const handleComponentResponse = async (messageId: string, value: any, componentType: string, componentStepId?: string, componentData?: any) => {
-    // ALWAYS ensure onboarding mode is active when handling component responses during onboarding
-    if (onboardingProgress.currentStep && onboardingProgress.currentStep !== 'complete') {
-      console.log('Component response during onboarding - ensuring onboarding mode is ON');
-      setIsOnboardingMode(true);
-    }
-    
-    // CRITICAL: Always use the stepId from the component, not from progress
-    // This ensures synchronization between client and server
-    const currentStepId = componentStepId || 'unknown';
-    
-    console.log('=== Client Component Response ===');
-    console.log('Message ID:', messageId);
-    console.log('Step ID:', currentStepId);
-    console.log('Component Type:', componentType);
-    console.log('Value:', value);
-    
-    // Log every answer to user_onboarding_responses
-    if (user && value !== 'skipped') {
-      const token = localStorage.getItem('auth_token')
-      if (token) {
-        // Use the actual step ID for logging
-        const question = currentStepId;
-        
-        console.log('Logging response to database:', { question, answer: value });
-        
-        // Log to database
-        await fetch('/api/onboarding/log-response', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ question, answer: value })
-        })
-      }
-    }
-    
-    // Update onboarding progress
-    const updatedProgress = { ...onboardingProgress, currentStep: currentStepId }
-    const currentStep = currentStepId
-    
-    // Store the response based on component type and current step
-    switch (componentType) {
-      case 'buttons':
-        // Store based on current step context (handle both uppercase and lowercase)
-        const stepLower = currentStep.toLowerCase();
-        if (stepLower === 'main_goal' || stepLower === 'main-goal') {
-          updatedProgress.mainGoal = value
-        } else if (stepLower === 'life_stage' || stepLower === 'life-stage') {
-          updatedProgress.lifeStage = value
-        } else if (stepLower === 'income_confirmation' || stepLower === 'income-confirmation') {
-          updatedProgress.incomeConfirmed = value === 'confirmed'
-        } else {
-          updatedProgress[`response_${currentStep}`] = value
-        }
-        break
-        
-      case 'cards':
-        const stepLowerCards = currentStep.toLowerCase();
-        if (stepLowerCards === 'life_stage' || stepLowerCards === 'life-stage') {
-          updatedProgress.lifeStage = value
-        } else if (stepLowerCards === 'main_goal' || stepLowerCards === 'main-goal') {
-          updatedProgress.mainGoal = value
-        } else {
-          updatedProgress.selectedCard = value
-        }
-        break
-        
-      case 'slider':
-        const stepLowerSlider = currentStep.toLowerCase();
-        if (stepLowerSlider === 'risk_tolerance' || stepLowerSlider === 'risk-tolerance') {
-          updatedProgress.riskTolerance = value
-        } else if (stepLowerSlider === 'manual_income' || stepLowerSlider === 'manual-income' || stepLowerSlider === 'income_capture') {
-          updatedProgress.monthlyIncome = value
-        } else if (stepLowerSlider === 'manual_expenses' || stepLowerSlider === 'manual-expenses' || stepLowerSlider === 'expenses_capture') {
-          updatedProgress.monthlyExpenses = value
-        }
-        break
-        
-      case 'checkboxes':
-        const stepLowerCheck = currentStep.toLowerCase();
-        if (stepLowerCheck === 'goals_selection' || stepLowerCheck === 'goals-selection') {
-          updatedProgress.selectedGoals = value.selected || value
-          // Save goals to database
-          if (value.selected || value) {
-            const goals = (value.selected || value).map((goalId: string) => {
-              const goalInfo = componentData?.options?.find((opt: any) => opt.id === goalId || opt.value === goalId)
-              return {
-                name: goalInfo?.label || goalId,
-                description: goalInfo?.description || '',
-                target_amount: 10000, // Default, will be calculated based on income later
-                priority: goalInfo?.recommended ? 'high' : 'medium'
-              }
-            })
-            
-            try {
-              const token = localStorage.getItem('auth_token')
-              if (token) {
-                fetch('/api/goals', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                  },
-                  body: JSON.stringify({ goals })
-                }).then(res => res.json())
-                  .then(data => console.log('Goals saved:', data))
-                  .catch(err => console.error('Error saving goals:', err))
-              }
-            } catch (error) {
-              console.error('Error saving goals:', error)
-            }
-          }
-        }
-        break
-        
-      case 'plaid':
-        if (value === 'skipped' || value === 'skip') {
-          updatedProgress.plaidSkipped = true
-        } else {
-          updatedProgress.plaidConnection = value
-          updatedProgress.hasConnectedAccounts = true
-          // Trigger auto-analysis
-          if (value.publicToken) {
-            await triggerAutoAnalysis(value)
-          }
-        }
-        break
-        
-      case 'pieChart':
-        updatedProgress.expenseCategories = value
-        break
-        
-      case 'quickAdd':
-        updatedProgress.manualAccounts = value
-        break
-        
-      case 'dashboardPreview':
-        updatedProgress.dashboardViewed = true
-        break
-        
-      case 'assetsInput':
-        updatedProgress.manualAssets = value
-        // Save assets to database
-        if (value && Object.keys(value).length > 0) {
-          try {
-            const token = localStorage.getItem('auth_token')
-            if (token) {
-              fetch('/api/assets', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ assets: value })
-              }).then(res => res.json())
-                .then(data => console.log('Assets saved:', data))
-                .catch(err => console.error('Error saving assets:', err))
-            }
-          } catch (error) {
-            console.error('Error saving assets:', error)
-          }
-        }
-        break
-        
-      case 'liabilitiesInput':
-        updatedProgress.manualLiabilities = value
-        // Save liabilities to database
-        if (value && Object.keys(value).length > 0) {
-          try {
-            const token = localStorage.getItem('auth_token')
-            if (token) {
-              fetch('/api/liabilities', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ liabilities: value })
-              }).then(res => res.json())
-                .then(data => console.log('Liabilities saved:', data))
-                .catch(err => console.error('Error saving liabilities:', err))
-            }
-          } catch (error) {
-            console.error('Error saving liabilities:', error)
-          }
-        }
-        break
-    }
-    
-    // Mark current step as completed
-    const completedSteps = updatedProgress.completedSteps || []
-    if (!completedSteps.includes(currentStep)) {
-      completedSteps.push(currentStep)
-    }
-    updatedProgress.completedSteps = completedSteps
-    
-    // The server will determine the next step based on the response
-    // We just track what's been completed here
-    
-    setOnboardingProgress(updatedProgress)
-    
-    // CRITICAL: Ensure onboarding mode stays active
-    if (updatedProgress.currentStep && updatedProgress.currentStep !== 'complete') {
-      console.log('Keeping onboarding mode ACTIVE after updating progress');
-      setIsOnboardingMode(true);
-    }
-    
-    // Send the response as a user message with natural language
-    let userDisplayMessage = ''
-    
-    // Convert component responses to natural language
-    if (componentType === 'buttons') {
-      const buttonLabels: Record<string, string> = {
-        // Main goals
-        'debt_payoff': 'Pay off debt',
-        'emergency_fund': 'Save for emergencies',
-        'home_purchase': 'Save for a home',
-        'retirement': 'Plan for retirement',
-        'travel': 'Save for travel',
-        'investments': 'Build wealth',
-        'other': 'Something else',
-        // Life stages
-        'student': 'Student',
-        'working_professional': 'Working Professional',
-        'married_partnered': 'Married/Partnered',
-        'parent': 'Parent',
-        'retired': 'Retired',
-        // Income confirmation
-        'confirmed': 'Yes, that\'s right',
-        'adjust': 'Let me adjust it',
-        // Generic
-        'skipped': 'Skip this for now'
-      }
-      userDisplayMessage = buttonLabels[value] || value
-    } else if (componentType === 'cards') {
-      // For card selections (life stage)
-      const cardLabels: Record<string, string> = {
-        'student': 'Student',
-        'working_professional': 'Working Professional',
-        'married_partnered': 'Married/Partnered',
-        'parent': 'Parent',
-        'retired': 'Retired'
-      }
-      userDisplayMessage = cardLabels[value] || value
-    } else if (componentType === 'slider') {
-      // Better formatting for different slider types
-      if (currentStep === 'RISK_TOLERANCE') {
-        const riskLevel = value <= 3 ? 'Conservative' : value <= 7 ? 'Moderate' : 'Aggressive';
-        userDisplayMessage = `${riskLevel} (${value}/10)`
-      } else if (currentStep === 'MANUAL_INCOME') {
-        userDisplayMessage = `$${value.toLocaleString()}/month income`
-      } else if (currentStep === 'MANUAL_EXPENSES') {
-        userDisplayMessage = `$${value.toLocaleString()}/month expenses`
-      } else {
-        userDisplayMessage = `${value}`
-      }
-    } else if (componentType === 'plaid') {
-      userDisplayMessage = value === 'skipped' || value === 'skip' ? 'I\'ll connect my accounts later' : 'Connected my bank accounts'
-    } else if (componentType === 'checkboxes') {
-      // Format selected goals nicely
-      if (value.selected && value.selected.length > 0) {
-        const goalLabels: Record<string, string> = {
-          'emergency_fund': 'Emergency Fund',
-          'debt_payoff': 'Pay Off Debt',
-          'home_purchase': 'Buy a Home',
-          'retirement': 'Retirement',
-          'investments': 'Build Wealth',
-          'travel': 'Travel Fund',
-          'education': 'Education',
-          'business': 'Start Business'
-        }
-        const formattedGoals = value.selected.map((g: string) => goalLabels[g] || g)
-        userDisplayMessage = formattedGoals.join(', ')
-      } else {
-        userDisplayMessage = 'No goals selected'
-      }
-    } else if (componentType === 'quickAdd') {
-      if (value === 'skipped' || value === 'skip') {
-        userDisplayMessage = 'Skip manual account entry'
-      } else if (typeof value === 'object') {
-        // Show summary of accounts added
-        const total = Object.values(value).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0)
-        userDisplayMessage = `Added accounts (Total: $${total.toLocaleString()})`
-      } else {
-        userDisplayMessage = 'Added account information'
-      }
-    } else if (componentType === 'pieChart') {
-      userDisplayMessage = 'Updated budget allocation'
-    } else if (componentType === 'dashboardPreview') {
-      userDisplayMessage = 'Viewed dashboard preview'
-    } else {
-      userDisplayMessage = typeof value === 'object' ? 'Made selection' : value
-    }
-    
-    const userResponseMessage: Message = {
-      id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      content: userDisplayMessage,
-      sender: "user",
-      timestamp: new Date(),
-    }
-    setMessages(prev => [...prev, userResponseMessage])
-    
-    // Ensure we're in onboarding mode if user has selected a main goal
-    if (user && !isOnboardingMode && onboardingProgress.currentStep && onboardingProgress.currentStep !== 'complete') {
-      console.log('Re-enabling onboarding mode - user is in progress');
-      setIsOnboardingMode(true)
-    }
-    
-    // Trigger Penny's next response
-    const responseMessage = typeof value === 'object' ? JSON.stringify(value) : value
-    console.log('=== SENDING COMPONENT RESPONSE ===');
-    console.log('Component type:', componentType);
-    console.log('Step ID:', currentStepId);
-    console.log('Value:', value);
-    console.log('Response message:', responseMessage);
-    console.log('Current isOnboardingMode before send:', isOnboardingMode);
-    console.log('Updated progress before send:', updatedProgress);
-    
-    // Force onboarding mode for the next request - include stepId in message
-    await handleSendMessage(`[Component Response: ${componentType}:${currentStepId}] ${responseMessage}`, true, updatedProgress)
-  }
-  */
+  // Removed onboarding component responses - handled by dashboard
 
   // Safe renderer for interactive components (only non-onboarding components)
   const renderInteractiveComponent = (component: any, messageId: string) => {
@@ -1322,61 +924,7 @@ function AppleChatInterfaceInner() {
     }
   }
 
-  /* Removed - onboarding handled by dashboard
-  const saveOnboardingData = async (showPreview = false) => {
-    if (!user) return
-    
-    try {
-      const token = localStorage.getItem('auth_token')
-      if (!token) return
-      
-      console.log('Saving onboarding data:', onboardingProgress)
-      
-      // Save comprehensive progress to all database tables
-      const response = await fetch('/api/onboarding/save-progress', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          progress: onboardingProgress,
-          phase: showPreview ? 'preview' : onboardingPhase
-        })
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Onboarding data saved successfully', data)
-        
-        // If showing preview or complete, also generate dashboard
-        if (data.dashboardReady) {
-          const dashboardResponse = await fetch('/api/onboarding/generate-dashboard', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              userId: user.id,
-              onboardingData: onboardingProgress
-            })
-          })
-          
-          if (dashboardResponse.ok) {
-            console.log('Dashboard generated successfully')
-          }
-        }
-        
-        return data.dashboardReady
-      }
-    } catch (error) {
-      console.error('Failed to save onboarding data:', error)
-    }
-    
-    return false
-  }
-  */
+  // Removed onboarding data saving - handled by dashboard
 
   const handleSendMessage = async (customMessage?: string, isAutomated?: boolean, forceProgress?: any) => {
     const userMessage = customMessage || inputValue.trim()
@@ -1505,10 +1053,11 @@ function AppleChatInterfaceInner() {
       // Try to get token from localStorage first (most reliable)
       const token = localStorage.getItem('auth_token');
       
-      if (token) {
+      // Only use token if user is actually logged in
+      if (token && user) {
         headers['Authorization'] = `Bearer ${token}`
         console.log('Authorization header set:', `Bearer ${token.substring(0, 20)}...`);
-      } else if (user) {
+      } else if (!token && user) {
         // If no token in localStorage but user exists, we have a problem
         console.error('WARNING: User is logged in but no auth_token in localStorage!');
         console.log('User data:', { id: user.id, first_name: user.first_name });
@@ -1533,8 +1082,14 @@ function AppleChatInterfaceInner() {
           setIsTyping(false);
           return;
         }
-      } else {
+      } else if (!user) {
         console.log('No user object found - user not logged in');
+        // Clear any stale tokens if user is not logged in
+        if (token) {
+          console.log('Clearing stale auth token from localStorage');
+          localStorage.removeItem('auth_token');
+          sessionStorage.removeItem('auth_token');
+        }
       }
       
       console.log('Final headers:', headers);
@@ -1567,19 +1122,11 @@ function AppleChatInterfaceInner() {
         }
       }
       
-      // Add onboarding context if in onboarding mode
+      // Simple request body for chat only
       const requestBody: any = { 
         message: userMessage,
-        conversationHistory,
         sessionId: activeSessionId || sessionId
       }
-      
-      // Add component response if present
-      if (componentResponse) {
-        requestBody.componentResponse = componentResponse;
-      }
-      
-      // Removed onboarding context - handled by dashboard
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -1591,9 +1138,17 @@ function AppleChatInterfaceInner() {
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
-        const errorText = await response.text();
+        let errorText = '';
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          errorText = 'Unable to read error response';
+        }
         console.error('API Error Response:', errorText);
-        throw new Error(`API Error: ${response.status} - ${errorText}`);
+        
+        // If error text is empty, provide a meaningful message
+        const errorMessage = errorText || `Server error (${response.status})`;
+        throw new Error(`API Error: ${response.status} - ${errorMessage}`);
       }
       
       let aiResponseContent = ""
@@ -1629,34 +1184,15 @@ function AppleChatInterfaceInner() {
           if (!activeSessionId) activeSessionId = data.session_id
         }
         
-        // Removed onboarding response handling - handled by dashboard
-        
-        // Extract message and component from different possible response structures
-        aiResponseContent = data.content || data.message || data.response || data.assistantMessage?.content
-        
-        // Add component to the message if present
-        let messageComponent = undefined
-        if (data.component) {
-          console.log('=== COMPONENT RECEIVED (direct) ===');
-          console.log('data.component:', data.component);
-          messageComponent = data.component
-        } else if (data.assistantMessage?.component) {
-          console.log('=== COMPONENT RECEIVED (assistantMessage) ===');
-          console.log('data.assistantMessage.component:', data.assistantMessage.component);
-          messageComponent = data.assistantMessage.component
-        } else {
-          console.log('=== NO COMPONENT IN RESPONSE ===');
-          console.log('data keys:', Object.keys(data));
-          console.log('Full response:', data);
-        }
-        
-        // Removed onboarding progress updates - handled by dashboard
-        
-        // Update the streaming message with full content and component
-        setMessages((prev) => 
-          prev.map(msg => 
-            msg.id === streamingId 
-              ? { ...msg, content: aiResponseContent, component: messageComponent }
+        // Extract message content and metadata from response
+        aiResponseContent = data.content || data.message || data.response || "I'm here to help with your financial journey!"
+        const metadata = data.metadata || null
+
+        // Update the streaming message with full content and metadata
+        setMessages((prev) =>
+          prev.map(msg =>
+            msg.id === streamingId
+              ? { ...msg, content: aiResponseContent, metadata: metadata }
               : msg
           )
         )
@@ -1995,6 +1531,12 @@ function AppleChatInterfaceInner() {
               <h1 className="font-bold text-gray-900 dark:text-white text-lg">Penny</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">Your Personal Financial Advisor</p>
             </div>
+            {/* Demo Mode Badge for non-logged in users */}
+            {!user && (
+              <Badge variant="outline" className="ml-2 bg-yellow-50 text-yellow-700 border-yellow-300 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-700">
+                Demo Mode - Sample Data
+              </Badge>
+            )}
           </div>
         </div>
         
@@ -2098,10 +1640,13 @@ function AppleChatInterfaceInner() {
                           className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-2xl px-6 py-4 text-sm lg:text-base shadow-lg border border-gray-200 dark:border-gray-700"
                         >
                           {/* Removed onboarding progress - handled by dashboard */}
-                              {message.id === streamingMessageId && isTyping
-        ? renderPennyMessage(message.content || '', theme)
-        : renderPennyMessage(message.content || '', theme)
-      }
+                          {message.metadata ? (
+                            <PennyResponseRenderer content={message.content || ''} metadata={message.metadata} />
+                          ) : (
+                            message.id === streamingMessageId && isTyping
+                              ? renderPennyMessage(message.content || '', theme)
+                              : renderPennyMessage(message.content || '', theme)
+                          )}
                               
                           {/* Render interactive component if present */}
                           {message.component && (
@@ -2162,6 +1707,33 @@ function AppleChatInterfaceInner() {
         className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 p-2 sm:p-4"
       >
         <div className="max-w-[1600px] mx-auto">
+          {/* Demo Mode CTA for non-logged in users */}
+          {!user && messages.length > 2 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-3 p-3 bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 rounded-lg border border-cyan-200 dark:border-cyan-700"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    📊 See this with YOUR real data!
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Sign up for free to connect your accounts and get personalized insights
+                  </p>
+                </div>
+                <Button
+                  onClick={() => window.location.href = '/signup'}
+                  className="ml-4 bg-cyan-600 hover:bg-cyan-700 text-white text-sm"
+                  size="sm"
+                >
+                  Get Started
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
           {/* Enhanced Quick Suggestions with Toggle */}
           <AnimatePresence mode="wait">
             {suggestionsVisible ? (
@@ -2202,7 +1774,7 @@ function AppleChatInterfaceInner() {
 
                 {/* Quick Suggestions Buttons */}
                 <div className="flex flex-wrap gap-1 sm:gap-2 mb-2 sm:mb-4">
-                  {quickSuggestions.slice(0, 4).map((suggestion, index) => (
+                  {getQuickSuggestions(!!user).slice(0, 4).map((suggestion, index) => (
                     <motion.button
                       key={index}
                       initial={{ opacity: 0, scale: 0.8 }}
@@ -2217,7 +1789,7 @@ function AppleChatInterfaceInner() {
                     </motion.button>
                   ))}
                   {/* Show remaining suggestions on desktop only */}
-                  {quickSuggestions.slice(4).map((suggestion, index) => (
+                  {getQuickSuggestions(!!user).slice(4).map((suggestion, index) => (
                     <motion.button
                       key={index + 4}
                       initial={{ opacity: 0, scale: 0.8 }}

@@ -1,11 +1,6 @@
-# Agentic Framework for TrueFi Financial Advisor
-# Version 3.0 - Simplified LLM-driven architecture
-from .simple_supervisor_agent import SimpleSupervisorAgent
-from .sql_agent_simple import SimpleSQLAgent
-from .base_agent import BaseAgent
+# Agents v2 module initialization
+from .sql_agent import SQLAgent
+from .modeling_agent import ModelingAgent
+from .critique_agent import CritiqueAgent
 
-__all__ = [
-    'SimpleSupervisorAgent',
-    'SimpleSQLAgent',
-    'BaseAgent'
-]
+__all__ = ['SQLAgent', 'ModelingAgent', 'CritiqueAgent']

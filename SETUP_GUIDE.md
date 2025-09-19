@@ -80,6 +80,10 @@ cd TRUEFIBACKEND
 
 uvicorn main:app --reload --host 0.0.0.0 --port 8080
 
+if reload is needed: python -m uvicorn main:app --host 127.0.0.1 --port 8080 --reload
+
+python main.py
+
 
 
 or 5a. Start the Backend (in TRUEFIBACKEND/)

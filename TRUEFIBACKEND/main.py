@@ -52,23 +52,24 @@ except ImportError as e:
     logger.warning(f"Plaid module not available: {e}")
     PLAID_AVAILABLE = False
 
-# Import the Simplified LLM-driven Agentic Framework v3.0
+# Import the New LLM-driven Agentic Framework v4.0
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from agents.simple_supervisor_agent import SimpleSupervisorAgent
-from agents.sql_agent_simple import SimpleSQLAgent
-from agents.financial_modeling_agent import FinancialModelingAgent
-from agents.base_agent import BaseAgent
-from agents.utils.schema_registry import SchemaRegistry
+# Import new agent framework
+from orchestrator import AgentOrchestrator
+from config import config as agent_config
+from db import initialize_db_pool
+from agent_logging.logger import agent_logger
+
+# Legacy imports removed - using new orchestrator only
 
 load_dotenv()
 
 # Set specific loggers to DEBUG for detailed tracing
-logging.getLogger("agents.simple_supervisor_agent").setLevel(logging.DEBUG)
-logging.getLogger("agents.sql_agent_simple").setLevel(logging.DEBUG)
-logging.getLogger("agents.base_agent").setLevel(logging.DEBUG)
+logging.getLogger("orchestrator").setLevel(logging.DEBUG)
+logging.getLogger("agents_v2").setLevel(logging.DEBUG)
 
 # Import OAuth modules
 try:
@@ -80,10 +81,17 @@ except ImportError as e:
     logger.warning(f"OAuth modules not available: {e}")
     OAUTH_AVAILABLE = False
 
-# Config
+# Config - Use new config system
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 JWT_SECRET = os.getenv("JWT_SECRET", "6f7b0f47c27a44b0a0fc781c2e3e84b50a0f6f7a1c9d8c25b7d0fa492ce2a35b")
+
+# Validate configuration
+try:
+    agent_config.validate()
+except ValueError as e:
+    logger.error(f"Configuration validation failed: {e}")
+    # Use fallback configuration for basic operation
 
 # Async OpenAI
 client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
@@ -158,8 +166,8 @@ async def health_check():
         
         # Check if agents are initialized
         agent_status = "not initialized"
-        if supervisor_agent is not None:
-            agent_status = "simplified-llm-driven"
+        if orchestrator is not None:
+            agent_status = "orchestrator_v4_ready"
         
         return {
             "status": "healthy", 
@@ -204,10 +212,9 @@ class ChatMessageCreate(BaseModel):
     content: str
     rich_content: Optional[Dict] = None
 
-# Global agent variables
-supervisor_agent = None
-sql_agent = None
-financial_modeling_agent = None
+# Agent framework variables
+orchestrator = None
+new_db_pool = None
 
 async def authenticate(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
     """Optional authentication - returns user_id if authenticated, None if not"""
@@ -335,22 +342,26 @@ async def get_session_messages(
     
     cur, conn = db
     try:
-        # Verify session ownership
+        # Verify session ownership - look up by session_id field, not id
         cur.execute("""
-            SELECT id FROM chat_sessions 
-            WHERE id = %s AND user_id = %s
+            SELECT id FROM chat_sessions
+            WHERE session_id = %s AND user_id = %s
         """, (session_id, user_id))
-        
-        if not cur.fetchone():
+
+        session_row = cur.fetchone()
+        if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        # Get messages
+
+        # Get the actual primary key id
+        chat_session_id = session_row[0]
+
+        # Get messages using the primary key
         cur.execute("""
             SELECT id, message_type, content, rich_content, turn_number, created_at
             FROM chat_messages
             WHERE session_id = %s
             ORDER BY turn_number ASC
-        """, (session_id,))
+        """, (chat_session_id,))
         
         messages = []
         for row in cur.fetchall():
@@ -392,21 +403,25 @@ async def update_session_title(
         if not new_title:
             raise HTTPException(status_code=400, detail="Title is required")
         
-        # Verify session ownership
+        # Verify session ownership - look up by session_id field, not id
         cur.execute("""
-            SELECT id FROM chat_sessions 
-            WHERE id = %s AND user_id = %s
+            SELECT id FROM chat_sessions
+            WHERE session_id = %s AND user_id = %s
         """, (session_id, user_id))
-        
-        if not cur.fetchone():
+
+        session_row = cur.fetchone()
+        if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        # Update the title
+
+        # Get the actual primary key id
+        chat_session_id = session_row[0]
+
+        # Update the title using the primary key
         cur.execute("""
-            UPDATE chat_sessions 
+            UPDATE chat_sessions
             SET title = %s, updated_at = CURRENT_TIMESTAMP
             WHERE id = %s AND user_id = %s
-        """, (new_title, session_id, user_id))
+        """, (new_title, chat_session_id, user_id))
         
         conn.commit()
         
@@ -435,46 +450,51 @@ async def save_message(
     
     cur, conn = db
     try:
-        # Verify session ownership
+        # Verify session ownership - look up by session_id field, not id
         cur.execute("""
-            SELECT id FROM chat_sessions 
-            WHERE id = %s AND user_id = %s
+            SELECT id FROM chat_sessions
+            WHERE session_id = %s AND user_id = %s
         """, (session_id, user_id))
-        
-        if not cur.fetchone():
+
+        session_row = cur.fetchone()
+        if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        # Get next turn number
+
+        # Get the actual primary key id
+        chat_session_id = session_row[0]
+
+        # Get next turn number using the primary key
         cur.execute("""
-            SELECT COALESCE(MAX(turn_number), 0) + 1 
-            FROM chat_messages 
+            SELECT COALESCE(MAX(turn_number), 0) + 1
+            FROM chat_messages
             WHERE session_id = %s
-        """, (session_id,))
+        """, (chat_session_id,))
         turn_number = cur.fetchone()[0]
-        
-        # Insert message
+
+        # Insert message using the primary key
         message_id = str(uuid.uuid4())
         cur.execute("""
-            INSERT INTO chat_messages (id, session_id, message_type, content, rich_content, turn_number, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            INSERT INTO chat_messages (id, session_id, message_type, content, rich_content, turn_number, created_at, user_id)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
             RETURNING id, created_at
         """, (
-            message_id, 
-            session_id,
+            message_id,
+            chat_session_id,  # Use the primary key here
             message_data.message_type,
             message_data.content,
             json.dumps(message_data.rich_content) if message_data.rich_content else None,
-            turn_number
+            turn_number,
+            user_id
         ))
-        
+
         result = cur.fetchone()
-        
-        # Update session updated_at
+
+        # Update session updated_at using the primary key
         cur.execute("""
-            UPDATE chat_sessions 
-            SET updated_at = NOW() 
+            UPDATE chat_sessions
+            SET updated_at = NOW()
             WHERE id = %s
-        """, (session_id,))
+        """, (chat_session_id,))
         
         conn.commit()
         
@@ -509,20 +529,24 @@ async def delete_chat_session(
     
     cur, conn = db
     try:
-        # Verify session ownership
+        # Verify session ownership - look up by session_id field, not id
         cur.execute("""
-            SELECT id FROM chat_sessions 
-            WHERE id = %s AND user_id = %s
+            SELECT id FROM chat_sessions
+            WHERE session_id = %s AND user_id = %s
         """, (session_id, user_id))
-        
-        if not cur.fetchone():
+
+        session_row = cur.fetchone()
+        if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        # Delete messages first (foreign key constraint)
-        cur.execute("DELETE FROM chat_messages WHERE session_id = %s", (session_id,))
-        
-        # Delete session
-        cur.execute("DELETE FROM chat_sessions WHERE id = %s", (session_id,))
+
+        # Get the actual primary key id
+        chat_session_id = session_row[0]
+
+        # Delete messages first (foreign key constraint) using the primary key
+        cur.execute("DELETE FROM chat_messages WHERE session_id = %s", (chat_session_id,))
+
+        # Delete session using the primary key
+        cur.execute("DELETE FROM chat_sessions WHERE id = %s", (chat_session_id,))
         
         conn.commit()
         
@@ -550,23 +574,27 @@ async def update_chat_session(
     
     cur, conn = db
     try:
-        # Verify session ownership
+        # Verify session ownership - look up by session_id field, not id
         cur.execute("""
-            SELECT id FROM chat_sessions 
-            WHERE id = %s AND user_id = %s
+            SELECT id FROM chat_sessions
+            WHERE session_id = %s AND user_id = %s
         """, (session_id, user_id))
-        
-        if not cur.fetchone():
+
+        session_row = cur.fetchone()
+        if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        # Update title if provided
+
+        # Get the actual primary key id
+        chat_session_id = session_row[0]
+
+        # Update title if provided using the primary key
         if "title" in update_data:
             cur.execute("""
-                UPDATE chat_sessions 
-                SET title = %s, updated_at = NOW() 
+                UPDATE chat_sessions
+                SET title = %s, updated_at = NOW()
                 WHERE id = %s
                 RETURNING title, updated_at
-            """, (update_data["title"], session_id))
+            """, (update_data["title"], chat_session_id))
             
             result = cur.fetchone()
             conn.commit()
@@ -589,61 +617,90 @@ async def update_chat_session(
         if conn:
             db_pool.putconn(conn)
 
-# Traditional system prompt for non-authenticated users
-SYSTEM_PROMPT = """You are Penny, a friendly and knowledgeable financial assistant for TrueFi. You help users with general financial questions, budgeting advice, and financial education.
+# Import demo data for lean prompt
+from demo.demo_data import get_lean_prompt_facts
+from demo.demo_enhancer import enhance_demo_response, get_demo_suggestions
+
+# Lean system prompt for non-authenticated users
+SYSTEM_PROMPT = f"""You are Penny, TrueFi's AI financial advisor for demo users.
+
+{get_lean_prompt_facts()}
+
+When asked for specifics, reference these numbers. For detailed analysis, mention you're using sample data to demonstrate TrueFi's capabilities.
 
 Your role is to:
 - Provide clear, helpful financial guidance
-- Explain financial concepts in simple terms
-- Offer budgeting tips and strategies
-- Help users understand their financial situation
-- Be encouraging and non-judgmental
+- Explain concepts in simple terms
+- Offer actionable tips based on the data
+- Be encouraging and supportive
+- Demonstrate TrueFi's value proposition
 
-Remember: You're here to help users feel more confident about their finances."""
+Remember: This is demo data to show what TrueFi can do with real user data."""
 
 def initialize_agents():
-    """Initialize the agentic framework"""
-    global supervisor_agent, sql_agent, financial_modeling_agent
-    
-    if supervisor_agent is not None:
+    """Initialize the agentic framework v4.0"""
+    global orchestrator, new_db_pool
+
+    if orchestrator is not None:
         return  # Already initialized
-    
+
     try:
-        # Initialize schema registry with db_pool
-        schema_registry = SchemaRegistry(db_pool)
-        
-        # Initialize SQL agent with openai client and db_pool
-        sql_agent = SimpleSQLAgent(
-            openai_client=client,
-            db_pool=db_pool
-        )
-        
-        # Initialize financial modeling agent with openai client and db_pool
-        financial_modeling_agent = FinancialModelingAgent(
-            openai_client=client,
-            db_pool=db_pool,
-            sql_agent=sql_agent
-        )
-        
-        # Initialize supervisor agent with openai client and db_pool
-        supervisor_agent = SimpleSupervisorAgent(
-            openai_client=client,
-            db_pool=db_pool
-        )
-        
-        logger.info("Agentic framework initialized successfully")
+        # Initialize database pool
+        new_db_pool = initialize_db_pool()
+
+        # Initialize orchestrator
+        orchestrator = AgentOrchestrator()
+
+        logger.info("Agentic framework v4.0 initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize agents: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        supervisor_agent = None
-        sql_agent = None
-        financial_modeling_agent = None
+        orchestrator = None
+        new_db_pool = None
 
 # Chat endpoint for non-authenticated users (basic functionality)
 @app.post("/chat/public")
-async def chat_public(input: MessageInput):
-    """Public chat endpoint for non-authenticated users - uses basic OpenAI chat"""
+async def chat_public(input: MessageInput, request: Request = None):
+    """Public chat endpoint for non-authenticated users - uses basic OpenAI chat with demo enhancements"""
+
+    # EXPLICIT CHECK - never use auth (safeguard)
+    if request and request.headers.get("authorization"):
+        logger.warning("Public endpoint received auth header - rejecting for safety")
+        raise HTTPException(status_code=400, detail="Public endpoint should not receive authentication")
+
+    # Telemetry - log demo chat usage
+    logger.info(f"DEMO_CHAT: {input.message[:100] if input.message else 'empty'}")
+
     try:
+        # Check if OpenAI API key is configured
+        if not OPENAI_API_KEY:
+            logger.warning("OpenAI API key not configured - returning demo response")
+            # Return a helpful demo response when OpenAI is not configured
+            demo_responses = {
+                "default": "Welcome to TrueFi! I'm Penny, your AI financial advisor. While I'm currently in demo mode, I can help you explore features like budget tracking, investment planning, and financial goal setting. What aspect of personal finance would you like to learn about?",
+                "budget": "Great question about budgeting! TrueFi helps you track spending across categories, set monthly limits, and get alerts when you're approaching your budget. Our smart categorization automatically organizes your transactions. Would you like to know more about our budgeting features?",
+                "invest": "Investment planning is crucial! TrueFi provides portfolio analysis, risk assessment, and personalized recommendations based on your goals. We can help you balance growth and security. What's your investment experience level?",
+                "save": "Saving money is a great goal! TrueFi can help you set savings targets, track progress, and find opportunities to save more each month. We analyze your spending patterns to identify potential savings. What are you hoping to save for?"
+            }
+            
+            # Simple keyword matching for demo responses
+            message_lower = input.message.lower()
+            if any(word in message_lower for word in ['budget', 'spend', 'expense']):
+                response_key = 'budget'
+            elif any(word in message_lower for word in ['invest', 'stock', 'portfolio']):
+                response_key = 'invest'
+            elif any(word in message_lower for word in ['save', 'saving', 'goal']):
+                response_key = 'save'
+            else:
+                response_key = 'default'
+            
+            return {
+                "message": demo_responses[response_key],
+                "session_id": input.session_id or f"demo_{int(time.time())}",
+                "agent_used": "demo_fallback",
+                "requires_auth": False
+            }
+        
         # Simple conversation history handling with validation
         conversation_history = input.conversation_history or []
         
@@ -675,51 +732,62 @@ async def chat_public(input: MessageInput):
             presence_penalty=0.6,
             frequency_penalty=0.3,
         )
-        
+
         bot_message = response.choices[0].message.content
-        
-        return {
-            "message": bot_message,
-            "session_id": input.session_id,
-            "agent_used": "basic_openai",
-            "requires_auth": False
-        }
+
+        # Enhance the response with computed insights
+        enhanced_response = enhance_demo_response(input.message, bot_message)
+
+        # Add demo suggestions for next questions
+        enhanced_response["suggestions"] = get_demo_suggestions(input.message)
+        enhanced_response["session_id"] = input.session_id or f"demo_{int(time.time())}"
+        enhanced_response["agent_used"] = "demo_openai_enhanced"
+        enhanced_response["requires_auth"] = False
+
+        return enhanced_response
         
     except Exception as e:
         logger.error(f"Public chat error: {e}")
-        raise HTTPException(status_code=500, detail="Chat service temporarily unavailable")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {str(e)}")
+        
+        # Return a friendly demo message instead of error
+        return {
+            "message": "Welcome to TrueFi! I'm Penny, your AI financial advisor. I'm here to help you understand how TrueFi can transform your financial journey. Ask me about budgeting, investments, savings goals, or any other financial topic!",
+            "session_id": input.session_id or f"demo_{int(time.time())}",
+            "agent_used": "error_fallback",
+            "requires_auth": False
+        }
 
-# Chat endpoint using Agentic Framework for authenticated users
+# Chat endpoint using New Agentic Framework v4.0 for authenticated users
 @app.post("/chat")
 async def chat(input: MessageInput, user_id: Optional[str] = Depends(authenticate), db = Depends(get_db_cursor)):
-    """Authenticated chat endpoint with conditional agentic flow"""
+    """Authenticated chat endpoint with new agentic framework"""
     cur, conn = db
-    
+
     # Check if user is authenticated
     if user_id is None:
         # Fall back to basic chat functionality
         return await chat_public(input)
-    
-    try:
-        # Initialize agents if not already done
-        initialize_agents()
-        
-        # Fetch user name and data dump
-        user_name = get_user_name(cur, user_id)
-        data_dump = get_data_dump(cur, user_id)
 
+    try:
+        # Initialize new agents if not already done
+        initialize_agents()
+
+        # Fetch user name for logging
+        user_name = get_user_name(cur, user_id)
         session_id = input.session_id or str(uuid.uuid4())
 
         # Create session if it doesn't exist (pass the message for title generation)
         valid_session_id = create_session(cur, session_id, user_id, conn, input.message)
 
         # Store user message
-        store_message(cur, valid_session_id, "user", input.message, conn)
+        store_message(cur, valid_session_id, "user", input.message, conn, user_id)
 
         # Get conversation history
         history = get_history(cur, valid_session_id)
-        
-        # Convert history to the format expected by the supervisor agent
+
+        # Convert history to the format expected by the orchestrator
         conversation_history = []
         for msg in history:
             conversation_history.append({
@@ -727,122 +795,194 @@ async def chat(input: MessageInput, user_id: Optional[str] = Depends(authenticat
                 'content': msg['content']
             })
 
-        # Use the Simplified Supervisor Agent for authenticated users
         logger.info(f"=" * 80)
-        logger.info(f"AGENT FRAMEWORK EXECUTION START")
+        logger.info(f"NEW AGENT FRAMEWORK v4.0 EXECUTION START")
         logger.info(f"User: {user_id} | Name: {user_name} | Session: {session_id}")
         logger.info(f"Query: {input.message}")
         logger.info(f"=" * 80)
-        
-        try:
-            supervisor_result = await supervisor_agent.process(
-                query=input.message,
-                user_id=user_id,
-                user_name=user_name,
-                session_id=session_id
-            )
-            
-            # Enhanced logging of results
-            logger.info(f"SUPERVISOR RESULT:")
-            logger.info(f"  Success: {supervisor_result.get('success')}")
-            
-            metadata = supervisor_result.get('metadata', {})
-            routing_info = metadata.get('routing', {})
-            
-            logger.info(f"ROUTING DECISION:")
-            logger.info(f"  Delegated to: {routing_info.get('delegated_to')}")
-            logger.info(f"  Query type: {routing_info.get('query_type')}")
-            logger.info(f"  Required agents: {routing_info.get('required_agents')}")
-            logger.info(f"  Reasoning: {routing_info.get('reasoning', '')}")
-            
-            if metadata.get('sql_agent_performance'):
-                perf = metadata['sql_agent_performance']
-                logger.info(f"SQL AGENT PERFORMANCE:")
-                logger.info(f"  Success: {perf.get('success')}")
-                logger.info(f"  Row count: {perf.get('row_count')}")
-                logger.info(f"  Execution time: {perf.get('execution_time')}s")
-            
-            if metadata.get('merchant_hints'):
-                logger.info(f"ENTITY RESOLUTION:")
-                logger.info(f"  Merchant hints: {metadata['merchant_hints']}")
-            
-            if metadata.get('semantic_interpretation'):
-                logger.info(f"SEMANTIC INTERPRETATION: {metadata['semantic_interpretation']}")
-            
-            logger.info(f"=" * 80)
-            logger.info(f"AGENT FRAMEWORK EXECUTION COMPLETE")
-            logger.info(f"=" * 80)
-            
-        except Exception as e:
-            logger.error(f"SUPERVISOR AGENT FAILED: {e}")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-            # Fallback to traditional OpenAI approach
-            supervisor_result = {"success": False, "response": f"Agent error: {str(e)}"}
-        
-        logger.info(f"Supervisor processed query for user {user_id}")
 
-        # Check if supervisor agent returned results
-        if not supervisor_result.get("success"):
-            error_msg = supervisor_result.get("response", "An error occurred while processing your request.")
-            logger.error(f"Supervisor error for user {user_id}: {error_msg}")
-            # Fallback to traditional OpenAI approach
-            logger.info("Falling back to traditional OpenAI approach")
-            system_content = SYSTEM_PROMPT.format(
-                user_name=user_name, 
-                data_dump=data_dump, 
-                history='\n'.join([f"{msg['role']}: {msg['content']}" for msg in history])
-            )
-            
-            messages = [
-                {"role": "system", "content": system_content}
-            ] + history + [
+        # Use the new orchestrator
+        if orchestrator is not None:
+            try:
+                orchestrator_result = await orchestrator.process_question(
+                    user_id=user_id,
+                    question=input.message,
+                    conversation_history=conversation_history,
+                    session_id=input.session_id  # Pass session_id for memory support
+                )
+
+                if 'error' in orchestrator_result:
+                    logger.error(f"Orchestrator error: {orchestrator_result['error']}")
+                    # Fall back to legacy agents if available
+                    raise Exception(orchestrator_result['error'])
+
+                # Extract the result with rich content
+                result = orchestrator_result.get('result', {})
+                response_text = result.get('answer_markdown', 'I apologize, but I encountered an issue processing your request.')
+
+                # Prepare rich content for frontend
+                rich_content = {
+                    'ui_blocks': result.get('ui_blocks', []),
+                    'computations': result.get('computations', []),
+                    'assumptions': result.get('assumptions', [])
+                }
+
+                # Store assistant response with rich content
+                store_message(cur, valid_session_id, "assistant", response_text, conn, user_id, rich_content=rich_content)
+
+                logger.info(f"=" * 80)
+                logger.info(f"NEW AGENT FRAMEWORK EXECUTION COMPLETE")
+                logger.info(f"Execution time: {orchestrator_result.get('execution_time_ms', 0):.2f}ms")
+                logger.info(f"=" * 80)
+
+                return {
+                    "message": response_text,
+                    "session_id": valid_session_id,
+                    "agent_used": "orchestrator_v4",
+                    "metadata": {
+                        "execution_time_ms": orchestrator_result.get('execution_time_ms', 0),
+                        "profile_pack_summary": orchestrator_result.get('profile_pack_summary', {}),
+                        "ui_blocks": result.get('ui_blocks', []),
+                        "computations": result.get('computations', []),
+                        "assumptions": result.get('assumptions', [])
+                    },
+                    "success": True
+                }
+
+            except Exception as e:
+                logger.error(f"New orchestrator failed: {e}")
+                logger.info("Falling back to basic OpenAI...")
+                # Fall through to basic OpenAI fallback
+
+        # Final fallback to basic OpenAI
+        logger.info("Using basic OpenAI fallback")
+
+        # Fetch user data for context
+        data_dump = get_data_dump(cur, user_id)
+
+        system_content = f"""You are Penny, a helpful financial advisor AI assistant for TrueFi.
+
+User: {user_name}
+User ID: {user_id}
+
+Provide helpful, accurate financial advice based on the user's question. Be friendly and professional.
+
+Recent conversation history:
+{chr(10).join([f"{msg['role']}: {msg['content']}" for msg in history[-5:]])}
+"""
+
+        # Call basic OpenAI
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_content},
                 {"role": "user", "content": input.message}
-            ]
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
 
-            # Async OpenAI call
-            response = await client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                max_tokens=1800,
-                temperature=0.7,
-                presence_penalty=0.6,
-                frequency_penalty=0.3,
-            )
-            
-            bot_message = response.choices[0].message.content
-        else:
-            # Extract the final response from the supervisor
-            bot_message = supervisor_result.get("response", "I apologize, but I couldn't generate a response at this time.")
-            
-            # Log the agent execution for monitoring
-            execution_time = supervisor_result.get("metadata", {}).get("execution_time", 0)
-            logger.info(f"Dynamic agent execution completed for user {user_id} in {execution_time:.2f}s")
+        response_text = response.choices[0].message.content
 
-        # Store bot message
-        store_message(cur, valid_session_id, "assistant", bot_message, conn)
+        # Store assistant response
+        store_message(cur, valid_session_id, "assistant", response_text, conn, user_id)
 
-        # Prepare response with optional metadata
-        response_data = {
-            "message": bot_message, 
+        return {
+            "message": response_text,
             "session_id": valid_session_id,
-            "agent_used": "supervisor_agent" if supervisor_result.get("success") else "fallback_openai",
-            "requires_auth": True,
-            "user_id": user_id
+            "agent_used": "openai_fallback",
+            "success": True
         }
-        
-        # Add metadata if available
-        if supervisor_result.get("metadata"):
-            response_data["metadata"] = supervisor_result["metadata"]
-        
-        return response_data
 
     except Exception as e:
-        logger.error(f"Chat error for user {user_id}: {e}")
+        logger.error(f"Chat endpoint error: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail="Chat service temporarily unavailable")
+
+        return {
+            "error": str(e),
+            "message": "I apologize, but I encountered an error processing your request. Please try again.",
+            "session_id": session_id,
+            "agent_used": "error_handler",
+            "success": False
+        }
     finally:
         if conn:
             db_pool.putconn(conn)
+
+
+# Test endpoint for agentic framework (no auth required)
+@app.post("/chat/test-agents")
+async def test_agents(input: MessageInput):
+    """Test endpoint to directly use the new orchestrator framework without authentication"""
+    try:
+        logger.info("=" * 80)
+        logger.info("TESTING NEW ORCHESTRATOR FRAMEWORK")
+        logger.info(f"Query: {input.message}")
+        logger.info("=" * 80)
+
+        # Use test user ID for demo (using the first test user)
+        test_user_id = "04063b94-8377-426c-b8ff-83adae7a1839"
+
+        # Use the new orchestrator
+        if orchestrator is not None:
+            try:
+                orchestrator_result = await orchestrator.process_question(
+                    user_id=test_user_id,
+                    question=input.message,
+                    conversation_history=[]
+                )
+
+                if 'error' in orchestrator_result:
+                    logger.error(f"Orchestrator error: {orchestrator_result['error']}")
+                    raise Exception(orchestrator_result['error'])
+
+                # Extract the result
+                result = orchestrator_result.get('result', {})
+                response_text = result.get('answer_markdown', 'I apologize, but I encountered an issue processing your request.')
+
+                logger.info("=" * 80)
+                logger.info("NEW ORCHESTRATOR TEST COMPLETE")
+                logger.info(f"Execution time: {orchestrator_result.get('execution_time_ms', 0)}ms")
+                logger.info("=" * 80)
+
+                return {
+                    "message": response_text,
+                    "session_id": "test-session",
+                    "agent_used": "orchestrator_v4",
+                    "metadata": {
+                        "execution_time_ms": orchestrator_result.get('execution_time_ms', 0),
+                        "profile_pack_summary": orchestrator_result.get('profile_pack_summary', {}),
+                        "ui_blocks": result.get('ui_blocks', []),
+                        "computations": result.get('computations', []),
+                        "assumptions": result.get('assumptions', []),
+                        "test_mode": True
+                    },
+                    "success": True
+                }
+
+            except Exception as e:
+                logger.error(f"New orchestrator test failed: {e}")
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                return {
+                    "message": f"Orchestrator test failed: {str(e)}",
+                    "session_id": "test-session",
+                    "agent_used": "error",
+                    "success": False,
+                    "error": str(e)
+                }
+        else:
+            return {
+                "message": "Orchestrator not initialized",
+                "session_id": "test-session",
+                "agent_used": "error",
+                "success": False,
+                "error": "Orchestrator not available"
+            }
+
+    except Exception as e:
+        logger.error(f"Test agents error: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Test service temporarily unavailable")
 
 # End session endpoint using Agentic Framework
 @app.post("/end-session")
@@ -867,51 +1007,40 @@ async def end_session(input: EndSessionInput, user_id: str = Depends(authenticat
                 'content': msg['content']
             })
 
-        # Try to use the Dynamic Supervisor Agent for session analysis
+        # Try to use the new orchestrator for session analysis
         analysis_query = "Analyze this conversation session and provide comprehensive insights about the user's financial situation, key topics discussed, and actionable recommendations."
-        
-        try:
-            supervisor_result = await supervisor_agent.process(
-                query=analysis_query,
-                user_id=user_id,
-                user_name=user_name,
-                session_id=session_id
-            )
-            logger.info(f"Supervisor analyzed session for user {user_id}")
 
-            # Check if dynamic supervisor agent returned results
-            if supervisor_result.get("success"):
-                # Extract the analysis from the supervisor
-                analysis_content = supervisor_result.get("response", "")
-                
-                # Try to parse structured data from the response
-                try:
-                    # Try to extract JSON from the analysis if it contains structured data
-                    analysis = {
-                        "summary": analysis_content[:500] + "..." if len(analysis_content) > 500 else analysis_content,
-                        "sentiment_analysis": {"overall": "neutral", "confidence": 0.5},
-                        "key_topics": ["financial planning", "session analysis"],
-                        "action_items": [],
-                        "goals_identified": [],
-                        "risk_assessment": "low",
-                        "next_steps": "Continue with regular financial planning sessions.",
-                        "confidence_score": 0.5
-                    }
-                except Exception as e:
-                    logger.error(f"Failed to parse analysis content: {e}")
-                    # Create a fallback analysis
-                    analysis = {
-                        "summary": analysis_content[:500] + "..." if len(analysis_content) > 500 else analysis_content,
-                        "sentiment_analysis": {"overall": "neutral", "confidence": 0.5},
-                        "key_topics": ["financial discussion"],
-                        "action_items": [],
-                        "goals_identified": [],
-                        "risk_assessment": "low",
-                        "next_steps": "Continue with regular financial planning sessions.",
-                        "confidence_score": 0.5
-                    }
+        try:
+            if orchestrator is not None:
+                orchestrator_result = await orchestrator.process_question(
+                    user_id=user_id,
+                    question=analysis_query,
+                    conversation_history=conversation_history
+                )
+
+                if 'error' in orchestrator_result:
+                    logger.error(f"Orchestrator session analysis error: {orchestrator_result['error']}")
+                    raise Exception(orchestrator_result['error'])
+
+                # Extract the analysis content
+                result = orchestrator_result.get('result', {})
+                analysis_content = result.get('answer_markdown', '')
+
+                logger.info(f"New orchestrator analyzed session for user {user_id}")
+
+                # Try to parse structured data from the response or create a basic analysis
+                analysis = {
+                    "summary": analysis_content[:500] + "..." if len(analysis_content) > 500 else analysis_content,
+                    "sentiment_analysis": {"overall": "neutral", "confidence": 0.7},
+                    "key_topics": ["financial planning", "session analysis"],
+                    "action_items": [],
+                    "goals_identified": [],
+                    "risk_assessment": "low",
+                    "next_steps": "Continue with regular financial planning sessions.",
+                    "confidence_score": 0.7
+                }
             else:
-                raise Exception("Agent analysis failed")
+                raise Exception("Orchestrator not available")
                 
         except Exception as agent_error:
             logger.warning(f"Agent analysis failed, falling back to OpenAI: {agent_error}")
@@ -1161,27 +1290,35 @@ def get_history(cur, session_id):
     """, (chat_session_id,))
     return [{"role": row[0], "content": row[1]} for row in cur.fetchall()]
 
-def store_message(cur, session_id, message_type, content, conn):
+def store_message(cur, session_id, message_type, content, conn, user_id=None, rich_content=None):
     # Handle session_id - if it's not a valid UUID, skip storing
     try:
         session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
     except (ValueError, TypeError):
         logger.warning(f"Invalid session_id format: {session_id}, skipping message storage")
         return
-    
-    # First get the chat_sessions.id for this session_id
-    cur.execute("SELECT id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
+
+    # First get the chat_sessions.id and user_id for this session_id
+    cur.execute("SELECT id, user_id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
     session_row = cur.fetchone()
     if not session_row:
         logger.warning(f"Session {session_id} not found in chat_sessions table")
         return
-    
+
     chat_session_id = session_row[0]
-    
+    session_user_id = session_row[1]
+
+    # Use the user_id from the session if not provided
+    if user_id is None:
+        user_id = session_user_id
+
+    # Convert rich_content to JSON if provided
+    rich_content_json = json.dumps(rich_content) if rich_content else None
+
     cur.execute("""
-        INSERT INTO chat_messages (id, session_id, message_type, content, turn_number, created_at)
-        VALUES (%s, %s, %s, %s, (SELECT COALESCE(MAX(turn_number), 0) + 1 FROM chat_messages WHERE session_id = %s), now())
-    """, (str(uuid.uuid4()), chat_session_id, message_type, content, chat_session_id))
+        INSERT INTO chat_messages (id, session_id, message_type, content, rich_content, turn_number, created_at, user_id)
+        VALUES (%s, %s, %s, %s, %s, (SELECT COALESCE(MAX(turn_number), 0) + 1 FROM chat_messages WHERE session_id = %s), now(), %s)
+    """, (str(uuid.uuid4()), chat_session_id, message_type, content, rich_content_json, chat_session_id, user_id))
     conn.commit()
 
 def store_session_analysis(cur, session_id, user_id, analysis, conn):
@@ -1250,10 +1387,11 @@ async def get_agent_config(user_id: str = Depends(authenticate)):
 async def get_agent_logs():
     """Get agent execution logs for monitoring and debugging with full detail."""
     try:
-        if supervisor_agent is None:
-            return {"logs": [], "message": "Agent not initialized"}
-        
-        logs = BaseAgent.get_agent_logs()
+        if orchestrator is None:
+            return {"logs": [], "message": "New orchestrator not initialized"}
+
+        # For now, return basic orchestrator status since we replaced the legacy logging system
+        logs = [{"agent_name": "orchestrator_v4", "status": "active", "message": "New agentic framework running"}]
         
         # Enhance logs with additional metadata and full details
         enhanced_logs = []
@@ -1319,10 +1457,11 @@ async def get_agent_logs():
 async def clear_agent_logs():
     """Clear agent execution logs and cache."""
     try:
-        if supervisor_agent is None:
-            return {"message": "Agent not initialized"}
-        
-        BaseAgent.clear_agent_logs()
+        if orchestrator is None:
+            return {"message": "New orchestrator not initialized"}
+
+        # Note: The new system logs to database via the logging framework
+        # No in-memory logs to clear in the new system
         return {"message": "Agent logs cleared successfully", "timestamp": time.time()}
     except Exception as e:
         logger.error(f"Error clearing agent logs: {e}")
@@ -1332,11 +1471,11 @@ async def clear_agent_logs():
 async def get_agent_status():
     """Get real-time agent system status."""
     try:
-        if supervisor_agent is None:
+        if orchestrator is None:
             return {
                 "status": "not_initialized",
                 "health": "failed",
-                "message": "Agent system not initialized"
+                "message": "New orchestrator system not initialized"
             }
         
         # Check database connectivity
@@ -1430,14 +1569,13 @@ async def login(input: LoginInput = Body(...)):
 async def test_agents(input: MessageInput):
     """Test endpoint to directly use the agentic framework without authentication"""
     try:
-        # Initialize agents if not already done
-        initialize_agents()
-        
-        if supervisor_agent is None:
-            return {
-                "error": "Agents not initialized",
-                "message": "The agentic framework is not properly initialized"
-            }
+        # DISABLED - Legacy duplicate endpoint
+        # initialize_agents()
+
+        return {
+            "error": "Endpoint disabled",
+            "message": "This duplicate endpoint has been disabled. Use the main /chat/test-agents endpoint instead."
+        }
         
         # Use a test user ID
         test_user_id = "00000000-0000-0000-0000-000000000001"  # You should replace with a real user ID from your DB
@@ -3087,10 +3225,7 @@ async def get_notifications(user_id: str):
 @app.on_event("shutdown")
 def shutdown():
     """Clean shutdown of the application."""
-    global supervisor_agent
-    
-    # Clear agent logs
-    BaseAgent.clear_agent_logs()
+    # Note: New orchestrator system doesn't require special cleanup
     
     # Close database pool
     if db_pool:
@@ -3100,27 +3235,29 @@ def shutdown():
 
 @app.on_event("startup")
 async def startup():
-    """Initialize agents on startup."""
+    """Initialize the new agentic framework on startup."""
     logger.info("=" * 80)
     logger.info("TRUEFI BACKEND STARTING UP")
     logger.info("=" * 80)
-    
-    # Initialize agents
+
+    # Initialize the new orchestrator and database pool
     initialize_agents()
-    
-    if supervisor_agent and sql_agent:
-        logger.info("[SUCCESS] Agentic Framework: INITIALIZED")
-        logger.info("  - SimpleSupervisorAgent: READY")
-        logger.info("  - SimpleSQLAgent: READY")
-        logger.info("  - Schema Registry: LOADED")
+
+    if orchestrator and new_db_pool:
+        logger.info("[SUCCESS] New Agentic Framework v4.0: INITIALIZED")
+        logger.info("  - Agent Orchestrator: READY")
+        logger.info("  - SQL Agent: READY")
+        logger.info("  - Financial Modeling Agent: READY")
+        logger.info("  - Critique Agent: READY")
+        logger.info("  - PostgreSQL Pool: CONNECTED")
+        logger.info("  - Profile Pack Builder: READY")
         logger.info("  - Entity Resolution: ENABLED")
-        logger.info("  - Semantic Interpretation: ENABLED")
-        logger.info("  - Result Validation: ENABLED")
-        logger.info("  - Query Explanation: ENABLED")
+        logger.info("  - SQL Sanitization: ENABLED")
+        logger.info("  - Loop Control: ENABLED (Max 1 revision per stage)")
     else:
-        logger.warning("[WARNING] Agentic Framework: NOT INITIALIZED")
+        logger.warning("[WARNING] New Agentic Framework: NOT INITIALIZED")
         logger.warning("  Falling back to basic OpenAI chat")
-    
+
     logger.info("=" * 80)
     logger.info("BACKEND READY - Listening on port 8080")
     logger.info("=" * 80)

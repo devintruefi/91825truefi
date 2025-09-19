@@ -41,7 +41,17 @@
       "Bash(npx prisma generate:*)",
       "Bash(pnpm tsc:*)",
       "Bash(pnpm build:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(pnpm remove:*)",
+      "Bash(find:*)",
+      "Read(//c/Users/**)",
+      "Bash(netstat:*)",
+      "Bash(tasklist)",
+      "Bash(tasklist:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "Bash(node:*)",
+      "Bash(git remote add:*)"
     ],
     "deny": [],
     "ask": [],

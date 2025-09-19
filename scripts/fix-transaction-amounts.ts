@@ -94,8 +94,8 @@ async function fixTransactionAmounts() {
     
     const samples = await prisma.transactions.findMany({
       where: {
-        plaid_transaction_id: {
-          not: null
+        NOT: {
+          plaid_transaction_id: undefined
         }
       },
       take: 10,

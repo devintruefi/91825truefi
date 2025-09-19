@@ -26,6 +26,7 @@ interface IncomeAnalysis {
     isStable: boolean;
   }>;
   stability: 'stable' | 'variable' | 'uncertain';
+  confidence: number; // 0-1 score indicating reliability of income detection
 }
 
 interface SpendingPattern {
@@ -170,10 +171,43 @@ async function analyzeUserIncome(userId: string, months: number = 6): Promise<In
   const stability = stableStreams === incomeStreams.length ? 'stable' :
                    stableStreams > 0 ? 'variable' : 'uncertain';
 
+  // Calculate income confidence score (0-1)
+  let confidence = 0;
+
+  if (monthlyIncome > 0) {
+    // Base confidence from having any income detected
+    confidence += 0.3;
+
+    // Boost for having recurring income defined
+    if (recurringIncome.length > 0) {
+      confidence += 0.4;
+    }
+
+    // Boost for stable income streams
+    if (incomeStreams.length > 0) {
+      const stableRatio = stableStreams / incomeStreams.length;
+      confidence += stableRatio * 0.2;
+    }
+
+    // Boost for sufficient transaction history
+    if (incomeTransactions.length >= months * 2) { // At least 2 income transactions per month
+      confidence += 0.1;
+    }
+
+    // Penalize if income seems very low (potential detection issue)
+    if (monthlyIncome < 1000) {
+      confidence *= 0.5;
+    }
+  }
+
+  // Cap confidence at 1.0
+  confidence = Math.min(confidence, 1.0);
+
   return {
     monthlyIncome: Math.round(monthlyIncome),
     incomeStreams,
-    stability
+    stability,
+    confidence: Math.round(confidence * 100) / 100 // Round to 2 decimal places
   };
 }
 
@@ -844,6 +878,17 @@ export async function generateAIBudget(
     } else if (incomeAnalysis.stability === 'variable') {
       insights.push('Your income varies. Consider budgeting based on your lowest monthly income.');
     }
+
+    // Income confidence warnings
+    if (incomeAnalysis.confidence < 0.7) {
+      if (incomeAnalysis.confidence < 0.3) {
+        validationWarnings.push('Income detection confidence is very low. Please verify your income information or connect additional accounts for more accurate budgeting.');
+      } else if (incomeAnalysis.confidence < 0.5) {
+        validationWarnings.push('Income detection confidence is low. Consider adding recurring income information in your profile for better budget accuracy.');
+      } else {
+        insights.push('Income detection is moderate. Adding more transaction history or recurring income details will improve budget accuracy.');
+      }
+    }
     
     // Spending insights
     const increasingCategories = spendingPatterns.filter(p => p.trend === 'increasing');
@@ -878,15 +923,82 @@ export async function generateAIBudget(
     
     // Calculate total budget
     const totalBudget = categories.reduce((sum, cat) => sum + cat.amount, 0);
-    
+
+    // Budget reasonableness validation
+    const validationWarnings: string[] = [];
+
+    // Hard stop: Budget exceeds 105% of income
+    if (totalBudget > incomeAnalysis.monthlyIncome * 1.05) {
+      const excessAmount = Math.round(totalBudget - incomeAnalysis.monthlyIncome);
+      validationWarnings.push(`Budget exceeds income by $${excessAmount} - this budget may not be sustainable`);
+
+      // For severe overages (>115%), return early with error
+      if (totalBudget > incomeAnalysis.monthlyIncome * 1.15) {
+        return {
+          totalBudget: 0,
+          categories: [],
+          framework,
+          insights: [],
+          warnings: [`Budget significantly exceeds income by $${excessAmount}. Please review your income and expenses, or consider a different budget framework.`]
+        };
+      }
+    }
+
+    // Strong warnings for budget composition issues
+    if (incomeAnalysis.monthlyIncome > 0) {
+      // Check essential expenses ratio
+      const essentialTotal = categories
+        .filter(cat => ESSENTIAL_CATEGORIES.has(cat.category))
+        .reduce((sum, cat) => sum + Number(cat.amount || 0), 0);
+      const essentialRatio = essentialTotal / incomeAnalysis.monthlyIncome;
+
+      if (essentialRatio > 0.80) {
+        validationWarnings.push(`Essential expenses (${Math.round(essentialRatio * 100)}%) exceed 80% of income - consider reducing fixed costs`);
+      }
+
+      // Check for any single category dominating budget
+      for (const category of categories) {
+        const categoryRatio = Number(category.amount || 0) / incomeAnalysis.monthlyIncome;
+        if (categoryRatio > 0.50) {
+          validationWarnings.push(`${category.category} accounts for ${Math.round(categoryRatio * 100)}% of income - this may be too high`);
+        }
+      }
+
+      // Check savings rate (only warn for income above poverty threshold)
+      if (incomeAnalysis.monthlyIncome > 2000) {
+        const savingsTotal = categories
+          .filter(cat => cat.priority === 'savings')
+          .reduce((sum, cat) => sum + Number(cat.amount || 0), 0);
+        const savingsRate = savingsTotal / incomeAnalysis.monthlyIncome;
+
+        if (savingsRate < 0.05) {
+          validationWarnings.push(`Savings rate (${Math.round(savingsRate * 100)}%) is below 5% - try to increase long-term savings when possible`);
+        }
+      }
+
+      // Check for discretionary spending excess
+      const discretionaryTotal = categories
+        .filter(cat => cat.priority === 'discretionary')
+        .reduce((sum, cat) => sum + Number(cat.amount || 0), 0);
+      const discretionaryRatio = discretionaryTotal / incomeAnalysis.monthlyIncome;
+
+      if (discretionaryRatio > 0.60) {
+        validationWarnings.push(`Discretionary spending (${Math.round(discretionaryRatio * 100)}%) exceeds 60% of income - consider reducing non-essential expenses`);
+      }
+    }
+
+    // Combine existing warnings with validation warnings
+    const allWarnings = [
+      ...(totalBudget > incomeAnalysis.monthlyIncome ? [`Budget exceeds income by $${Math.round(totalBudget - incomeAnalysis.monthlyIncome)}`] : []),
+      ...validationWarnings
+    ];
+
     return {
       totalBudget: Math.round(totalBudget),
       categories: categories.filter(c => c.amount > 0), // Remove zero-amount categories
       framework,
       insights,
-      warnings: totalBudget > incomeAnalysis.monthlyIncome 
-        ? [`Budget exceeds income by $${Math.round(totalBudget - incomeAnalysis.monthlyIncome)}`]
-        : undefined
+      warnings: allWarnings.length > 0 ? allWarnings : undefined
     };
     
   } catch (error) {
