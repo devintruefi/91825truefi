@@ -798,7 +798,7 @@ async def chat(input: MessageInput, user_id: Optional[str] = Depends(authenticat
         logger.info(f"=" * 80)
         logger.info(f"NEW AGENT FRAMEWORK v4.0 EXECUTION START")
         logger.info(f"User: {user_id} | Name: {user_name} | Session: {session_id}")
-        logger.info(f"Query: {input.message}")
+        logger.info(f"Query: {input.message.encode('ascii', 'replace').decode('ascii')}")
         logger.info(f"=" * 80)
 
         # Use the new orchestrator

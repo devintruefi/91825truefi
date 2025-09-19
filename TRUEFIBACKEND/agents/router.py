@@ -11,6 +11,18 @@ def classify_intent(question: str) -> Intent:
     """
     q = question.lower()
 
+    # Greetings and casual conversation - HIGHEST PRIORITY
+    if re.search(r'^\s*(hi|hello|hey|good\s+(morning|afternoon|evening)|howdy|greetings?)\s*([!.]|\s+\w+)?\s*$', q):
+        return Intent.GREETING
+
+    # Casual conversation patterns
+    if re.search(r'^\s*(how\s+are\s+you|what\'?s\s+up|whatsup|sup|how\'?s\s+it\s+going|how\s+you\s+doing)\s*[?!.]?\s*$', q):
+        return Intent.CASUAL_CONVERSATION
+
+    # Additional spending pattern
+    if re.search(r'\b(show.*spend|spending|spent.*me)\b', q):
+        return Intent.SPEND_BY_TIME
+
     # Account balance queries - HIGHEST PRIORITY
     if re.search(r'\b(balance|how much.*(?:money|cash|have|in.*account)|total.*account|account.*total|net worth)\b', q):
         if 'net worth' in q:

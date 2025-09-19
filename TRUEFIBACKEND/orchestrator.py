@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from agents import SQLAgent, ModelingAgent, CritiqueAgent
 from agents.router import classify_intent, intent_contract
+from agents.intents import Intent
 from profile_pack import ProfilePackBuilder, TransactionSchemaCard
 from security import SQLSanitizer
 from db import execute_safe_query
@@ -112,6 +113,18 @@ class AgentOrchestrator:
                     logger.info(f"Built agent context with {len(agent_context)} components")
                 except Exception as e:
                     logger.warning(f"Failed to build agent context: {e}")
+
+            # Step 2: Handle conversational intents vs analytical intents
+            if contract.get('conversational', False):
+                logger.info(f"Handling conversational intent: {intent_info.value}")
+                conversational_result = await self._handle_conversational_intent(user_id, question, intent_info, session_id)
+                # Wrap in proper orchestrator response format
+                return {
+                    'result': conversational_result,
+                    'profile_pack_summary': self._summarize_profile_pack(profile_pack),
+                    'execution_time_ms': 0.0,
+                    'logs': []
+                }
 
             # Step 2: SQL Generation and Validation Loop (or skip for analysis-only questions)
             should_skip_sql = (
@@ -419,6 +432,82 @@ class AgentOrchestrator:
             return model_response, logs
 
         return {'error': f"Maximum model revisions ({config.MAX_MODEL_REVISIONS}) exceeded"}, logs
+
+    async def _handle_conversational_intent(
+        self,
+        user_id: str,
+        question: str,
+        intent: Intent,
+        session_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Handle conversational intents with friendly responses"""
+        try:
+            # Get user's first name for personalization
+            user_name = "there"
+            try:
+                profile_pack = self.profile_builder.build(user_id, intent='greeting')
+                user_core = profile_pack.get('user_core', {})
+                first_name = user_core.get('first_name', '').strip()
+                if first_name:
+                    user_name = first_name
+            except Exception as e:
+                logger.warning(f"Could not get user name for greeting: {e}")
+
+            # Generate appropriate conversational response
+            if intent.value == 'greeting':
+                responses = [
+                    f"Hi {user_name}! I'm your personal financial advisor. How can I help you with your finances today?",
+                    f"Hello {user_name}! Great to see you. What financial questions can I help you with?",
+                    f"Hey {user_name}! I'm here to help with all your financial needs. What would you like to discuss?"
+                ]
+            elif intent.value == 'casual_conversation':
+                responses = [
+                    f"I'm doing well, {user_name}! As your financial advisor, I'm here whenever you need help with investments, budgeting, or financial planning. What can I assist you with?",
+                    f"Things are great, {user_name}! I'm ready to help you with any financial questions or planning you'd like to discuss.",
+                    f"I'm here and ready to help, {user_name}! What financial topics are on your mind today?"
+                ]
+            else:
+                responses = [f"Hi {user_name}! How can I help you with your finances today?"]
+
+            # Select a friendly response
+            import random
+            response_text = random.choice(responses)
+
+            # Store the conversational message if memory is available
+            if USE_MEMORY and session_id:
+                try:
+                    await self.memory_manager.store_message(
+                        session_id=session_id,
+                        user_id=user_id,
+                        role='assistant',
+                        content=response_text,
+                        intent=intent.value,
+                        metadata={'conversational': True}
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to store conversational response in memory: {e}")
+
+            return {
+                'answer_markdown': response_text,
+                'assumptions': [],
+                'computations': [],
+                'ui_blocks': [],
+                'next_data_requests': [],
+                'conversational': True,
+                'logs': []
+            }
+
+        except Exception as e:
+            logger.error(f"Error handling conversational intent: {e}")
+            return {
+                'answer_markdown': f"Hi there! I'm your financial advisor. How can I help you today?",
+                'assumptions': [],
+                'computations': [],
+                'ui_blocks': [],
+                'next_data_requests': [],
+                'conversational': True,
+                'logs': []
+            }
 
     def _summarize_profile_pack(self, profile_pack: Dict[str, Any]) -> Dict[str, Any]:
         """Create a summary of the profile pack"""

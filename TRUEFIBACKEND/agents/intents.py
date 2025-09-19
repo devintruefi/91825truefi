@@ -29,6 +29,10 @@ class Intent(str, Enum):
     GOAL_PLANNING = "goal_planning"
     NET_WORTH_ANALYSIS = "net_worth_analysis"
 
+    # Conversational intents
+    GREETING = "greeting"
+    CASUAL_CONVERSATION = "casual_conversation"
+
     UNKNOWN = "unknown"
 
 # Mapping of intents to allowed tables and guidance
@@ -302,5 +306,23 @@ INTENT_TO_ALLOWED: Dict[Intent, Dict[str, Any]] = {
         "notes": "Net worth analysis and advice. Uses profile pack data directly, no SQL needed.",
         "template_sql": None,
         "skip_sql": True
+    },
+
+    # Conversational intents that need friendly responses, not financial analysis
+    Intent.GREETING: {
+        "tables": [],
+        "columns": [],
+        "notes": "Greeting or casual conversation. Respond warmly without financial analysis.",
+        "template_sql": None,
+        "skip_sql": True,
+        "conversational": True
+    },
+    Intent.CASUAL_CONVERSATION: {
+        "tables": [],
+        "columns": [],
+        "notes": "Casual conversation. Respond appropriately and offer to help with finances.",
+        "template_sql": None,
+        "skip_sql": True,
+        "conversational": True
     }
 }
