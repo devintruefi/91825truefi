@@ -51,7 +51,8 @@
       "Bash(taskkill:*)",
       "Bash(timeout:*)",
       "Bash(node:*)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(git remote set-url:*)"
     ],
     "deny": [],
     "ask": [],
