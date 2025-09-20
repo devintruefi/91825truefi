@@ -549,24 +549,20 @@ function AppleChatInterfaceInner() {
   }, [])
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    const chatContainer = document.getElementById('chat-scroll-container')
+    if (chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight
+    }
   }
 
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end", inline: "nearest" })
-    }
-  }, [messages])
-
+  // Simplified single scroll management
   useEffect(() => {
     const chatContainer = document.getElementById('chat-scroll-container')
     if (chatContainer) {
-      const scrollHeight = chatContainer.scrollHeight
-      const clientHeight = chatContainer.clientHeight
-      const maxScroll = scrollHeight - clientHeight
-      
-      if (chatContainer.scrollTop > maxScroll) {
-        chatContainer.scrollTop = maxScroll
+      // Only auto-scroll if user is near bottom (within 100px)
+      const isNearBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 100
+      if (isNearBottom) {
+        chatContainer.scrollTop = chatContainer.scrollHeight
       }
     }
   }, [messages])
@@ -1356,7 +1352,7 @@ function AppleChatInterfaceInner() {
   }, []);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 overflow-hidden relative">
       {/* Chat History Sidebar - Only show for authenticated users */}
       {user && (
         <AnimatePresence>
@@ -1561,8 +1557,8 @@ function AppleChatInterfaceInner() {
       </motion.div>
 
       {/* Enhanced Chat Messages */}
-      <div className="flex-1 overflow-y-auto pb-40" id="chat-scroll-container" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-        <div className="max-w-[1600px] mx-auto px-4 py-6">
+      <div className="flex-1 overflow-y-auto" id="chat-scroll-container" style={{ paddingBottom: '120px' }}>
+        <div className="max-w-[1600px] mx-auto px-4 pt-6">
           <AnimatePresence>
             <div className="space-y-6">
               {messages.map((message, index) => (
@@ -1697,14 +1693,13 @@ function AppleChatInterfaceInner() {
             </div>
           </AnimatePresence>
         </div>
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Enhanced Fixed Input Area */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 p-2 sm:p-4"
+        className="absolute bottom-0 left-0 right-0 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 p-2 sm:p-4"
       >
         <div className="max-w-[1600px] mx-auto">
           {/* Demo Mode CTA for non-logged in users */}
@@ -1720,7 +1715,7 @@ function AppleChatInterfaceInner() {
                     📊 See this with YOUR real data!
                   </p>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Sign up for free to connect your accounts and get personalized insights
+                    Sign up to connect your accounts and get personalized insights
                   </p>
                 </div>
                 <Button

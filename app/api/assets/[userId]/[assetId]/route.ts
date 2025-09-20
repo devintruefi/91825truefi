@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getUserFromRequest } from '@/lib/auth'
 
 // GET - Fetch a specific asset
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string; assetId: string } }
+  { params }: { params: Promise<{ userId: string; assetId: string }> }
 ) {
   try {
-    const { userId, assetId } = params
+    const { userId, assetId } = await params
+
+    // Auth check
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.id !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const asset = await prisma.manual_assets.findFirst({
-      where: { 
+      where: {
         id: assetId,
-        user_id: userId 
+        user_id: user.id  // Use authenticated user ID
       },
       include: {
         business_ownership_details: true,
@@ -45,16 +55,37 @@ export async function GET(
 // PUT - Update a specific asset
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { userId: string; assetId: string } }
+  { params }: { params: Promise<{ userId: string; assetId: string }> }
 ) {
   try {
-    const { userId, assetId } = params
+    const { userId, assetId } = await params
+
+    // Auth check
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.id !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     const body = await request.json()
 
-    const asset = await prisma.manual_assets.update({
-      where: { 
+    // First check if asset exists and user owns it
+    const existingAsset = await prisma.manual_assets.findFirst({
+      where: {
         id: assetId,
-        user_id: userId 
+        user_id: user.id
+      }
+    })
+
+    if (!existingAsset) {
+      return NextResponse.json({ error: 'Asset not found or unauthorized' }, { status: 404 })
+    }
+
+    // Now update using just the ID
+    const asset = await prisma.manual_assets.update({
+      where: {
+        id: assetId
       },
       data: {
         name: body.name,
@@ -78,17 +109,30 @@ export async function PUT(
 // DELETE - Delete a specific asset
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { userId: string; assetId: string } }
+  { params }: { params: Promise<{ userId: string; assetId: string }> }
 ) {
   try {
-    const { userId, assetId } = params
+    const { userId, assetId } = await params
 
-    await prisma.manual_assets.delete({
-      where: { 
+    // Auth check
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.id !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const deleteResult = await prisma.manual_assets.deleteMany({
+      where: {
         id: assetId,
-        user_id: userId 
+        user_id: user.id  // Use authenticated user ID
       }
     })
+
+    if (deleteResult.count === 0) {
+      return NextResponse.json({ error: 'Asset not found or unauthorized' }, { status: 404 })
+    }
 
     return NextResponse.json({ message: 'Asset deleted successfully' })
   } catch (error) {

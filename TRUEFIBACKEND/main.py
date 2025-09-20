@@ -8,7 +8,7 @@ import logging
 import json
 import traceback
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from dotenv import load_dotenv
 import os
 from fastapi import FastAPI, Request, HTTPException, Depends, status, Body, Query
@@ -237,13 +237,141 @@ def get_db_cursor():
     """Get database cursor and connection"""
     if db_pool is None:
         raise HTTPException(status_code=500, detail="Database not available")
-    
+
     conn = db_pool.getconn()
     if conn is None:
         raise HTTPException(status_code=500, detail="Cannot get database connection")
-    
+
     cur = conn.cursor()
     return cur, conn
+
+def check_data_freshness(cur, user_id: str) -> Dict[str, Any]:
+    """Check when Plaid data was last synced"""
+    try:
+        cur.execute("""
+            SELECT MAX(balances_last_updated) as last_sync,
+                   EXTRACT(EPOCH FROM (NOW() - MAX(balances_last_updated)))/3600 as hours_since_sync
+            FROM accounts
+            WHERE user_id = %s AND is_active = true
+        """, (user_id,))
+
+        row = cur.fetchone()
+        if row and row[0]:
+            return {
+                "last_sync": row[0].isoformat() if row[0] else None,
+                "hours_since_sync": float(row[1]) if row[1] else 0,
+                "is_stale": float(row[1]) > 24 if row[1] else False
+            }
+        return {"last_sync": None, "hours_since_sync": 0, "is_stale": False}
+    except Exception as e:
+        logger.error(f"Error checking data freshness: {e}")
+        return {"last_sync": None, "hours_since_sync": 0, "is_stale": False}
+
+def add_advisor_framing(response_text: str, result: Dict[str, Any]) -> str:
+    """Add advisor-style framing to make responses more personal and actionable"""
+    try:
+        # Don't frame if it's already well-formatted or very short
+        if len(response_text) < 100 or response_text.startswith("##"):
+            return response_text
+
+        # Extract key metrics if available
+        has_computations = result.get('computations', [])
+        has_ui_blocks = result.get('ui_blocks', [])
+
+        framed_response = ""
+
+        # Add a brief summary intro if we have detailed data
+        if has_computations or has_ui_blocks:
+            framed_response = "## Financial Snapshot\n\n"
+
+        # Main response
+        framed_response += response_text
+
+        # Add actionable insights section if we have computations
+        if has_computations and len(has_computations) > 0:
+            framed_response += "\n\n### 💡 Quick Insights\n"
+            for comp in has_computations[:3]:  # Limit to top 3
+                if 'result' in comp:
+                    framed_response += f"• **{comp.get('name', 'Calculation')}**: {comp['result']}\n"
+
+        # Add next steps based on content
+        next_steps = generate_next_steps(response_text, result)
+        if next_steps:
+            framed_response += "\n\n### 🎯 Suggested Actions\n"
+            for step in next_steps[:3]:  # Limit to top 3
+                framed_response += f"• {step}\n"
+
+        # Add a follow-up question to encourage engagement
+        follow_up = generate_follow_up_question(response_text)
+        if follow_up:
+            framed_response += f"\n\n_{follow_up}_"
+
+        return framed_response
+    except Exception as e:
+        logger.error(f"Error adding advisor framing: {e}")
+        return response_text  # Return original if framing fails
+
+def generate_next_steps(response_text: str, result: Dict[str, Any]) -> List[str]:
+    """Generate contextual next steps based on the response"""
+    steps = []
+    text_lower = response_text.lower()
+
+    # Budget-related
+    if 'budget' in text_lower:
+        if 'over' in text_lower:
+            steps.append("Review and adjust budget categories that are overspent")
+        steps.append("Set up alerts for when you're approaching budget limits")
+
+    # Spending-related
+    if 'spending' in text_lower or 'expense' in text_lower:
+        if 'increase' in text_lower or 'high' in text_lower:
+            steps.append("Identify top spending categories for potential savings")
+            steps.append("Review recurring subscriptions you might not need")
+
+    # Savings-related
+    if 'saving' in text_lower:
+        if any(word in text_lower for word in ['low', 'negative', 'decrease']):
+            steps.append("Consider automating transfers to savings")
+            steps.append("Review your fixed expenses for reduction opportunities")
+
+    # Investment-related
+    if 'investment' in text_lower or 'portfolio' in text_lower:
+        steps.append("Review your asset allocation for balance")
+        steps.append("Consider your risk tolerance and time horizon")
+
+    # Goals-related
+    if 'goal' in text_lower:
+        steps.append("Update your goal targets and timelines")
+        steps.append("Set up automatic contributions to goal accounts")
+
+    # Net worth
+    if 'net worth' in text_lower:
+        steps.append("Track your net worth monthly to see trends")
+        if 'negative' in text_lower:
+            steps.append("Focus on debt reduction strategies")
+
+    return steps
+
+def generate_follow_up_question(response_text: str) -> str:
+    """Generate a contextual follow-up question"""
+    text_lower = response_text.lower()
+
+    if 'spending' in text_lower:
+        return "Would you like to see a breakdown by specific category or merchant?"
+    elif 'budget' in text_lower:
+        return "Should I help you adjust any budget categories?"
+    elif 'saving' in text_lower:
+        return "Would you like help setting up a savings plan?"
+    elif 'investment' in text_lower:
+        return "Want to explore specific investment opportunities?"
+    elif 'goal' in text_lower:
+        return "Which goal would you like to focus on first?"
+    elif 'net worth' in text_lower:
+        return "Would you like to see how your net worth has changed over time?"
+    elif 'balance' in text_lower or 'account' in text_lower:
+        return "Need help optimizing your account structure?"
+    else:
+        return "What other financial insights can I help you with?"
 
 # Chat History Endpoints
 
@@ -820,12 +948,24 @@ async def chat(input: MessageInput, user_id: Optional[str] = Depends(authenticat
                 result = orchestrator_result.get('result', {})
                 response_text = result.get('answer_markdown', 'I apologize, but I encountered an issue processing your request.')
 
+                # Add advisor framing for better UX
+                response_text = add_advisor_framing(response_text, result)
+
+                # Check data freshness
+                data_freshness = check_data_freshness(cur, user_id)
+
                 # Prepare rich content for frontend
                 rich_content = {
                     'ui_blocks': result.get('ui_blocks', []),
                     'computations': result.get('computations', []),
-                    'assumptions': result.get('assumptions', [])
+                    'assumptions': result.get('assumptions', []),
+                    'data_freshness': data_freshness
                 }
+
+                # Add freshness warning if data is stale
+                freshness_note = ""
+                if data_freshness and data_freshness.get('hours_since_sync', 0) > 24:
+                    freshness_note = f"\n\n_Note: Account data last synced {data_freshness['hours_since_sync']:.0f} hours ago._"
 
                 # Store assistant response with rich content
                 store_message(cur, valid_session_id, "assistant", response_text, conn, user_id, rich_content=rich_content)
@@ -836,15 +976,17 @@ async def chat(input: MessageInput, user_id: Optional[str] = Depends(authenticat
                 logger.info(f"=" * 80)
 
                 return {
-                    "message": response_text,
+                    "message": response_text + freshness_note,
                     "session_id": valid_session_id,
                     "agent_used": "orchestrator_v4",
+                    "rich_content": rich_content,
                     "metadata": {
                         "execution_time_ms": orchestrator_result.get('execution_time_ms', 0),
                         "profile_pack_summary": orchestrator_result.get('profile_pack_summary', {}),
                         "ui_blocks": result.get('ui_blocks', []),
                         "computations": result.get('computations', []),
-                        "assumptions": result.get('assumptions', [])
+                        "assumptions": result.get('assumptions', []),
+                        "data_freshness": data_freshness
                     },
                     "success": True
                 }

@@ -132,7 +132,7 @@ export default function AccountPage() {
 
   const getAccountStatus = (account: Account) => {
     if (account.type === 'credit') {
-      const utilization = account.current_balance / account.available_balance
+      const utilization = account.available_balance > 0 ? account.current_balance / account.available_balance : 0
       if (utilization > 0.8) return { status: 'High Utilization', color: 'text-red-600', icon: <AlertTriangle className="h-4 w-4" /> }
       if (utilization > 0.5) return { status: 'Moderate Utilization', color: 'text-yellow-600', icon: <Clock className="h-4 w-4" /> }
       return { status: 'Good Standing', color: 'text-green-600', icon: <CheckCircle className="h-4 w-4" /> }
@@ -256,7 +256,9 @@ export default function AccountPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {((account.current_balance / account.available_balance) * 100).toFixed(1)}%
+                    {account.available_balance > 0
+                      ? ((account.current_balance / account.available_balance) * 100).toFixed(1) + '%'
+                      : 'N/A'}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {formatCurrency(account.current_balance)} of {formatCurrency(account.available_balance)}

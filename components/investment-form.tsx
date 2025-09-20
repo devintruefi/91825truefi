@@ -48,10 +48,16 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
   const [selectedSecurity, setSelectedSecurity] = useState<any>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [userSetRiskLevel, setUserSetRiskLevel] = useState(false) // Track if user manually set risk level
 
   useEffect(() => {
     if (investment) {
       setFormData(investment)
+      // If editing an existing investment, mark that risk level has been set
+      // so it won't be auto-changed when selecting securities
+      if (investment.risk_level) {
+        setUserSetRiskLevel(true)
+      }
       // If editing, set the security picker value
       if (investment.symbol) {
         setSelectedSecurity({
@@ -126,13 +132,15 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
     setSelectedSecurity(security)
     if (security) {
       // Set basic info immediately (without price to avoid rate limits)
+      const newRiskLevel = userSetRiskLevel ? formData.risk_level : getRiskLevelFromType(security.type)
       setFormData({
         ...formData,
         name: security.name,
         symbol: security.symbol,
         type: security.type,
         current_price: 0, // Will fetch separately
-        risk_level: getRiskLevelFromType(security.type)
+        // Only auto-set risk level if user hasn't manually changed it
+        risk_level: newRiskLevel
       })
       // Clear name and symbol errors when security is selected
       setErrors(prev => {
@@ -175,7 +183,7 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
 
   const getRiskLevelFromType = (type: string): "low" | "medium" | "high" | "very_high" => {
     const riskMap: Record<string, "low" | "medium" | "high" | "very_high"> = {
-      "stock": "high",
+      "stock": "medium", // Changed from "high" - most stocks are medium risk
       "bond": "low",
       "etf": "medium",
       "mutual_fund": "medium",
@@ -276,9 +284,12 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
 
           <div className="space-y-2">
             <Label>Risk Level</Label>
-            <Select 
-              value={formData.risk_level || "medium"} 
-              onValueChange={(value) => setFormData({...formData, risk_level: value as Investment["risk_level"]})}
+            <Select
+              value={formData.risk_level || "medium"}
+              onValueChange={(value) => {
+                setFormData({...formData, risk_level: value as Investment["risk_level"]})
+                setUserSetRiskLevel(true) // Mark that user manually set the risk level
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -290,10 +301,10 @@ export function InvestmentForm({ investment, onSave, onCancel }: InvestmentFormP
                 <SelectItem value="very_high">Very High</SelectItem>
               </SelectContent>
             </Select>
-            {selectedSecurity && (
+            {selectedSecurity && !userSetRiskLevel && (
               <p className="text-xs text-gray-500">
                 <Info className="h-3 w-3 inline mr-1" />
-                Auto-assigned based on security type
+                Auto-suggested based on security type. You can change this.
               </p>
             )}
           </div>

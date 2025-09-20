@@ -102,7 +102,7 @@ export default function AccountsPage() {
 
   const getAccountStatus = (account: Account) => {
     if (account.type === 'credit') {
-      const utilization = account.current_balance / account.available_balance
+      const utilization = account.available_balance > 0 ? account.current_balance / account.available_balance : 0
       if (utilization > 0.8) return { status: 'High Utilization', color: 'text-red-600' }
       if (utilization > 0.5) return { status: 'Moderate Utilization', color: 'text-yellow-600' }
       return { status: 'Good Standing', color: 'text-green-600' }
@@ -307,7 +307,9 @@ export default function AccountsPage() {
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-medium">Utilization</span>
                           <span className="text-sm">
-                            {((account.current_balance / account.available_balance) * 100).toFixed(1)}%
+                            {account.available_balance > 0
+                              ? ((account.current_balance / account.available_balance) * 100).toFixed(1) + '%'
+                              : 'N/A'}
                           </span>
                         </div>
                       )}

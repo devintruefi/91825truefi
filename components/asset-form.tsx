@@ -65,7 +65,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
     setError("")
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const baseUrl = '/api'
       const url = asset?.id 
         ? `${baseUrl}/assets/${user.id}/${asset.id}`
         : `${baseUrl}/assets/${user.id}`
@@ -75,7 +75,7 @@ export function AssetForm({ asset, onSuccess, onCancel }: AssetFormProps) {
         ? { ...formData, id: asset.id, value: formData.value === '' ? 0 : formData.value }
         : { ...formData, value: formData.value === '' ? 0 : formData.value }
 
-      console.log('Submitting asset:', { url, method, body, apiUrl: process.env.NEXT_PUBLIC_API_URL })
+      console.log('Submitting asset:', { url, method, body })
 
       const response = await fetch(url, {
         method,

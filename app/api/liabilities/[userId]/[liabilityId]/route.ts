@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getUserFromRequest } from '@/lib/auth'
 
 // GET - Fetch a specific liability
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string; liabilityId: string } }
+  { params }: { params: Promise<{ userId: string; liabilityId: string }> }
 ) {
   try {
-    const { userId, liabilityId } = params
+    const { userId, liabilityId } = await params
+
+    // Auth check
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.id !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const liability = await prisma.manual_liabilities.findFirst({
-      where: { 
+      where: {
         id: liabilityId,
-        user_id: userId 
+        user_id: user.id  // Use authenticated user ID
       }
     })
 
@@ -36,16 +46,37 @@ export async function GET(
 // PUT - Update a specific liability
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { userId: string; liabilityId: string } }
+  { params }: { params: Promise<{ userId: string; liabilityId: string }> }
 ) {
   try {
-    const { userId, liabilityId } = params
+    const { userId, liabilityId } = await params
+
+    // Auth check
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.id !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     const body = await request.json()
 
-    const liability = await prisma.manual_liabilities.update({
-      where: { 
+    // First check if liability exists and user owns it
+    const existingLiability = await prisma.manual_liabilities.findFirst({
+      where: {
         id: liabilityId,
-        user_id: userId 
+        user_id: user.id
+      }
+    })
+
+    if (!existingLiability) {
+      return NextResponse.json({ error: 'Liability not found or unauthorized' }, { status: 404 })
+    }
+
+    // Now update using just the ID
+    const liability = await prisma.manual_liabilities.update({
+      where: {
+        id: liabilityId
       },
       data: {
         name: body.name,
@@ -70,17 +101,30 @@ export async function PUT(
 // DELETE - Delete a specific liability
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { userId: string; liabilityId: string } }
+  { params }: { params: Promise<{ userId: string; liabilityId: string }> }
 ) {
   try {
-    const { userId, liabilityId } = params
+    const { userId, liabilityId } = await params
 
-    await prisma.manual_liabilities.delete({
-      where: { 
+    // Auth check
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.id !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const deleteResult = await prisma.manual_liabilities.deleteMany({
+      where: {
         id: liabilityId,
-        user_id: userId 
+        user_id: user.id  // Use authenticated user ID
       }
     })
+
+    if (deleteResult.count === 0) {
+      return NextResponse.json({ error: 'Liability not found or unauthorized' }, { status: 404 })
+    }
 
     return NextResponse.json({ message: 'Liability deleted successfully' })
   } catch (error) {

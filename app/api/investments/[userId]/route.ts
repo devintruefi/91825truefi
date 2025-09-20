@@ -52,6 +52,19 @@ export async function GET(
       ]
     })
 
+    // Fetch manual assets (investments added manually by user)
+    const manualAssets = await prisma.manual_assets.findMany({
+      where: {
+        user_id: userId,
+        asset_class: {
+          in: ['stocks', 'bonds', 'etfs', 'mutual_funds', 'crypto', 'commodities', 'investment']
+        }
+      },
+      orderBy: {
+        created_at: 'desc'
+      }
+    })
+
     // Extract unique tickers for live price fetching
     const uniqueTickers = [...new Set(
       holdings
@@ -79,8 +92,45 @@ export async function GET(
       );
     }
 
+    // Process manual assets first
+    const manualInvestments = manualAssets.map(asset => {
+      let investmentData: any = {};
+      try {
+        // Parse the stored JSON data from notes field
+        investmentData = asset.notes ? JSON.parse(asset.notes) : {};
+      } catch (e) {
+        console.warn('Failed to parse manual asset notes:', e);
+      }
+
+      const currentPrice = investmentData.current_price || parseFloat(asset.value?.toString() || "0") / (investmentData.quantity || 1);
+      const quantity = investmentData.quantity || 1;
+
+      return {
+        id: asset.id,
+        name: asset.name || 'Unknown Investment',
+        symbol: investmentData.symbol,
+        type: mapAssetClassToType(asset.asset_class || 'investment'),
+        quantity: quantity,
+        purchase_price: investmentData.purchase_price || 0,
+        current_price: currentPrice,
+        current_value: quantity * currentPrice,
+        cost_basis: (investmentData.purchase_price || 0) * quantity,
+        purchase_date: investmentData.purchase_date || asset.created_at?.toISOString().split('T')[0],
+        account_id: investmentData.account_id,
+        notes: typeof investmentData.notes === 'string' ? investmentData.notes : undefined,
+        tags: investmentData.tags || [],
+        dividends: investmentData.dividends || 0,
+        expense_ratio: investmentData.expense_ratio,
+        target_allocation: investmentData.target_allocation,
+        risk_level: investmentData.risk_level || 'medium',  // Use stored risk_level
+        is_favorite: investmentData.is_favorite || false,
+        source: 'manual',
+        last_updated: asset.updated_at?.toISOString()
+      };
+    });
+
     // Transform holdings into investment format with live prices
-    const investments = holdings.map(holding => {
+    const plaidInvestments = holdings.map(holding => {
       const security = holding.securities
       const account = holding.accounts
       const ticker = security?.ticker;
@@ -115,9 +165,12 @@ export async function GET(
       }
     })
 
+    // Combine manual and Plaid investments
+    const investments = [...manualInvestments, ...plaidInvestments];
+
     // Calculate totals first
     const totalAccountValue = investmentAccounts.reduce((sum, acc) => sum + parseFloat(acc.balance?.toString() || "0"), 0)
-    const totalInvestmentValue = investments.reduce((sum, inv) => 
+    const totalInvestmentValue = investments.reduce((sum, inv) =>
       sum + (inv.quantity * inv.current_price), 0
     )
     const totalValue = totalAccountValue + totalInvestmentValue
@@ -404,6 +457,22 @@ export async function POST(
 }
 
 // Helper functions
+function mapAssetClassToType(assetClass: string): string {
+  const mapping: Record<string, string> = {
+    "stocks": "stock",
+    "bonds": "bond",
+    "etfs": "etf",
+    "mutual_funds": "mutual_fund",
+    "crypto": "crypto",
+    "commodities": "commodity",
+    "real_estate": "real_estate",
+    "cash": "cash",
+    "investment": "other"
+  }
+
+  return mapping[assetClass?.toLowerCase() || ""] || "other"
+}
+
 function mapSecurityTypeToType(securityType?: string | null): string {
   const mapping: Record<string, string> = {
     "stock": "stock",

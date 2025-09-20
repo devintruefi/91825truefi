@@ -109,7 +109,7 @@ export function AssetsLiabilitiesTables() {
     
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/assets-liabilities/${user.id}`)
+      const response = await fetch(`/api/assets-liabilities/${user.id}`)
       if (response.ok) {
         const data = await response.json()
         setData(data)
@@ -126,9 +126,9 @@ export function AssetsLiabilitiesTables() {
     
     setSaving(true)
     try {
-      const url = editingAsset 
-        ? `${process.env.NEXT_PUBLIC_API_URL}/api/assets/${editingAsset.id}`
-        : `${process.env.NEXT_PUBLIC_API_URL}/api/assets/${user.id}`
+      const url = editingAsset
+        ? `/api/assets/${user.id}/${editingAsset.id}`
+        : `/api/assets/${user.id}`
       
       const response = await fetch(url, {
         method: editingAsset ? "PUT" : "POST",
@@ -157,9 +157,9 @@ export function AssetsLiabilitiesTables() {
     
     setSaving(true)
     try {
-      const url = editingLiability 
-        ? `${process.env.NEXT_PUBLIC_API_URL}/api/liabilities/${editingLiability.id}`
-        : `${process.env.NEXT_PUBLIC_API_URL}/api/liabilities/${user.id}`
+      const url = editingLiability
+        ? `/api/liabilities/${user.id}/${editingLiability.id}`
+        : `/api/liabilities/${user.id}`
       
       const response = await fetch(url, {
         method: editingLiability ? "PUT" : "POST",
@@ -189,7 +189,11 @@ export function AssetsLiabilitiesTables() {
     if (!confirm("Are you sure you want to delete this asset?")) return
     
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/assets/${id}`, {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/assets/${user.id}/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         method: "DELETE"
       })
 
@@ -205,7 +209,11 @@ export function AssetsLiabilitiesTables() {
     if (!confirm("Are you sure you want to delete this liability?")) return
     
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/liabilities/${id}`, {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/liabilities/${user.id}/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         method: "DELETE"
       })
 

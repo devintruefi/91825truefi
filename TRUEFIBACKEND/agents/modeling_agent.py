@@ -17,6 +17,16 @@ from agents.router import classify_intent
 
 logger = logging.getLogger(__name__)
 
+def format_currency(amount: float) -> str:
+    """Format amount as USD currency with proper spacing and separators"""
+    if amount < 0:
+        return f"-${abs(amount):,.2f}"
+    return f"${amount:,.2f}"
+
+def format_percentage(value: float) -> str:
+    """Format value as percentage with proper symbol"""
+    return f"{value:.1f}%"
+
 class DecimalEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles Decimal and datetime objects"""
     def default(self, obj):
@@ -148,11 +158,11 @@ Analyze this data and provide comprehensive financial insights. Follow the exact
 
             summary = f"""
 User: {user_core.get('first_name', 'Unknown')} {user_core.get('last_name', '')}
-Net Worth: ${metrics.get('net_worth', 0):,.2f}
-Monthly Income: ${metrics.get('monthly_income_avg', 0):,.2f}
-Monthly Expenses: ${metrics.get('monthly_expenses_avg', 0):,.2f}
+Net Worth: {format_currency(metrics.get('net_worth', 0))}
+Monthly Income: {format_currency(metrics.get('monthly_income_avg', 0))}
+Monthly Expenses: {format_currency(metrics.get('monthly_expenses_avg', 0))}
 Liquid Reserves: {metrics.get('liquid_reserves_months', 0):.1f} months
-Savings Rate: {metrics.get('savings_rate_3m', 0):.1f}%
+Savings Rate: {format_percentage(metrics.get('savings_rate_3m', 0))}
 
 Accounts: {len(accounts)} total
 Goals: {len(goals)} active goals

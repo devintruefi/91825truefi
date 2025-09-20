@@ -647,9 +647,16 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
         setShowAddInvestment(false)
         setEditingInvestment(null)
       } else {
-        const errorData = await response.json()
-        console.error("API Error:", errorData)
-        alert(`Failed to save investment: ${errorData.error || 'Unknown error'}`)
+        let errorMessage = 'Unknown error'
+        try {
+          const errorData = await response.json()
+          console.error("API Error:", errorData)
+          errorMessage = errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`
+        } catch (e) {
+          console.error("Failed to parse error response:", e)
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`
+        }
+        alert(`Failed to save investment: ${errorMessage}`)
       }
     } catch (error) {
       console.error("Failed to save investment:", error)
@@ -685,9 +692,21 @@ export function InvestmentsDashboard({ userId }: { userId: string | null }) {
       if (response.ok) {
         await fetchInvestmentData()
       } else {
-        const errorData = await response.json()
-        console.error("Delete API Error:", errorData)
-        alert(`Failed to delete investment: ${errorData.error || 'Unknown error'}`)
+        let errorMessage = 'Unknown error'
+        try {
+          const errorData = await response.json()
+          console.error("Delete API Error:", errorData)
+          errorMessage = errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`
+        } catch (e) {
+          console.error("Failed to parse error response:", e)
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`
+        }
+        // Show user-friendly message for common scenarios
+        if (errorMessage.includes("Cannot delete synced investment")) {
+          alert("This investment is synced from your connected account and cannot be deleted. It will update automatically when your account syncs.")
+        } else {
+          alert(`Failed to delete investment: ${errorMessage}`)
+        }
       }
     } catch (error) {
       console.error("Failed to delete investment:", error)

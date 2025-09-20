@@ -747,7 +747,7 @@ class PersonalizedCalculator:
             reason = 'Building momentum with quick wins is valuable early in your financial journey'
         elif interest_savings > 500:
             recommended = 'avalanche'
-            reason = f'Save ${interest_savings:.0f} in interest with mathematical optimization'
+            reason = f'Save ${interest_savings:,.0f} in interest with mathematical optimization'
         else:
             recommended = 'snowball'
             reason = 'Minimal interest difference - psychological benefits outweigh'

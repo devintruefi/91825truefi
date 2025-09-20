@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     console.log('Auth header present:', !!authHeader);
     
     // Prepare the request to FastAPI backend
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     
     // Determine which endpoint to use based on authentication
     const endpoint = authHeader ? '/chat' : '/chat/public';

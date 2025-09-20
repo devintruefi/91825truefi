@@ -6,14 +6,59 @@ const prisma = new PrismaClient()
 // PUT: Update an existing investment
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { userId: string; investmentId: string } }
+  { params }: { params: Promise<{ userId: string; investmentId: string }> }
 ) {
   try {
-    const { userId, investmentId } = params
+    const { userId, investmentId } = await params
     const body = await request.json()
 
     if (!userId || !investmentId) {
       return NextResponse.json({ error: "User ID and Investment ID are required" }, { status: 400 })
+    }
+
+    // First, check if this investment exists and belongs to the user
+    const existingAsset = await prisma.manual_assets.findFirst({
+      where: {
+        id: investmentId,
+        user_id: userId
+      }
+    })
+
+    if (!existingAsset) {
+      // Check if it's a holding instead
+      const existingHolding = await prisma.holdings.findFirst({
+        where: {
+          id: investmentId
+        },
+        include: {
+          accounts: true
+        }
+      })
+
+      if (!existingHolding || existingHolding.accounts?.user_id !== userId) {
+        return NextResponse.json({ error: "Investment not found or access denied" }, { status: 404 })
+      }
+
+      // For holdings, we can only update certain fields
+      const updatedHolding = await prisma.holdings.update({
+        where: {
+          id: investmentId
+        },
+        data: {
+          quantity: body.quantity || existingHolding.quantity,
+          cost_basis: body.purchase_price ? body.purchase_price * (body.quantity || existingHolding.quantity) : existingHolding.cost_basis,
+          updated_at: new Date()
+        }
+      })
+
+      return NextResponse.json({
+        success: true,
+        investment: {
+          id: updatedHolding.id,
+          ...body,
+          source: 'plaid'
+        }
+      })
     }
 
     // Update investment data stored as a manual asset
@@ -66,16 +111,16 @@ export async function PUT(
 // DELETE: Delete an investment
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { userId: string; investmentId: string } }
+  { params }: { params: Promise<{ userId: string; investmentId: string }> }
 ) {
   try {
-    const { userId, investmentId } = params
+    const { userId, investmentId } = await params
 
     if (!userId || !investmentId) {
       return NextResponse.json({ error: "User ID and Investment ID are required" }, { status: 400 })
     }
 
-    // Verify the asset belongs to the user
+    // First check if it's a manual asset
     const asset = await prisma.manual_assets.findFirst({
       where: {
         id: investmentId,
@@ -83,16 +128,36 @@ export async function DELETE(
       }
     })
 
-    if (!asset) {
-      return NextResponse.json({ error: "Investment not found" }, { status: 404 })
-    }
+    if (asset) {
+      // Delete the manual asset
+      await prisma.manual_assets.delete({
+        where: {
+          id: investmentId
+        }
+      })
+    } else {
+      // Check if it's a holding
+      const holding = await prisma.holdings.findFirst({
+        where: {
+          id: investmentId
+        },
+        include: {
+          accounts: true
+        }
+      })
 
-    // Delete the asset
-    await prisma.manual_assets.delete({
-      where: {
-        id: investmentId
+      if (!holding || holding.accounts?.user_id !== userId) {
+        return NextResponse.json({ error: "Investment not found or access denied" }, { status: 404 })
       }
-    })
+
+      // For Plaid-connected holdings, we typically can't delete them directly
+      // as they're synced from the financial institution
+      // Instead, we might want to hide them or mark them as ignored
+      // For now, return an appropriate message
+      return NextResponse.json({
+        error: "Cannot delete synced investment holdings. These are automatically managed by your connected account."
+      }, { status: 400 })
+    }
 
     return NextResponse.json({
       success: true,

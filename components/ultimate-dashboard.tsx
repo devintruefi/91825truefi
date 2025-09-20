@@ -240,7 +240,7 @@ export function UltimateDashboard() {
       setLoadingAssets(true)
       
       // Fetch assets and liabilities separately from new API endpoints
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const baseUrl = '/api'
       const [assetsResponse, liabilitiesResponse] = await Promise.all([
         authenticatedFetch(`${baseUrl}/assets/${user.id}`),
         authenticatedFetch(`${baseUrl}/liabilities/${user.id}`)
@@ -635,7 +635,7 @@ export function UltimateDashboard() {
     setUpdatingTransaction(transactionId)
     
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const baseUrl = '/api'
       const response = await fetch(`${baseUrl}/transactions/${transactionId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1494,7 +1494,7 @@ export function UltimateDashboard() {
                               onClick={async () => {
                                 if (confirm(`Are you sure you want to delete this asset?`)) {
                                   try {
-                                    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+                                    const baseUrl = '/api'
                                     const response = await fetch(
                                       `${baseUrl}/assets/${user?.id}/${asset.id}`,
                                       { method: "DELETE" }
@@ -1585,7 +1585,7 @@ export function UltimateDashboard() {
                               onClick={async () => {
                                 if (confirm(`Are you sure you want to delete this liability?`)) {
                                   try {
-                                    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+                                    const baseUrl = '/api'
                                     const response = await fetch(
                                       `${baseUrl}/liabilities/${user?.id}/${liability.id}`,
                                       { method: "DELETE" }
@@ -1759,9 +1759,15 @@ export function UltimateDashboard() {
                                     onClick={async () => {
                                       if (confirm("Are you sure you want to delete this goal?")) {
                                         try {
+                                          const token = localStorage.getItem('token')
                                           const response = await fetch(
-                                            `${process.env.NEXT_PUBLIC_API_URL}/api/goals/${user?.id}/${goal.id}`,
-                                            { method: "DELETE" }
+                                            `/api/goals/${goal.id}`,
+                                            {
+                                              method: "DELETE",
+                                              headers: {
+                                                'Authorization': `Bearer ${token}`
+                                              }
+                                            }
                                           )
                                           if (response.ok) {
                                             refresh()

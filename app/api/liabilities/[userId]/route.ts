@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getUserFromRequest } from '@/lib/auth'
 
 // GET - Fetch all liabilities for a user (manual liabilities + Plaid credit/loan accounts)
 export async function GET(
@@ -8,6 +9,15 @@ export async function GET(
 ) {
   try {
     const { userId } = await params
+
+    // Auth check
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.id !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     // Fetch manual liabilities (user-entered)
     const manualLiabilities = await prisma.manual_liabilities.findMany({
@@ -142,6 +152,15 @@ export async function GET(
     try {
       const { userId } = await params
       console.log('Creating liability for user:', userId)
+
+      // Auth check
+      const user = await getUserFromRequest(request)
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      if (user.id !== userId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
       
       const body = await request.json()
       console.log('Request body:', body)
@@ -175,10 +194,23 @@ export async function PUT(
 ) {
   try {
     const { userId } = await params
+
+    // Auth check
+    const user = await getUserFromRequest(request)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (user.id !== userId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await request.json()
 
     const liability = await prisma.manual_liabilities.update({
-      where: { id: body.id },
+      where: {
+        id: body.id,
+        user_id: user.id  // Defense in depth - ensure we only update user's own liabilities
+      },
       data: {
         name: body.name,
         liability_class: body.liability_class,

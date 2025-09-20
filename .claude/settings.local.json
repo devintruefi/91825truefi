@@ -52,7 +52,9 @@
       "Bash(timeout:*)",
       "Bash(node:*)",
       "Bash(git remote add:*)",
-      "Bash(git remote set-url:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(wmic process where:*)",
+      "Bash(npx prisma studio:*)"
     ],
     "deny": [],
     "ask": [],

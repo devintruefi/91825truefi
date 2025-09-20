@@ -871,7 +871,10 @@ export async function generateAIBudget(
     
     // Generate insights
     const insights: string[] = [];
-    
+
+    // Initialize validation warnings early
+    const validationWarnings: string[] = [];
+
     // Income insights
     if (incomeAnalysis.stability === 'stable') {
       insights.push('Your income is stable, allowing for consistent budgeting.');
@@ -925,7 +928,7 @@ export async function generateAIBudget(
     const totalBudget = categories.reduce((sum, cat) => sum + cat.amount, 0);
 
     // Budget reasonableness validation
-    const validationWarnings: string[] = [];
+    // validationWarnings array already declared above
 
     // Hard stop: Budget exceeds 105% of income
     if (totalBudget > incomeAnalysis.monthlyIncome * 1.05) {

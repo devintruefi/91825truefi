@@ -23,14 +23,28 @@ def classify_intent(question: str) -> Intent:
     if re.search(r'\b(show.*spend|spending|spent.*me)\b', q):
         return Intent.SPEND_BY_TIME
 
+    # Net worth queries
+    if re.search(r'\b(net\s*worth|what\s+am\s+i\s+worth|overall\s+wealth|total\s+value|assets.*liabilities)\b', q):
+        return Intent.NET_WORTH
+
     # Account balance queries - HIGHEST PRIORITY
-    if re.search(r'\b(balance|how much.*(?:money|cash|have|in.*account)|total.*account|account.*total|net worth)\b', q):
-        if 'net worth' in q:
-            return Intent.NET_WORTH
+    if re.search(r'\b(balance|how much.*(?:money|cash|have|in.*account)|total.*account|account.*total|cash\s+on\s+hand|available\s+cash)\b', q):
         return Intent.ACCOUNT_BALANCES
 
+    # All accounts breakdown
+    if re.search(r'\b(all\s+accounts|list.*accounts|show.*accounts|accounts\s+breakdown)\b', q):
+        return Intent.BALANCES_BY_ACCOUNT
+
+    # Top merchants
+    if re.search(r'\b(top\s+merchant|most\s+spent|where.*spend.*most|frequent.*merchant)\b', q):
+        return Intent.TOP_MERCHANTS
+
+    # Month over month comparison
+    if re.search(r'\b(month\s+over\s+month|mom|compared?.*last\s+month|vs\s+last\s+month|spending.*change)\b', q):
+        return Intent.SPENDING_MOM_DELTA
+
     # Spending by category
-    if re.search(r'\b(category|categories|breakdown|by type|top merchant|where.*spend)\b', q):
+    if re.search(r'\b(category|categories|breakdown|by type|where.*spend)\b', q):
         return Intent.SPEND_BY_CATEGORY
 
     # Time-based spending (last month, this year, etc)
@@ -42,7 +56,7 @@ def classify_intent(question: str) -> Intent:
         return Intent.RECENT_TRANSACTIONS
 
     # Cash flow analysis
-    if re.search(r'\b(cash\s*flow|income.*expense|burn|net income|inflow.*outflow)\b', q):
+    if re.search(r'\b(cash\s*flow|income.*expense|burn\s*rate|net\s+income|inflow.*outflow|money\s+in.*out)\b', q):
         return Intent.CASHFLOW_SUMMARY
 
     # Savings rate
@@ -132,6 +146,20 @@ def get_time_range(question: str) -> Dict[str, str]:
         months = months_match.group(1)
         return {
             "start_date": f"CURRENT_DATE - INTERVAL '{months} months'",
+            "end_date": "CURRENT_DATE"
+        }
+
+    # Last quarter / Q1-Q4
+    if re.search(r'last\s+quarter|q[1-4]|quarter', q):
+        return {
+            "start_date": "DATE_TRUNC('quarter', CURRENT_DATE - INTERVAL '3 months')",
+            "end_date": "DATE_TRUNC('quarter', CURRENT_DATE)"
+        }
+
+    # Last 90 days
+    if re.search(r'last\s+90\s+days|ninety\s+days|3\s+months', q):
+        return {
+            "start_date": "CURRENT_DATE - INTERVAL '90 days'",
             "end_date": "CURRENT_DATE"
         }
 

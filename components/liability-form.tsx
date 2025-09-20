@@ -69,7 +69,7 @@ export function LiabilityForm({ liability, onSuccess, onCancel }: LiabilityFormP
     setError("")
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api'
+      const baseUrl = '/api'
       const url = liability?.id 
         ? `${baseUrl}/liabilities/${user.id}/${liability.id}`
         : `${baseUrl}/liabilities/${user.id}`
@@ -88,7 +88,7 @@ export function LiabilityForm({ liability, onSuccess, onCancel }: LiabilityFormP
             interest_rate: formData.interest_rate === '' ? 0 : formData.interest_rate
           }
 
-      console.log('Submitting liability:', { url, method, body, apiUrl: process.env.NEXT_PUBLIC_API_URL })
+      console.log('Submitting liability:', { url, method, body })
 
       const response = await fetch(url, {
         method,

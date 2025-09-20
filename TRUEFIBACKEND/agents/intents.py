@@ -29,6 +29,11 @@ class Intent(str, Enum):
     GOAL_PLANNING = "goal_planning"
     NET_WORTH_ANALYSIS = "net_worth_analysis"
 
+    # Additional analysis intents
+    SPENDING_MOM_DELTA = "spending_mom_delta"  # Month-over-month spending changes
+    TOP_MERCHANTS = "top_merchants"  # Top spending merchants
+    BALANCES_BY_ACCOUNT = "balances_by_account"  # Account balance breakdown
+
     # Conversational intents
     GREETING = "greeting"
     CASUAL_CONVERSATION = "casual_conversation"
@@ -240,6 +245,76 @@ INTENT_TO_ALLOWED: Dict[Intent, Dict[str, Any]] = {
             -- This intent uses dynamic SQL built by SearchQueryBuilder
             -- Example: "all coffee purchases over $5 last month"
             -- Will search by merchant, amount, date range, category
+        """
+    },
+    Intent.SPENDING_MOM_DELTA: {
+        "tables": ["transactions"],
+        "columns": ["amount", "date", "posted_datetime"],
+        "notes": "Compare current month spending to last month.",
+        "template_sql": """
+            WITH monthly_spending AS (
+                SELECT
+                    DATE_TRUNC('month', COALESCE(posted_datetime, date::timestamptz)) as month,
+                    SUM(ABS(amount)) as total_spent
+                FROM transactions
+                WHERE user_id = %(user_id)s
+                  AND amount < 0
+                  AND pending = false
+                  AND COALESCE(posted_datetime, date::timestamptz) >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+                GROUP BY 1
+            )
+            SELECT
+                month,
+                total_spent,
+                LAG(total_spent) OVER (ORDER BY month) as last_month_spent,
+                total_spent - LAG(total_spent) OVER (ORDER BY month) as delta,
+                CASE
+                    WHEN LAG(total_spent) OVER (ORDER BY month) > 0
+                    THEN ((total_spent - LAG(total_spent) OVER (ORDER BY month)) / LAG(total_spent) OVER (ORDER BY month)) * 100
+                    ELSE 0
+                END as percent_change
+            FROM monthly_spending
+            ORDER BY month DESC
+            LIMIT 2
+        """
+    },
+    Intent.TOP_MERCHANTS: {
+        "tables": ["transactions"],
+        "columns": ["merchant_name", "amount"],
+        "notes": "Top merchants by spending in time period.",
+        "template_sql": """
+            SELECT
+                COALESCE(merchant_name, name) as merchant,
+                SUM(ABS(amount)) as total_spent,
+                COUNT(*) as transaction_count,
+                AVG(ABS(amount)) as avg_transaction
+            FROM transactions
+            WHERE user_id = %(user_id)s
+              AND amount < 0
+              AND pending = false
+              AND COALESCE(posted_datetime, date::timestamptz) >= %(start_date)s
+            GROUP BY 1
+            HAVING SUM(ABS(amount)) > 0
+            ORDER BY total_spent DESC
+            LIMIT 10
+        """
+    },
+    Intent.BALANCES_BY_ACCOUNT: {
+        "tables": ["accounts"],
+        "columns": ["name", "balance", "type", "subtype"],
+        "notes": "All account balances for the user.",
+        "template_sql": """
+            SELECT
+                name,
+                type,
+                subtype,
+                balance as current_balance,
+                available_balance,
+                institution_name
+            FROM accounts
+            WHERE user_id = %(user_id)s
+              AND is_active = true
+            ORDER BY balance DESC
         """
     },
 
