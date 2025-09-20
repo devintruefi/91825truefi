@@ -467,16 +467,26 @@ async def get_session_messages(
     """Get all messages for a specific session"""
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     cur, conn = db
     try:
-        # Verify session ownership - look up by session_id field, not id
+        # The session_id parameter is actually the UUID id from the frontend
+        # First try to look it up as the primary key id
         cur.execute("""
             SELECT id FROM chat_sessions
-            WHERE session_id = %s AND user_id = %s
+            WHERE id = %s AND user_id = %s
         """, (session_id, user_id))
 
         session_row = cur.fetchone()
+
+        # If not found by id, try by session_id field (for backward compatibility)
+        if not session_row:
+            cur.execute("""
+                SELECT id FROM chat_sessions
+                WHERE session_id = %s AND user_id = %s
+            """, (session_id, user_id))
+            session_row = cur.fetchone()
+
         if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -575,16 +585,26 @@ async def save_message(
     """Save a message to a session"""
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     cur, conn = db
     try:
-        # Verify session ownership - look up by session_id field, not id
+        # The session_id parameter is actually the UUID id from the frontend
+        # First try to look it up as the primary key id
         cur.execute("""
             SELECT id FROM chat_sessions
-            WHERE session_id = %s AND user_id = %s
+            WHERE id = %s AND user_id = %s
         """, (session_id, user_id))
 
         session_row = cur.fetchone()
+
+        # If not found by id, try by session_id field (for backward compatibility)
+        if not session_row:
+            cur.execute("""
+                SELECT id FROM chat_sessions
+                WHERE session_id = %s AND user_id = %s
+            """, (session_id, user_id))
+            session_row = cur.fetchone()
+
         if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -654,16 +674,26 @@ async def delete_chat_session(
     """Delete a chat session and all its messages"""
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     cur, conn = db
     try:
-        # Verify session ownership - look up by session_id field, not id
+        # The session_id parameter is actually the UUID id from the frontend
+        # First try to look it up as the primary key id
         cur.execute("""
             SELECT id FROM chat_sessions
-            WHERE session_id = %s AND user_id = %s
+            WHERE id = %s AND user_id = %s
         """, (session_id, user_id))
 
         session_row = cur.fetchone()
+
+        # If not found by id, try by session_id field (for backward compatibility)
+        if not session_row:
+            cur.execute("""
+                SELECT id FROM chat_sessions
+                WHERE session_id = %s AND user_id = %s
+            """, (session_id, user_id))
+            session_row = cur.fetchone()
+
         if not session_row:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -1373,52 +1403,67 @@ def get_data_dump(cur, user_id):
     return data
 
 def create_session(cur, session_id, user_id, conn, initial_message=None):
-    # Handle session_id - if it's not a valid UUID, generate a new one
-    try:
-        session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
-    except (ValueError, TypeError):
-        # If session_id is not a valid UUID, generate a new one
-        session_uuid = uuid.uuid4()
-        logger.info(f"Generated new session UUID for invalid session_id: {session_id}")
-    
+    # If session_id is provided, check if it's a UUID (which means it's actually the id field from frontend)
+    # First try to find existing session by id
+    if session_id:
+        try:
+            # Try to parse as UUID - this would be the primary key id
+            session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
+            cur.execute("SELECT id FROM chat_sessions WHERE id = %s", (str(session_uuid),))
+            existing_session = cur.fetchone()
+            if existing_session:
+                return str(session_uuid)  # Return the primary key id
+        except (ValueError, TypeError):
+            pass
+
     # Convert user_id to UUID if it's a string, then back to string for PostgreSQL
     try:
         user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
     except (ValueError, TypeError):
         logger.error(f"Invalid user_id format: {user_id}")
         raise Exception(f"Invalid user_id format: {user_id}")
-    
-    # Check if session already exists
-    cur.execute("SELECT id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
-    existing_session = cur.fetchone()
-    
-    if not existing_session:
-        # Generate a smart title based on the first message if provided
-        if initial_message:
-            # Truncate message to first 50 chars for title
-            title = initial_message[:50] + ("..." if len(initial_message) > 50 else "")
-        else:
-            title = f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        
-        cur.execute("""
-            INSERT INTO chat_sessions (id, user_id, session_id, title, is_active, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, true, now(), now())
-        """, (str(uuid.uuid4()), str(user_uuid), str(session_uuid), title))
-        conn.commit()
-    
-    return str(session_uuid)
+
+    # Generate new session with new UUID for id
+    new_id = str(uuid.uuid4())
+    session_identifier = f"session_{int(time.time() * 1000)}"
+
+    # Generate a smart title based on the first message if provided
+    if initial_message:
+        # Truncate message to first 50 chars for title
+        title = initial_message[:50] + ("..." if len(initial_message) > 50 else "")
+    else:
+        title = f"Chat Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+    cur.execute("""
+        INSERT INTO chat_sessions (id, user_id, session_id, title, is_active, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, true, now(), now())
+    """, (new_id, str(user_uuid), session_identifier, title))
+    conn.commit()
+
+    return new_id  # Return the primary key id, not the session_id field
 
 def get_history(cur, session_id):
-    # Handle session_id - if it's not a valid UUID, return empty history
+    # The session_id could be either the UUID id or the string session_id
+    # First try to find the session by id (UUID)
     try:
+        # Try to parse as UUID
         session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
+        cur.execute("SELECT id FROM chat_sessions WHERE id = %s", (str(session_uuid),))
+        session_row = cur.fetchone()
     except (ValueError, TypeError):
-        logger.warning(f"Invalid session_id format: {session_id}, returning empty history")
-        return []
-    
-    # First get the chat_sessions.id for this session_id
-    cur.execute("SELECT id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
-    session_row = cur.fetchone()
+        # Not a valid UUID, try as session_id string field
+        cur.execute("SELECT id FROM chat_sessions WHERE session_id = %s", (str(session_id),))
+        session_row = cur.fetchone()
+
+    if not session_row:
+        # If still not found and it looks like a UUID, try one more time with session_id field
+        try:
+            session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
+            cur.execute("SELECT id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
+            session_row = cur.fetchone()
+        except:
+            pass
+
     if not session_row:
         return []
     
@@ -1433,16 +1478,27 @@ def get_history(cur, session_id):
     return [{"role": row[0], "content": row[1]} for row in cur.fetchall()]
 
 def store_message(cur, session_id, message_type, content, conn, user_id=None, rich_content=None):
-    # Handle session_id - if it's not a valid UUID, skip storing
+    # The session_id could be either the UUID id or the string session_id
+    # First try to find the session by id (UUID)
     try:
+        # Try to parse as UUID
         session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
+        cur.execute("SELECT id, user_id FROM chat_sessions WHERE id = %s", (str(session_uuid),))
+        session_row = cur.fetchone()
     except (ValueError, TypeError):
-        logger.warning(f"Invalid session_id format: {session_id}, skipping message storage")
-        return
+        # Not a valid UUID, try as session_id string field
+        cur.execute("SELECT id, user_id FROM chat_sessions WHERE session_id = %s", (str(session_id),))
+        session_row = cur.fetchone()
 
-    # First get the chat_sessions.id and user_id for this session_id
-    cur.execute("SELECT id, user_id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
-    session_row = cur.fetchone()
+    if not session_row:
+        # If still not found and it looks like a UUID, try one more time with session_id field
+        try:
+            session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
+            cur.execute("SELECT id, user_id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
+            session_row = cur.fetchone()
+        except:
+            pass
+
     if not session_row:
         logger.warning(f"Session {session_id} not found in chat_sessions table")
         return
@@ -1464,12 +1520,27 @@ def store_message(cur, session_id, message_type, content, conn, user_id=None, ri
     conn.commit()
 
 def store_session_analysis(cur, session_id, user_id, analysis, conn):
-    # Convert session_id to UUID if it's a string, then back to string for PostgreSQL
-    session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
-    
-    # First get the chat_sessions.id for this session_id
-    cur.execute("SELECT id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
-    session_row = cur.fetchone()
+    # The session_id could be either the UUID id or the string session_id
+    # First try to find the session by id (UUID)
+    try:
+        # Try to parse as UUID
+        session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
+        cur.execute("SELECT id FROM chat_sessions WHERE id = %s", (str(session_uuid),))
+        session_row = cur.fetchone()
+    except (ValueError, TypeError):
+        # Not a valid UUID, try as session_id string field
+        cur.execute("SELECT id FROM chat_sessions WHERE session_id = %s", (str(session_id),))
+        session_row = cur.fetchone()
+
+    if not session_row:
+        # If still not found and it looks like a UUID, try one more time with session_id field
+        try:
+            session_uuid = uuid.UUID(session_id) if isinstance(session_id, str) else session_id
+            cur.execute("SELECT id FROM chat_sessions WHERE session_id = %s", (str(session_uuid),))
+            session_row = cur.fetchone()
+        except:
+            pass
+
     if not session_row:
         raise Exception(f"Session {session_id} not found in chat_sessions table")
     

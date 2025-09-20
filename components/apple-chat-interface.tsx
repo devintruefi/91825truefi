@@ -531,6 +531,7 @@ function AppleChatInterfaceInner() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState<string>("")
+  const [invalidSessions, setInvalidSessions] = useState<Set<string>>(new Set())
   // Removed all onboarding state - moved to dashboard
   
   // Add suggestions visibility state - initialize to true for SSR consistency
@@ -643,14 +644,16 @@ function AppleChatInterfaceInner() {
       
       if (response.ok) {
         const sessions = await response.json()
-        // Convert backend format to frontend format
-        const formattedSessions = sessions.map((session: any) => ({
-          id: session.id,
-          title: session.title,
-          timestamp: new Date(session.created_at),
-          messageCount: session.message_count || 0,
-          lastMessage: session.last_message || ''
-        }))
+        // Convert backend format to frontend format, filtering out known invalid sessions
+        const formattedSessions = sessions
+          .filter((session: any) => !invalidSessions.has(session.id))
+          .map((session: any) => ({
+            id: session.id,
+            title: session.title,
+            timestamp: new Date(session.created_at),
+            messageCount: session.message_count || 0,
+            lastMessage: session.last_message || ''
+          }))
         setChatSessions(formattedSessions)
       } else {
         // Fallback to localStorage if API fails
@@ -774,13 +777,22 @@ function AppleChatInterfaceInner() {
           // No messages in this session yet
           setMessages(getInitialMessages())
         }
+      } else if (response.status === 404) {
+        // Session not found - mark as invalid and remove from list
+        console.warn(`Session ${sessionId} not found, marking as invalid`)
+        setInvalidSessions(prev => new Set([...prev, sessionId]))
+        setChatSessions(prev => prev.filter(s => s.id !== sessionId))
+        setCurrentSessionId(null)
+        setSessionId(null)
+        setMessages(getInitialMessages())
+        // Don't reload sessions to prevent loop
       } else {
-        const errorText = await response.text()
-        console.error('Failed to load chat messages:', response.status, errorText)
-        throw new Error('Failed to load chat messages')
+        // Other error - just reset to initial messages
+        console.error('Failed to load chat messages:', response.status)
+        setMessages(getInitialMessages())
       }
     } catch (error) {
-      console.error('Failed to load chat session:', error)
+      console.error('Error loading chat session:', error)
       setMessages(getInitialMessages())
     }
   }
@@ -1174,10 +1186,35 @@ function AppleChatInterfaceInner() {
         const data = await response.json()
         if (data.error) throw new Error(data.error)
         
-        // Update session ID if provided
-        if (data.session_id) {
-          setSessionId(data.session_id)
-          if (!activeSessionId) activeSessionId = data.session_id
+        // Update session ID if provided by backend
+        if (data.session_id && data.session_id !== activeSessionId) {
+          const newSessionId = data.session_id
+          setSessionId(newSessionId)
+          setCurrentSessionId(newSessionId)
+
+          // If this is a new session created by the backend, add it to the sessions list
+          if (!activeSessionId && user) {
+            activeSessionId = newSessionId
+
+            // Check if this session is already in the list
+            const sessionExists = chatSessions.some(s => s.id === newSessionId)
+            if (!sessionExists) {
+              // Add the new session to the list
+              const newSession = {
+                id: newSessionId,
+                title: userMessage.length > 50 ? userMessage.substring(0, 50) + '...' : userMessage,
+                timestamp: new Date(),
+                messageCount: 1,
+                lastMessage: userMessage
+              }
+              setChatSessions(prev => [...prev, newSession])
+
+              // Also reload the sessions list to get the accurate data from backend
+              setTimeout(() => loadChatSessions(), 500)
+            }
+          } else if (!activeSessionId) {
+            activeSessionId = newSessionId
+          }
         }
         
         // Extract message content and metadata from response
@@ -1352,7 +1389,7 @@ function AppleChatInterfaceInner() {
   }, []);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 overflow-hidden relative">
+    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 relative">
       {/* Chat History Sidebar - Only show for authenticated users */}
       {user && (
         <AnimatePresence>
@@ -1497,12 +1534,12 @@ function AppleChatInterfaceInner() {
       )}
 
       {/* Main Chat Area */}
-      <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Enhanced Chat Header */}
-      <motion.div 
+      <div className="flex flex-col flex-1 min-w-0">
+      {/* Enhanced Chat Header - Fixed at top of chat area */}
+      <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between flex-shrink-0"
+        className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between min-h-[68px] flex-shrink-0"
       >
         <div className="w-20 flex items-center">
           {user && (
@@ -1557,7 +1594,7 @@ function AppleChatInterfaceInner() {
       </motion.div>
 
       {/* Enhanced Chat Messages */}
-      <div className="flex-1 overflow-y-auto" id="chat-scroll-container" style={{ paddingBottom: '120px' }}>
+      <div className="flex-1 overflow-y-auto" id="chat-scroll-container" style={{ paddingBottom: '140px' }}>
         <div className="max-w-[1600px] mx-auto px-4 pt-6">
           <AnimatePresence>
             <div className="space-y-6">
