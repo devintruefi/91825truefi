@@ -213,15 +213,30 @@ export function AboutMeForm({ onComplete }: { onComplete?: () => void }) {
   }
 
   const saveAboutMeData = async () => {
-    if (!user?.id) return
-    
+    if (!user?.id) {
+      console.error('Cannot save: No user ID found')
+      toast({
+        title: "Error",
+        description: "User not authenticated. Please log in again.",
+        variant: "destructive"
+      })
+      return
+    }
+
     setSaving(true)
+    const authToken = localStorage.getItem('auth_token')
+    console.log('Saving About Me data:', {
+      userId: user.id,
+      hasAuthToken: !!authToken,
+      dataToSave: data
+    })
+
     try {
       const response = await fetch(`/api/profile/about-me`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify(data)
       })
@@ -235,23 +250,33 @@ export function AboutMeForm({ onComplete }: { onComplete?: () => void }) {
       }
       
       if (response.ok) {
+        console.log('Save successful:', result)
         toast({
           title: "Profile saved",
           description: result.aboutMeComplete ? "Your profile is complete!" : "Profile updated successfully.",
         })
-        
+
         if (result.aboutMeComplete && onComplete) {
           onComplete()
         }
       } else {
-        console.error('API Error:', result)
+        console.error('Save failed - Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          result: result
+        })
         throw new Error(result?.details || result?.error || 'Failed to save profile')
       }
     } catch (error: any) {
-      console.error('Error saving profile:', error)
+      console.error('Error saving profile:', {
+        error: error,
+        message: error?.message,
+        stack: error?.stack
+      })
       toast({
         title: "Error",
         description: error?.message || "Failed to save profile. Please try again.",
+        variant: "destructive",
         variant: "destructive"
       })
     } finally {
