@@ -123,16 +123,20 @@ export function AssetsLiabilitiesTables() {
 
   const handleSaveAsset = async () => {
     if (!user?.id) return
-    
+
     setSaving(true)
     try {
+      const token = localStorage.getItem('auth_token')
       const url = editingAsset
         ? `/api/assets/${user.id}/${editingAsset.id}`
         : `/api/assets/${user.id}`
-      
+
       const response = await fetch(url, {
         method: editingAsset ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({
           ...assetForm,
           value: assetForm.value === '' ? 0 : assetForm.value
@@ -154,16 +158,20 @@ export function AssetsLiabilitiesTables() {
 
   const handleSaveLiability = async () => {
     if (!user?.id) return
-    
+
     setSaving(true)
     try {
+      const token = localStorage.getItem('auth_token')
       const url = editingLiability
         ? `/api/liabilities/${user.id}/${editingLiability.id}`
         : `/api/liabilities/${user.id}`
-      
+
       const response = await fetch(url, {
         method: editingLiability ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({
           ...liabilityForm,
           balance: liabilityForm.balance === '' ? 0 : liabilityForm.balance,
@@ -187,9 +195,9 @@ export function AssetsLiabilitiesTables() {
 
   const handleDeleteAsset = async (id: string) => {
     if (!confirm("Are you sure you want to delete this asset?")) return
-    
+
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       const response = await fetch(`/api/assets/${user.id}/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -207,9 +215,9 @@ export function AssetsLiabilitiesTables() {
 
   const handleDeleteLiability = async (id: string) => {
     if (!confirm("Are you sure you want to delete this liability?")) return
-    
+
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       const response = await fetch(`/api/liabilities/${user.id}/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`

@@ -1,32 +1,33 @@
-# Use Python 3.11 slim image
+# ---- Base image - Python 3.11 slim (lighter than regular)
 FROM python:3.11-slim
+
+# ---- Runtime configuration
+ENV PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PORT=8080
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements from TRUEFIBACKEND
+# ---- Install dependencies
+# Copy requirements first (for better Docker layer caching)
 COPY TRUEFIBACKEND/requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies (no gcc needed since using psycopg2-binary)
+RUN pip install -r requirements.txt
 
-# Copy the TRUEFIBACKEND application
-COPY TRUEFIBACKEND/ .
+# ---- Copy application code
+COPY TRUEFIBACKEND/ ./
 
-# Create non-root user for security
+# ---- Create non-root user for security
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Set environment variable to prevent Python buffering
-ENV PYTHONUNBUFFERED=1
-
-# Expose port 8080 (Cloud Run default)
+# Expose port (documentation only)
 EXPOSE 8080
 
-# Run the application with uvicorn - bind to 0.0.0.0 and use PORT env var
-CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
+# ---- Start application
+# Use python -m uvicorn for better module resolution
+# Since main.py is directly in /app, we use main:app
+CMD exec python -m uvicorn main:app --host 0.0.0.0 --port ${PORT}
