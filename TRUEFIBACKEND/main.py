@@ -170,8 +170,9 @@ async def health_check():
             agent_status = "orchestrator_v4_ready"
         
         return {
-            "status": "healthy", 
+            "status": "healthy",
             "database": "connected",
+            "version": "1.0.1",
             "agent_system": agent_status,
             "version": "2.0.0"
         }
