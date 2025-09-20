@@ -1220,12 +1220,61 @@ function AppleChatInterfaceInner() {
         // Extract message content and metadata from response
         aiResponseContent = data.content || data.message || data.response || "I'm here to help with your financial journey!"
         const metadata = data.metadata || null
+        const richContent = data.rich_content || null
+
+        // Generate chart tags from rich_content UI blocks if present
+        let enhancedContent = aiResponseContent
+        if (richContent && richContent.ui_blocks && Array.isArray(richContent.ui_blocks)) {
+          richContent.ui_blocks.forEach((block: any) => {
+            if (block.type === 'line_chart' || block.type === 'bar_chart' || block.type === 'pie_chart') {
+              // Convert UI block to chart tag format
+              const chartType = block.type.replace('_chart', '')
+
+              // Convert backend format to frontend format
+              let chartData = []
+              if (block.data.labels && block.data.datasets) {
+                // Backend format with labels and datasets
+                const labels = block.data.labels || []
+                const dataset = block.data.datasets[0] || {}
+                const values = dataset.data || []
+                chartData = labels.map((label: string, i: number) => ({
+                  x: label,
+                  [dataset.label || 'value']: values[i] || 0
+                }))
+              } else if (block.data.labels && block.data.values) {
+                // Alternative format with labels and values
+                const labels = block.data.labels || []
+                const values = block.data.values || []
+                chartData = labels.map((label: string, i: number) => ({
+                  x: label,
+                  value: values[i] || 0
+                }))
+              }
+
+              const chartTag = `<chart type="${chartType}" title="${block.title || ''}" colors='${JSON.stringify(block.data.colors || ["#0070f3","#10b981"])}'>${JSON.stringify(chartData)}</chart>`
+              enhancedContent += `\n\n${chartTag}`
+            } else if (block.type === 'table' && block.data) {
+              // Format table data as markdown
+              const headers = block.data.headers || []
+              const rows = block.data.rows || []
+              if (headers.length > 0 && rows.length > 0) {
+                let tableContent = `\n\n**${block.title || 'Data'}**\n\n`
+                tableContent += '| ' + headers.join(' | ') + ' |\n'
+                tableContent += '| ' + headers.map(() => '---').join(' | ') + ' |\n'
+                rows.forEach((row: any[]) => {
+                  tableContent += '| ' + row.join(' | ') + ' |\n'
+                })
+                enhancedContent += tableContent
+              }
+            }
+          })
+        }
 
         // Update the streaming message with full content and metadata
         setMessages((prev) =>
           prev.map(msg =>
             msg.id === streamingId
-              ? { ...msg, content: aiResponseContent, metadata: metadata }
+              ? { ...msg, content: enhancedContent, metadata: metadata }
               : msg
           )
         )
