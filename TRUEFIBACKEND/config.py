@@ -18,16 +18,16 @@ class Config:
         # Cloud Run with Cloud SQL - use Unix socket
         DB_HOST = os.getenv("DB_HOST", "/cloudsql/truefi:us-central1:true-fi-db")
         DB_PORT = None  # Unix socket doesn't use port
-        DB_NAME = os.getenv("DB_NAME", "truefi")
-        DB_USER = os.getenv("DB_USER", "postgres")
+        DB_NAME = os.getenv("DB_NAME", "truefi_app_data")
+        DB_USER = os.getenv("DB_USER", "truefi_user")
         DB_PASSWORD = os.getenv("DB_PASSWORD", "")
         DB_SSLMODE = os.getenv("DB_SSLMODE", "disable")  # Unix socket is already secure
     else:
         # Local development
         DB_HOST = os.getenv("DB_HOST", "localhost")
         DB_PORT = int(os.getenv("DB_PORT", "5432"))
-        DB_NAME = os.getenv("DB_NAME", "truefi")
-        DB_USER = os.getenv("DB_USER", "postgres")
+        DB_NAME = os.getenv("DB_NAME", "truefi_app_data")
+        DB_USER = os.getenv("DB_USER", "truefi_user")
         DB_PASSWORD = os.getenv("DB_PASSWORD", "")
         DB_SSLMODE = os.getenv("DB_SSLMODE", "require")
 

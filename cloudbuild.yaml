@@ -41,7 +41,7 @@ steps:
       '--execution-environment', 'gen2',  # Use 2nd gen execution environment
       '--cpu-boost',  # CPU boost during startup
       '--service-account', 'cloud-run-sa@$PROJECT_ID.iam.gserviceaccount.com',
-      '--set-env-vars', 'PORT=8080,PYTHONUNBUFFERED=1,DB_NAME=truefi,DB_USER=postgres,DB_PASSWORD=${_DB_PASSWORD},OPENAI_API_KEY=${_OPENAI_API_KEY},JWT_SECRET=${_JWT_SECRET}'
+      '--set-env-vars', 'PORT=8080,PYTHONUNBUFFERED=1,DB_NAME=truefi_app_data,DB_USER=truefi_user,DB_PASSWORD=${_DB_PASSWORD},OPENAI_API_KEY=${_OPENAI_API_KEY},JWT_SECRET=${_JWT_SECRET}'
     ]
 
 images:
