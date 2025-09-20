@@ -16,17 +16,23 @@ class DatabasePool:
 
     def __init__(self, min_conn=1, max_conn=10):
         """Initialize the database connection pool"""
-        self.pool = ThreadedConnectionPool(
-            minconn=min_conn,
-            maxconn=max_conn,
-            host=config.DB_HOST,
-            port=config.DB_PORT,
-            database=config.DB_NAME,
-            user=config.DB_USER,
-            password=config.DB_PASSWORD,
-            sslmode=config.DB_SSLMODE,
-            cursor_factory=RealDictCursor
-        )
+        # Build connection parameters
+        conn_params = {
+            'minconn': min_conn,
+            'maxconn': max_conn,
+            'host': config.DB_HOST,
+            'database': config.DB_NAME,
+            'user': config.DB_USER,
+            'password': config.DB_PASSWORD,
+            'sslmode': config.DB_SSLMODE,
+            'cursor_factory': RealDictCursor
+        }
+
+        # Only add port if not using Unix socket (Cloud SQL)
+        if config.DB_PORT is not None:
+            conn_params['port'] = config.DB_PORT
+
+        self.pool = ThreadedConnectionPool(**conn_params)
         logger.info(f"Database pool initialized with {min_conn}-{max_conn} connections")
 
     @contextmanager

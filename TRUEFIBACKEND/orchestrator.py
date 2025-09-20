@@ -219,7 +219,7 @@ class AgentOrchestrator:
                     logger.warning(f"Failed to store assistant response in memory: {e}")
 
             # Log the complete orchestration
-            agent_logger.log_agent_execution(
+            agent_logger().log_agent_execution(
                 user_id=user_id,
                 agent_name="orchestrator",
                 input_data={'question': question, 'user_id': user_id},
@@ -249,7 +249,7 @@ class AgentOrchestrator:
             logger.error(error_msg)
 
             # Log the error
-            agent_logger.log_agent_execution(
+            agent_logger().log_agent_execution(
                 user_id=user_id,
                 agent_name="orchestrator",
                 input_data={'question': question, 'user_id': user_id},
@@ -297,7 +297,7 @@ class AgentOrchestrator:
                 return {'error': f"SQL generation failed: {sql_response['error']}"}, logs
 
             # Log SQL generation
-            agent_logger.log_agent_execution(
+            agent_logger().log_agent_execution(
                 user_id=user_id,
                 agent_name="sql_agent",
                 input_data=sql_request,
@@ -328,7 +328,7 @@ class AgentOrchestrator:
         # Sanitize SQL
         is_safe, error = SQLSanitizer.sanitize(sql)
         if not is_safe:
-            agent_logger.log_security_event(
+            agent_logger().log_security_event(
                 user_id=user_id,
                 event_type="sql_sanitizer_block",
                 details={'sql': sql, 'error': error},
@@ -345,7 +345,7 @@ class AgentOrchestrator:
         exec_time = (time.time() - exec_start) * 1000
 
         # Log SQL execution
-        agent_logger.log_sql_execution(
+        agent_logger().log_sql_execution(
             user_id=user_id,
             sql=safe_sql,
             params=params,
@@ -413,7 +413,7 @@ class AgentOrchestrator:
                 return {'error': f"Modeling failed: {model_response['error']}"}, logs
 
             # Log modeling
-            agent_logger.log_agent_execution(
+            agent_logger().log_agent_execution(
                 user_id=user_id,
                 agent_name="modeling_agent",
                 input_data=model_request,

@@ -147,7 +147,13 @@ except Exception as e:
 
 app = FastAPI(title="TrueFi Chatbot Backend")
 
-# Health check endpoint
+# Simple health check endpoint for Cloud Run (no DB check)
+@app.get("/healthz")
+async def healthz():
+    """Simple health check for Cloud Run startup probe"""
+    return {"status": "ok", "service": "truefi-backend", "version": "1.0.0"}
+
+# Health check endpoint with DB check
 @app.get("/health")
 async def health_check():
     try:

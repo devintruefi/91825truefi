@@ -168,5 +168,15 @@ class AgentLogger:
         else:
             logger.info(f"Security event: {json.dumps(log_entry, default=str)}")
 
-# Global logger instance
-agent_logger = AgentLogger()
+# Global logger instance - lazy initialization
+_agent_logger = None
+
+def get_agent_logger():
+    """Get the global agent logger instance (lazy initialization)"""
+    global _agent_logger
+    if _agent_logger is None:
+        _agent_logger = AgentLogger()
+    return _agent_logger
+
+# For backward compatibility
+agent_logger = get_agent_logger
