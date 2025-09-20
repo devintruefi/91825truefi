@@ -65,6 +65,12 @@ export async function GET(
       }
     })
 
+    // Fetch user preferences to get holding metadata (risk levels, notes, etc.)
+    const userPrefs = await prisma.user_preferences.findUnique({
+      where: { user_id: userId }
+    })
+    const holdingMetadata = ((userPrefs?.financial_goals as any)?.holding_metadata) || {}
+
     // Extract unique tickers for live price fetching
     const uniqueTickers = [...new Set(
       holdings
@@ -140,6 +146,9 @@ export async function GET(
       const currentPrice = livePrice || parseFloat(holding.institution_price?.toString() || "0");
       const currentValue = currentPrice * parseFloat(holding.quantity?.toString() || "0");
       
+      // Get metadata for this holding from user preferences
+      const metadata = holdingMetadata[holding.id] || {}
+
       return {
         id: holding.id,
         name: security?.name || 'Unknown Security',
@@ -154,13 +163,13 @@ export async function GET(
         account_id: holding.account_id || undefined,
         price_source: livePrice ? 'live' : 'cached',
         last_updated: livePrice ? new Date().toISOString() : holding.institution_price_datetime?.toISOString(),
-        notes: undefined, // Notes could be added to holdings table if needed
-        tags: [], // Tags could be added as a separate relation
-        dividends: 0, // Would need dividend tracking
-        expense_ratio: undefined, // Could be added to securities table
-        target_allocation: undefined, // Could be user preference
-        risk_level: getRiskLevelFromType(mapSecurityTypeToType(security?.security_type)),
-        is_favorite: false, // Could be added as user preference
+        notes: metadata.notes || undefined,
+        tags: metadata.tags || [],
+        dividends: metadata.dividends || 0,
+        expense_ratio: metadata.expense_ratio || undefined,
+        target_allocation: metadata.target_allocation || undefined,
+        risk_level: metadata.risk_level || getRiskLevelFromType(mapSecurityTypeToType(security?.security_type)),
+        is_favorite: metadata.is_favorite || false
         source: holding.account_id ? 'plaid' : 'manual'
       }
     })

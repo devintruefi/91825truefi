@@ -39,7 +39,7 @@ export async function PUT(
         return NextResponse.json({ error: "Investment not found or access denied" }, { status: 404 })
       }
 
-      // For holdings, we can only update certain fields
+      // For holdings, update what we can in the holdings table
       const updatedHolding = await prisma.holdings.update({
         where: {
           id: investmentId
@@ -50,6 +50,53 @@ export async function PUT(
           updated_at: new Date()
         }
       })
+
+      // Store additional metadata (risk_level, notes, etc.) in user preferences
+      if (body.risk_level !== undefined || body.notes !== undefined || body.target_allocation !== undefined) {
+        const userPrefs = await prisma.user_preferences.findUnique({
+          where: { user_id: userId }
+        })
+
+        const currentGoals = (userPrefs?.financial_goals as any) || {}
+        const holdingMetadata = currentGoals.holding_metadata || {}
+
+        // Update metadata for this holding
+        holdingMetadata[investmentId] = {
+          ...holdingMetadata[investmentId],
+          risk_level: body.risk_level,
+          notes: body.notes,
+          target_allocation: body.target_allocation,
+          is_favorite: body.is_favorite,
+          updated_at: new Date().toISOString()
+        }
+
+        await prisma.user_preferences.upsert({
+          where: { user_id: userId },
+          update: {
+            financial_goals: {
+              ...currentGoals,
+              holding_metadata: holdingMetadata
+            },
+            updated_at: new Date()
+          },
+          create: {
+            id: require('crypto').randomUUID(),
+            user_id: userId,
+            theme: 'light',
+            notifications_enabled: true,
+            email_notifications: true,
+            push_notifications: false,
+            currency: 'USD',
+            timezone: 'America/New_York',
+            language: 'en',
+            financial_goals: {
+              holding_metadata: holdingMetadata
+            },
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        })
+      }
 
       return NextResponse.json({
         success: true,
