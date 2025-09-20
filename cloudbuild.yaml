@@ -1,42 +1,38 @@
 options:
   logging: CLOUD_LOGGING_ONLY
 
-serviceAccount: projects/river-sky-455001-j1/serviceAccounts/118529284371@cloudbuild.gserviceaccount.com
-
 steps:
   # Build Docker image from TRUEFIBACKEND/Dockerfile
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'build',
-      '-t', 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA',
+      '-t', 'gcr.io/truefi/truefi-backend:$SHORT_SHA',
       '-f', 'TRUEFIBACKEND/Dockerfile',
       'TRUEFIBACKEND'
     ]
 
-  # Push Docker image to Artifact Registry
+  # Push Docker image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
     args: [
       'push',
-      'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA'
+      'gcr.io/truefi/truefi-backend:$SHORT_SHA'
     ]
 
   # Deploy to Cloud Run with Cloud SQL connection
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args: [
-      'run', 'deploy', 'truefi-api-service',
-      '--image', 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA',
+      'run', 'deploy', 'truefi-backend',
+      '--image', 'gcr.io/truefi/truefi-backend:$SHORT_SHA',
       '--region', 'us-central1',
       '--platform', 'managed',
-      '--add-cloudsql-instances', 'river-sky-455001-j1:us-central1:true-fi-db',
+      '--add-cloudsql-instances', 'truefi:us-central1:true-fi-db',
       '--allow-unauthenticated',
-      '--port', '8000',
+      '--port', '8080',
       '--memory', '512Mi',
       '--cpu', '1',
-      '--max-instances', '10',
-      '--set-env-vars', 'DB_HOST=/cloudsql/river-sky-455001-j1:us-central1:true-fi-db,DB_PORT=5432,DB_NAME=truefi_db,DB_USER=truefi_user,DB_SSL_MODE=disable',
-      '--set-secrets', 'DB_PASSWORD=DB_PASSWORD:latest'
+      '--max-instances', '10'
     ]
 
 images:
-  - 'us-west2-docker.pkg.dev/river-sky-455001-j1/truefi-images/penny-api:$SHORT_SHA'
+  - 'gcr.io/truefi/truefi-backend:$SHORT_SHA'
