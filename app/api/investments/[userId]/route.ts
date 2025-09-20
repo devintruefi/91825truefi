@@ -169,7 +169,7 @@ export async function GET(
         expense_ratio: metadata.expense_ratio || undefined,
         target_allocation: metadata.target_allocation || undefined,
         risk_level: metadata.risk_level || getRiskLevelFromType(mapSecurityTypeToType(security?.security_type)),
-        is_favorite: metadata.is_favorite || false
+        is_favorite: metadata.is_favorite || false,
         source: holding.account_id ? 'plaid' : 'manual'
       }
     })
