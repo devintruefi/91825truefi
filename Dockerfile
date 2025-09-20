@@ -22,8 +22,11 @@ COPY TRUEFIBACKEND/ .
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
+# Set environment variable to prevent Python buffering
+ENV PYTHONUNBUFFERED=1
+
 # Expose port 8080 (Cloud Run default)
 EXPOSE 8080
 
-# Run the application with uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run the application with uvicorn - bind to 0.0.0.0 and use PORT env var
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
