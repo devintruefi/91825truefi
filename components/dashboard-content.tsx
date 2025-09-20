@@ -12,8 +12,8 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { InteractiveGoalChart } from "@/components/interactive-goal-chart"
-import { 
-  TrendingUp, TrendingDown, DollarSign, Target, PiggyBank, CreditCard, 
+import {
+  TrendingUp, TrendingDown, DollarSign, Target, PiggyBank, CreditCard,
   Building2, ArrowUpRight, ArrowDownRight, Search, Filter, Calendar,
   Bell, Settings, RefreshCw, Plus, Edit2, Trash2, Check, X, Loader2,
   Home, Car, Briefcase, Heart, ShoppingBag, Utensils, Plane, Zap,
@@ -22,6 +22,7 @@ import {
   AlertTriangle, CheckCircle, Smartphone, Star, Pin, Award, LineChart,
   User, MapPin, Shield, Globe, Lock
 } from "lucide-react"
+import { LineChart as RechartsLineChart, Line, Area, AreaChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts"
 
 // Enhanced styling classes for the premium dashboard experience
 const glassmorphismCard = "backdrop-blur-xl bg-white/70 dark:bg-gray-950/70 border border-gray-200/50 dark:border-gray-800/50 shadow-2xl shadow-gray-200/20 dark:shadow-gray-950/20 hover:shadow-3xl hover:shadow-gray-300/30 dark:hover:shadow-gray-900/40 transition-all duration-500 ease-out hover:scale-[1.01] hover:-translate-y-1 rounded-2xl"
@@ -154,6 +155,38 @@ const sampleBudget = {
     { name: "Income", amount: 7500, type: "income", percentage: 100.0 },
   ]
 };
+
+// Generate realistic portfolio performance data (last 12 months)
+const generatePortfolioData = () => {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
+  const baseValue = 250000; // Starting portfolio value
+  let currentValue = baseValue;
+  const data = [];
+
+  // Generate realistic monthly returns with some volatility
+  const monthlyReturns = [
+    0.023, -0.012, 0.031, 0.018, -0.008, 0.027,
+    0.019, 0.011, -0.015, 0.034, 0.028, 0.022
+  ];
+
+  months.forEach((month, i) => {
+    currentValue = currentValue * (1 + monthlyReturns[i]);
+    data.push({
+      month,
+      value: Math.round(currentValue),
+      return: (monthlyReturns[i] * 100).toFixed(1),
+      benchmark: Math.round(baseValue * (1 + (i + 1) * 0.008)) // 0.8% monthly benchmark
+    });
+  });
+
+  return data;
+};
+
+const portfolioPerformanceData = generatePortfolioData();
 
 const sampleNotifications = [
   { id: 1, title: "Budget Alert", message: "You're approaching your dining budget limit", type: "warning", timestamp: "2 hours ago" },
@@ -1071,13 +1104,110 @@ export function DashboardContent() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {/* Simplified chart representation */}
-                      <div className="h-64 bg-gradient-to-br from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 rounded-lg flex items-center justify-center">
-                        <div className="text-center">
-                          <LineChart className="h-12 w-12 text-green-600 dark:text-green-400 mx-auto mb-2" />
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Performance Chart</p>
-                          <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-2">+23.8%</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Year to Date</p>
+                      {/* Portfolio Performance Chart - Polygon Style */}
+                      <div className="relative">
+                        {/* Performance Summary */}
+                        <div className="mb-4">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-bold text-gray-900 dark:text-white">
+                              {formatCurrency(portfolioPerformanceData[portfolioPerformanceData.length - 1].value)}
+                            </span>
+                            <span className="text-lg font-semibold text-green-600 dark:text-green-400">
+                              +{formatCurrency(portfolioPerformanceData[portfolioPerformanceData.length - 1].value - 250000)}
+                            </span>
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                              +{((portfolioPerformanceData[portfolioPerformanceData.length - 1].value / 250000 - 1) * 100).toFixed(1)}%
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Total Portfolio Value</p>
+                        </div>
+
+                        {/* Actual Chart */}
+                        <div className="h-80">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={portfolioPerformanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                              <defs>
+                                <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                </linearGradient>
+                                <linearGradient id="benchmarkGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke="#e5e7eb"
+                                strokeOpacity={0.3}
+                                vertical={false}
+                              />
+                              <XAxis
+                                dataKey="month"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 12, fill: '#6b7280' }}
+                                dy={10}
+                              />
+                              <YAxis
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 12, fill: '#6b7280' }}
+                                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
+                                domain={[240000, 'dataMax']}
+                                dx={-10}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                  backdropFilter: 'blur(10px)',
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)'
+                                }}
+                                labelStyle={{ fontWeight: 600, color: '#111827' }}
+                                formatter={(value: any, name: string) => {
+                                  if (name === 'value') return [`${formatCurrency(value)}`, 'Portfolio'];
+                                  if (name === 'benchmark') return [`${formatCurrency(value)}`, 'S&P 500'];
+                                  return [value, name];
+                                }}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="benchmark"
+                                stroke="#6366f1"
+                                strokeWidth={1.5}
+                                fill="url(#benchmarkGradient)"
+                                strokeDasharray="5 5"
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="value"
+                                stroke="#10b981"
+                                strokeWidth={2.5}
+                                fill="url(#portfolioGradient)"
+                              />
+                              <ReferenceLine
+                                y={250000}
+                                stroke="#9ca3af"
+                                strokeDasharray="3 3"
+                                strokeWidth={1}
+                                label={{ value: "Initial", position: "left", fill: '#6b7280', fontSize: 11 }}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex items-center gap-6 mt-4 justify-center">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">Your Portfolio</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">S&P 500 Benchmark</span>
+                          </div>
                         </div>
                       </div>
                       
