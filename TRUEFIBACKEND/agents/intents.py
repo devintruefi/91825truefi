@@ -124,14 +124,14 @@ INTENT_TO_ALLOWED: Dict[Intent, Dict[str, Any]] = {
         "tables": ["holdings", "securities", "accounts"],
         "columns": ["account_id", "security_id", "quantity", "cost_basis",
                    "institution_value", "institution_price"],
-        "notes": "Use holdings and securities tables. Never use transactions.",
+        "notes": "Use holdings and securities tables. Join accounts for user_id filter.",
         "template_sql": """
             SELECT s.name, s.ticker, h.quantity, h.institution_value as market_value,
                    a.name as account_name
             FROM holdings h
             JOIN securities s ON s.id = h.security_id
             JOIN accounts a ON a.id = h.account_id
-            WHERE h.user_id = %(user_id)s
+            WHERE a.user_id = %(user_id)s AND a.is_active = true
             ORDER BY h.institution_value DESC
         """
     },
