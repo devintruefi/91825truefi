@@ -1,27 +1,26 @@
-import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { NextResponse } from "next/server";
+import prisma from "@/lib/db";
 
 export async function GET() {
   try {
-    // Test database connection
-    await prisma.$connect()
-    
-    // Test a simple query
-    const result = await prisma.$queryRaw`SELECT 1 as test`
-    
-    return NextResponse.json({ 
-      status: 'success', 
-      message: 'Database connection successful',
-      test: result
-    })
-  } catch (error) {
-    console.error('Database connection test failed:', error)
-    return NextResponse.json({ 
-      status: 'error', 
-      message: 'Database connection failed',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
-  } finally {
-    await prisma.$disconnect()
+    const result = await prisma.$queryRaw`SELECT 1 as test`;
+    const tables = await prisma.$queryRaw`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = "public"
+      AND table_name = "plaid_connections"
+    `;
+
+    return NextResponse.json({
+      database: "connected",
+      plaid_connections_exists: tables.length > 0,
+      tables: tables
+    });
+  } catch (error: any) {
+    console.error("Database test error:", error);
+    return NextResponse.json({
+      error: error.message,
+      code: error.code
+    }, { status: 500 });
   }
-} 
+}
