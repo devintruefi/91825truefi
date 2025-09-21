@@ -40,7 +40,7 @@ steps:
       '--timeout', '300',  # 5 minute timeout for startup
       '--execution-environment', 'gen2',  # Use 2nd gen execution environment
       '--cpu-boost',  # CPU boost during startup
-      '--set-env-vars', 'PORT=8080,PYTHONUNBUFFERED=1,DB_NAME=truefi_app_data,DB_USER=truefi_user,DB_PASSWORD=${_DB_PASSWORD},OPENAI_API_KEY=${_OPENAI_API_KEY},JWT_SECRET=${_JWT_SECRET}'
+      '--set-env-vars', 'PYTHONUNBUFFERED=1,DB_NAME=truefi_app_data,DB_USER=truefi_user,DB_PASSWORD=${_DB_PASSWORD},OPENAI_API_KEY=${_OPENAI_API_KEY},JWT_SECRET=${_JWT_SECRET}'
     ]
 
 images:
