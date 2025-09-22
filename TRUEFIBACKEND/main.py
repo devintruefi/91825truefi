@@ -189,7 +189,13 @@ async def health_check():
 # CORS for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://truefi.ai"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://truefi.ai",
+        "https://www.truefi.ai",
+        "https://*.vercel.app"  # Allow all Vercel preview deployments
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
