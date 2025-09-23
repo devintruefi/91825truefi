@@ -60,11 +60,14 @@ class Config:
     @classmethod
     def validate(cls):
         """Validate required configuration"""
-        if not cls.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY is required")
-        if not cls.DB_PASSWORD:
-            raise ValueError("DB_PASSWORD is required")
-        if not cls.JWT_SECRET:
-            raise ValueError("JWT_SECRET is required")
+        # In Cloud Run, secrets are injected at runtime so may not be available during import
+        # Only validate if not in Cloud Run or if the values are actually set
+        if not cls.IS_CLOUD_RUN:
+            if not cls.OPENAI_API_KEY:
+                raise ValueError("OPENAI_API_KEY is required")
+            if not cls.DB_PASSWORD:
+                raise ValueError("DB_PASSWORD is required")
+            if not cls.JWT_SECRET:
+                raise ValueError("JWT_SECRET is required")
 
 config = Config()

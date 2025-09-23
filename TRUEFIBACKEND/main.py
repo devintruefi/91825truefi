@@ -86,6 +86,17 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 JWT_SECRET = os.getenv("JWT_SECRET", "6f7b0f47c27a44b0a0fc781c2e3e84b50a0f6f7a1c9d8c25b7d0fa492ce2a35b")
 
+# If DATABASE_URL doesn't have a password, construct it properly for Cloud Run
+if DATABASE_URL and "@/" in DATABASE_URL and not ":" in DATABASE_URL.split("@")[0].split("//")[-1]:
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+    if DB_PASSWORD:
+        # Insert password into the URL
+        parts = DATABASE_URL.split("@")
+        if len(parts) == 2:
+            user_part = parts[0].split("//")[-1]  # Get 'truefi_user' part
+            DATABASE_URL = f"postgresql://{user_part}:{DB_PASSWORD}@{parts[1]}"
+            logger.info("DATABASE_URL updated with password from DB_PASSWORD secret")
+
 # Validate configuration
 try:
     agent_config.validate()
