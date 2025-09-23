@@ -1723,7 +1723,11 @@ function AppleChatInterfaceInner() {
                         className="bg-blue-100 dark:bg-blue-900 text-gray-900 dark:text-gray-200 rounded-2xl px-6 py-4 text-sm lg:text-base shadow-lg"
                       >
                         <div className="prose prose-base dark:prose-invert max-w-none text-gray-900 dark:text-white">
-                          {message.content}
+                          {typeof message.content === 'string'
+                            ? message.content
+                            : typeof message.content === 'object' && message.content !== null
+                            ? JSON.stringify(message.content, null, 2)
+                            : String(message.content)}
                         </div>
                         <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 opacity-80">
                           {message.timestamp ? new Date(message.timestamp).toLocaleTimeString('en-US', { hour: "2-digit", minute: "2-digit" }) : ''}
@@ -1744,11 +1748,11 @@ function AppleChatInterfaceInner() {
                         >
                           {/* Removed onboarding progress - handled by dashboard */}
                           {message.metadata ? (
-                            <PennyResponseRenderer content={message.content || ''} metadata={message.metadata} />
+                            <PennyResponseRenderer content={typeof message.content === 'string' ? message.content : JSON.stringify(message.content || '')} metadata={message.metadata} />
                           ) : (
                             message.id === streamingMessageId && isTyping
-                              ? renderPennyMessage(message.content || '', theme)
-                              : renderPennyMessage(message.content || '', theme)
+                              ? renderPennyMessage(typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''), theme)
+                              : renderPennyMessage(typeof message.content === 'string' ? message.content : JSON.stringify(message.content || ''), theme)
                           )}
                               
                           {/* Render interactive component if present */}
