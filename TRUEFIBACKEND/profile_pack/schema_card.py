@@ -2,6 +2,7 @@
 # Schema card generator for database tables
 
 from typing import Dict, Any, List
+from .comprehensive_schema import ComprehensiveSchemaCard
 
 class TransactionSchemaCard:
     """Generates schema card for database tables"""
@@ -99,6 +100,9 @@ class TransactionSchemaCard:
                     "use_for": ["financial goals", "savings goals", "targets", "millionaire goal"]
                 }
             },
+
+            # Include all comprehensive tables
+            **ComprehensiveSchemaCard.get_all_additional_tables(),
 
             # Transaction columns for backward compatibility
             "columns": {

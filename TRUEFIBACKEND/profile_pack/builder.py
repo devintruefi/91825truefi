@@ -66,6 +66,12 @@ class ProfilePackBuilder:
                 profile_pack['goals'] = self._get_goals(user_id)
                 profile_pack['recurring_income'] = self._get_recurring_income(user_id)
                 profile_pack['budgets'] = self._get_budgets(user_id)
+
+                # Add comprehensive data for complete context
+                profile_pack['insurances'] = self._get_insurances(user_id)
+                profile_pack['loan_details'] = self._get_loan_details(user_id)
+                profile_pack['real_estate'] = self._get_real_estate_details(user_id)
+                profile_pack['vehicles'] = self._get_vehicle_details(user_id)
             else:
                 # Provide empty lists for lightweight intents
                 profile_pack['holdings'] = []
@@ -74,6 +80,10 @@ class ProfilePackBuilder:
                 profile_pack['goals'] = []
                 profile_pack['recurring_income'] = []
                 profile_pack['budgets'] = []
+                profile_pack['insurances'] = []
+                profile_pack['loan_details'] = []
+                profile_pack['real_estate'] = []
+                profile_pack['vehicles'] = []
 
             # Cache the result
             self._cache_result(cache_key, profile_pack)
@@ -540,6 +550,67 @@ class ProfilePackBuilder:
             'essential_expenses_avg': round(essential_expenses, 2),
             'discretionary_expenses_avg': round(discretionary_expenses, 2)
         }
+
+    def _get_insurances(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get insurance policies"""
+        query = """
+        SELECT
+            id, type, provider, policy_number,
+            coverage_amount, premium, frequency,
+            deductible, effective_date, expiration_date
+        FROM insurances
+        WHERE user_id = %(user_id)s AND is_active = true
+        ORDER BY coverage_amount DESC
+        LIMIT 20
+        """
+        results = self.db_pool.execute_query(query, {'user_id': user_id})
+        return [self._serialize_row(row) for row in results]
+
+    def _get_loan_details(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get detailed loan information"""
+        query = """
+        SELECT
+            ld.account_id, ld.interest_rate, ld.origination_principal,
+            ld.origination_date, ld.maturity_date, ld.next_payment_due,
+            ld.next_payment_amount, ld.minimum_payment_amount,
+            ld.ytd_interest_paid, ld.ytd_principal_paid,
+            a.name as account_name, a.balance
+        FROM loan_details ld
+        JOIN accounts a ON ld.account_id = a.id
+        WHERE a.user_id = %(user_id)s
+        ORDER BY a.balance DESC
+        LIMIT 50
+        """
+        results = self.db_pool.execute_query(query, {'user_id': user_id})
+        return [self._serialize_row(row) for row in results]
+
+    def _get_real_estate_details(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get real estate property details"""
+        query = """
+        SELECT
+            red.*, ma.name, ma.value
+        FROM real_estate_details red
+        JOIN manual_assets ma ON red.manual_asset_id = ma.id
+        WHERE ma.user_id = %(user_id)s
+        ORDER BY red.market_value DESC NULLS LAST
+        LIMIT 20
+        """
+        results = self.db_pool.execute_query(query, {'user_id': user_id})
+        return [self._serialize_row(row) for row in results]
+
+    def _get_vehicle_details(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get vehicle asset details"""
+        query = """
+        SELECT
+            va.*, ma.name, ma.value
+        FROM vehicle_assets va
+        JOIN manual_assets ma ON va.asset_id = ma.id
+        WHERE ma.user_id = %(user_id)s
+        ORDER BY ma.value DESC
+        LIMIT 20
+        """
+        results = self.db_pool.execute_query(query, {'user_id': user_id})
+        return [self._serialize_row(row) for row in results]
 
     def _get_schema_excerpt(self) -> Dict[str, List[str]]:
         """Return schema excerpt for agent reference"""
