@@ -22,25 +22,29 @@ steps:
       'gcr.io/$PROJECT_ID/truefi-backend'
     ]
 
-  # Deploy to Cloud Run with optimized settings
+  # Deploy to Cloud Run with production settings
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args: [
-      'run', 'deploy', 'truefi-backend',
+      'run', 'deploy', 'truefi-backend-prod',  # New service name for production
       '--image', 'gcr.io/$PROJECT_ID/truefi-backend:$SHORT_SHA',
       '--region', 'us-central1',
       '--platform', 'managed',
       '--add-cloudsql-instances', '$PROJECT_ID:us-central1:true-fi-db',
-      '--allow-unauthenticated',
+      '--no-allow-unauthenticated',  # Require authentication for production
+      '--vpc-connector', 'truefi-connector',  # Use VPC connector for private IP
       '--port', '8080',
-      '--memory', '1Gi',  # Increased memory for better performance
-      '--cpu', '2',  # Increased CPU
+      '--memory', '1Gi',
+      '--cpu', '2',
       '--min-instances', '1',  # Keep 1 instance warm
       '--max-instances', '10',
-      '--timeout', '300',  # 5 minute timeout for startup
-      '--execution-environment', 'gen2',  # Use 2nd gen execution environment
-      '--cpu-boost',  # CPU boost during startup
-      '--set-env-vars', 'PYTHONUNBUFFERED=1,DB_NAME=truefi_app_data,DB_USER=truefi_user,DB_PASSWORD=${_DB_PASSWORD},OPENAI_API_KEY=${_OPENAI_API_KEY},JWT_SECRET=${_JWT_SECRET}'
+      '--timeout', '300',
+      '--execution-environment', 'gen2',
+      '--cpu-boost',
+      # Use private IP for database connection
+      '--set-env-vars', 'PYTHONUNBUFFERED=1,DB_HOST=10.109.208.3,DB_PORT=5432,DB_NAME=truefi_app_data,DB_USER=truefi_user,DB_SSLMODE=disable',
+      # Use secrets from Secret Manager
+      '--set-secrets', 'DB_PASSWORD=db-password:latest,OPENAI_API_KEY=openai-api-key:latest,JWT_SECRET=jwt-secret:latest'
     ]
 
 images:
