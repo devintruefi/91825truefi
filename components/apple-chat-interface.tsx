@@ -1,4 +1,5 @@
 "use client"
+// v0.1.1 - Fixed React error #31 for logged-in users
 
 import React, { useState, useRef, useEffect, Suspense } from "react"
 import { Button } from "@/components/ui/button"
