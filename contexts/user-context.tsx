@@ -126,7 +126,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
             console.log('Token format check:', authToken.substring(0, 50) + '...');
             
             // Try to validate token with backend
-            const response = await fetch('http://localhost:8080/api/auth/validate', {
+            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
+            const response = await fetch(`${backendUrl}/api/auth/validate`, {
               method: 'GET',
               headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -416,7 +417,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
       // Try to call backend API first
       try {
-        const response = await fetch('http://localhost:8080/api/users', {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
+        const response = await fetch(`${backendUrl}/api/users`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -516,7 +518,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
       // Try to call backend API first
       try {
-        const response = await fetch(`http://localhost:8080/api/users/${userId}`, {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
+        const response = await fetch(`${backendUrl}/api/users/${userId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
