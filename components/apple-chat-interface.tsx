@@ -1218,7 +1218,9 @@ function AppleChatInterfaceInner() {
         }
         
         // Extract message content and metadata from response
-        aiResponseContent = data.content || data.message || data.response || "I'm here to help with your financial journey!"
+        // Ensure we're getting a string for the message content
+        const rawMessage = data.content || data.message || data.response || "I'm here to help with your financial journey!"
+        aiResponseContent = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage)
         const metadata = data.metadata || null
         const richContent = data.rich_content || null
 
