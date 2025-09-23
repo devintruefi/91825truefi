@@ -351,7 +351,11 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
             )}
             {result && (
               <div className="mt-4 p-3 bg-primary/10 rounded-lg">
-                <div className="font-semibold text-lg">Result: {result}</div>
+                <div className="font-semibold text-lg">
+                  Result: {typeof result === 'object' && result !== null
+                    ? JSON.stringify(result, null, 2)
+                    : result}
+                </div>
               </div>
             )}
           </CardContent>
@@ -464,7 +468,11 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
                   <div className="font-semibold text-sm">{comp.name}</div>
                   <div className="text-sm text-muted-foreground font-mono">{comp.formula}</div>
                   <div className="text-sm mt-1">
-                    Result: <span className="font-semibold">{comp.result}</span>
+                    Result: <span className="font-semibold">
+                      {typeof comp.result === 'object' && comp.result !== null
+                        ? JSON.stringify(comp.result, null, 2)
+                        : comp.result}
+                    </span>
                   </div>
                 </div>
               ))}
