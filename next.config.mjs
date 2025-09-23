@@ -14,6 +14,12 @@ const nextConfig = {
   // Ensure proper environment variable handling
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
+    BUILD_ID: Date.now().toString(), // Force cache bust
+  },
+  // Force webpack to rebuild
+  webpack: (config) => {
+    config.cache = false;
+    return config;
   },
 }
 
