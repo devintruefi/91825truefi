@@ -46,6 +46,57 @@ class TransactionSchemaCard:
                         "pending": "boolean"
                     },
                     "use_for": ["spending", "expenses", "income", "transaction history"]
+                },
+                "holdings": {
+                    "description": "Investment holdings and positions",
+                    "columns": {
+                        "id": "uuid",
+                        "account_id": "uuid",
+                        "security_id": "uuid",
+                        "quantity": "numeric",
+                        "cost_basis": "numeric",
+                        "institution_price": "numeric",
+                        "institution_value": "numeric",
+                        "last_price_date": "date"
+                    },
+                    "use_for": ["investments", "portfolio", "holdings", "stocks", "etfs", "positions"]
+                },
+                "securities": {
+                    "description": "Security information for holdings",
+                    "columns": {
+                        "id": "uuid",
+                        "name": "text",
+                        "ticker": "text",
+                        "security_type": "text",
+                        "cusip": "text",
+                        "currency": "text"
+                    },
+                    "use_for": ["investment details", "security info", "ticker symbols", "stock names"]
+                },
+                "manual_assets": {
+                    "description": "Manual assets entered by user",
+                    "columns": {
+                        "id": "uuid",
+                        "user_id": "uuid",
+                        "name": "text",
+                        "asset_class": "text",
+                        "value": "numeric",
+                        "notes": "text"
+                    },
+                    "use_for": ["manual investments", "real estate", "collectibles", "other assets"]
+                },
+                "goals": {
+                    "description": "Financial goals and targets",
+                    "columns": {
+                        "id": "uuid",
+                        "user_id": "uuid",
+                        "name": "text",
+                        "target_amount": "numeric",
+                        "current_amount": "numeric",
+                        "target_date": "date",
+                        "priority": "text"
+                    },
+                    "use_for": ["financial goals", "savings goals", "targets", "millionaire goal"]
                 }
             },
 
@@ -142,6 +193,42 @@ class TransactionSchemaCard:
                         GROUP BY merchant_name
                         ORDER BY transaction_count DESC
                         LIMIT 20
+                    """
+                },
+                {
+                    "description": "User's investment holdings",
+                    "sql": """
+                        SELECT
+                            s.name AS security_name,
+                            s.ticker,
+                            s.security_type,
+                            h.quantity,
+                            h.institution_price AS price_per_share,
+                            h.institution_value AS total_value,
+                            h.cost_basis,
+                            (h.institution_value - h.cost_basis) AS gain_loss,
+                            ((h.institution_value - h.cost_basis) / h.cost_basis * 100) AS return_percentage
+                        FROM holdings h
+                        JOIN securities s ON h.security_id = s.id
+                        JOIN accounts a ON h.account_id = a.id
+                        WHERE a.user_id = %(user_id)s
+                        ORDER BY h.institution_value DESC
+                    """
+                },
+                {
+                    "description": "Portfolio summary by asset type",
+                    "sql": """
+                        SELECT
+                            s.security_type,
+                            COUNT(*) AS position_count,
+                            SUM(h.institution_value) AS total_value,
+                            SUM(h.institution_value - h.cost_basis) AS total_gain_loss
+                        FROM holdings h
+                        JOIN securities s ON h.security_id = s.id
+                        JOIN accounts a ON h.account_id = a.id
+                        WHERE a.user_id = %(user_id)s
+                        GROUP BY s.security_type
+                        ORDER BY total_value DESC
                     """
                 },
                 {

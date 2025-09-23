@@ -48,11 +48,48 @@ Generate precise, safe, and efficient PostgreSQL queries based on the user's que
 - `pending` (boolean): Transaction pending status
 - `account_id` (uuid): Associated account
 
+### Holdings Table (for investments, portfolio):
+- `id` (uuid): Holding identifier
+- `account_id` (uuid): Investment account
+- `security_id` (uuid): Security identifier
+- `quantity` (numeric): Number of shares
+- `cost_basis` (numeric): Purchase cost basis
+- `institution_price` (numeric): Current price per share
+- `institution_value` (numeric): Current total value
+- `last_price_date` (date): Last price update
+
+### Securities Table (for investment details):
+- `id` (uuid): Security identifier
+- `name` (text): Security name
+- `ticker` (text): Stock ticker symbol
+- `security_type` (text): Type (stock, etf, mutual_fund, etc.)
+- `cusip` (text): CUSIP identifier
+- `currency` (text): Trading currency
+
+### Manual Assets Table (for user-entered assets):
+- `user_id` (uuid): User identifier
+- `name` (text): Asset name
+- `asset_class` (text): Asset category
+- `value` (numeric): Current value
+- `notes` (text): User notes
+
+### Goals Table (for financial goals):
+- `user_id` (uuid): User identifier
+- `name` (text): Goal name
+- `target_amount` (numeric): Target amount
+- `current_amount` (numeric): Current saved amount
+- `target_date` (date): Target achievement date
+- `priority` (text): Priority level
+
 ## IMPORTANT: Table Selection Logic
 - **Account balances, cash, net worth** → Query `accounts` table
 - **Spending, expenses, income, transactions** → Query `transactions` table
+- **Investments, portfolio, holdings, stocks** → Query `holdings` JOIN `securities` JOIN `accounts`
+- **Financial goals, millionaire target** → Query `goals` table
 - **"How much money/cash do I have"** → Query `accounts` table, sum `balance`
 - **"How much did I spend"** → Query `transactions` table with `amount < 0`
+- **"What are my investments"** → Query `holdings` with security details
+- **"Investment strategy"** → Query `holdings`, `goals`, and risk profile
 
 ## Example Queries:
 
@@ -156,6 +193,79 @@ WHERE user_id = %(user_id)s
 GROUP BY merchant_name
 ORDER BY total_spent DESC
 LIMIT 20
+```
+
+### User's investment holdings:
+```sql
+SELECT
+  s.name AS security_name,
+  s.ticker,
+  s.security_type,
+  h.quantity,
+  h.institution_price AS price_per_share,
+  h.institution_value AS total_value,
+  h.cost_basis,
+  (h.institution_value - h.cost_basis) AS gain_loss,
+  CASE
+    WHEN h.cost_basis > 0
+    THEN ((h.institution_value - h.cost_basis) / h.cost_basis * 100)
+    ELSE 0
+  END AS return_percentage
+FROM holdings h
+JOIN securities s ON h.security_id = s.id
+JOIN accounts a ON h.account_id = a.id
+WHERE a.user_id = %(user_id)s
+ORDER BY h.institution_value DESC
+LIMIT %(max_rows)s
+```
+
+### Portfolio risk assessment:
+```sql
+WITH portfolio_summary AS (
+  SELECT
+    s.security_type,
+    COUNT(*) AS position_count,
+    SUM(h.institution_value) AS total_value,
+    SUM(h.institution_value - h.cost_basis) AS total_gain_loss
+  FROM holdings h
+  JOIN securities s ON h.security_id = s.id
+  JOIN accounts a ON h.account_id = a.id
+  WHERE a.user_id = %(user_id)s
+  GROUP BY s.security_type
+),
+total_portfolio AS (
+  SELECT SUM(total_value) AS portfolio_total
+  FROM portfolio_summary
+)
+SELECT
+  ps.security_type,
+  ps.position_count,
+  ps.total_value,
+  ps.total_gain_loss,
+  (ps.total_value / tp.portfolio_total * 100) AS allocation_percentage
+FROM portfolio_summary ps, total_portfolio tp
+ORDER BY ps.total_value DESC
+```
+
+### Financial goals (millionaire target):
+```sql
+SELECT
+  name AS goal_name,
+  target_amount,
+  current_amount,
+  (target_amount - current_amount) AS amount_needed,
+  CASE
+    WHEN target_amount > 0
+    THEN (current_amount / target_amount * 100)
+    ELSE 0
+  END AS progress_percentage,
+  target_date,
+  EXTRACT(DAYS FROM target_date - CURRENT_DATE) AS days_remaining
+FROM goals
+WHERE user_id = %(user_id)s
+  AND is_active = true
+ORDER BY priority, target_date
+LIMIT %(max_rows)s
 ```
 
 ## Time Window Interpretations:

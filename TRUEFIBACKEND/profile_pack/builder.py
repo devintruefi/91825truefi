@@ -98,6 +98,7 @@ class ProfilePackBuilder:
             return False
 
         # Intents that only need basic account and transaction data
+        # DO NOT include investment-related intents here
         lightweight_intents = [
             'account_balances',
             'recent_transactions',
@@ -106,6 +107,7 @@ class ProfilePackBuilder:
             'cashflow_summary',
             'transaction_search',
             'savings_rate'
+            # 'investment_positions' and 'investment_analysis' removed - they need holdings data
         ]
 
         return intent.lower() in lightweight_intents
