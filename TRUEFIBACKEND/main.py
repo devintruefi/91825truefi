@@ -86,8 +86,24 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 JWT_SECRET = os.getenv("JWT_SECRET", "6f7b0f47c27a44b0a0fc781c2e3e84b50a0f6f7a1c9d8c25b7d0fa492ce2a35b")
 
+# Construct DATABASE_URL if not provided but components are available
+if not DATABASE_URL:
+    DB_HOST = os.getenv("DB_HOST")
+    DB_NAME = os.getenv("DB_NAME")
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+
+    if DB_HOST and DB_NAME and DB_USER:
+        # For Cloud SQL Unix socket connection
+        if DB_HOST.startswith("/cloudsql/"):
+            DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@/{DB_NAME}?host={DB_HOST}"
+        else:
+            # For regular TCP connection
+            DB_PORT = os.getenv("DB_PORT", "5432")
+            DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        logger.info(f"DATABASE_URL constructed from components")
 # If DATABASE_URL doesn't have a password, construct it properly for Cloud Run
-if DATABASE_URL and "@/" in DATABASE_URL and not ":" in DATABASE_URL.split("@")[0].split("//")[-1]:
+elif DATABASE_URL and "@/" in DATABASE_URL and not ":" in DATABASE_URL.split("@")[0].split("//")[-1]:
     DB_PASSWORD = os.getenv("DB_PASSWORD", "")
     if DB_PASSWORD:
         # Insert password into the URL
