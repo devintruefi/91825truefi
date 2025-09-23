@@ -246,8 +246,23 @@ class PersonalizedCalculator:
         retirement_needed = annual_expenses * 25  # 4% withdrawal rate
 
         # Get current retirement savings
-        retirement_accounts = [acc for acc in self.accounts if acc.get('type') == 'retirement']
-        current_retirement_savings = sum(float(acc.get('balance', 0)) for acc in retirement_accounts)
+        # Look for retirement accounts or investment accounts that could be for retirement
+        retirement_accounts = [acc for acc in self.accounts
+                               if acc.get('type') in ['retirement', 'investment', '401k', 'ira', 'roth_ira']
+                               or acc.get('subtype') in ['401k', 'ira', 'roth_ira', 'retirement']
+                               or 'retirement' in acc.get('name', '').lower()
+                               or '401k' in acc.get('name', '').lower()
+                               or 'ira' in acc.get('name', '').lower()]
+
+        # If no specific retirement accounts, use a portion of investment accounts
+        if not retirement_accounts:
+            investment_accounts = [acc for acc in self.accounts
+                                    if acc.get('type') in ['investment', 'brokerage']
+                                    or acc.get('subtype') in ['investment', 'brokerage']]
+            # Assume 70% of investment accounts are for retirement
+            current_retirement_savings = sum(float(acc.get('balance', 0)) * 0.7 for acc in investment_accounts)
+        else:
+            current_retirement_savings = sum(float(acc.get('balance', 0)) for acc in retirement_accounts)
 
         # Calculate monthly contribution needed
         if years_to_retirement > 0:

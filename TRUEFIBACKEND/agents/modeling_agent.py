@@ -15,6 +15,7 @@ from agents.calculation_router import CalculationRouter
 from agents.intents import Intent
 from agents.router import classify_intent
 from agents.formatting import format_computation_result
+from agents.response_formatter import ResponseFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,12 @@ class ModelingAgent:
 
             # Use custom encoder to handle any remaining Decimal objects
             logger.info("Serializing final output")
-            return json.loads(json.dumps(validated_output.dict(), cls=DecimalEncoder))
+            result = json.loads(json.dumps(validated_output.dict(), cls=DecimalEncoder))
+
+            # Clean and format the response
+            result = ResponseFormatter.clean_response(result)
+
+            return result
 
         except Exception as e:
             logger.error(f"Modeling Agent error: {e}")
@@ -465,10 +471,12 @@ Sample data: {rows[0] if rows else 'None'}
         except Exception as e:
             logger.error(f"Failed to parse modeling agent response: {e}")
             # Fallback response
-            return {
+            fallback = {
                 'answer_markdown': f"I encountered an error analyzing your data: {str(e)}",
                 'assumptions': ["Unable to process data due to parsing error"],
                 'computations': [],
                 'ui_blocks': [],
                 'next_data_requests': []
             }
+            # Clean the fallback response too
+            return ResponseFormatter.clean_response(fallback)
