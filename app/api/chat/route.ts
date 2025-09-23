@@ -34,8 +34,12 @@ export async function POST(request: NextRequest) {
       headers['Authorization'] = authHeader;
     }
     
+    // Log the full URL being called
+    const fullUrl = `${backendUrl}${endpoint}`;
+    console.log('Calling backend at:', fullUrl);
+
     // Forward the request to FastAPI backend
-    const response = await fetch(`${backendUrl}${endpoint}`, {
+    const response = await fetch(fullUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({

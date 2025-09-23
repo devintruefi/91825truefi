@@ -31,7 +31,7 @@ steps:
       '--region', 'us-central1',
       '--platform', 'managed',
       '--add-cloudsql-instances', '$PROJECT_ID:us-central1:true-fi-db',
-      '--no-allow-unauthenticated',  # Require authentication for production
+      '--allow-unauthenticated',  # Allow public access for chat endpoints
       '--vpc-connector', 'truefi-connector',  # Use VPC connector for private IP
       '--port', '8080',
       '--memory', '1Gi',
