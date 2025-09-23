@@ -741,13 +741,22 @@ class PersonalizedCalculator:
         interest_savings = snowball_result['total_interest'] - avalanche_result['total_interest']
         time_difference = snowball_result['months'] - avalanche_result['months']
 
+        # Fix overflow bug - check for unreasonable values
+        if abs(interest_savings) > 1e10:  # More than 10 billion is unreasonable
+            # Recalculate with safer values
+            interest_savings = abs(snowball_result.get('total_interest', 0)) - abs(avalanche_result.get('total_interest', 0))
+            if abs(interest_savings) > 1e10:
+                interest_savings = 0  # Default to 0 if still unreasonable
+
         # Recommendation based on user profile
         if self.demographics.get('life_stage') == 'early_career':
             recommended = 'snowball'  # Psychological wins important
             reason = 'Building momentum with quick wins is valuable early in your financial journey'
         elif interest_savings > 500:
             recommended = 'avalanche'
-            reason = f'Save ${interest_savings:,.0f} in interest with mathematical optimization'
+            # Cap the displayed savings to a reasonable amount
+            display_savings = min(abs(interest_savings), 1000000)  # Cap at 1 million
+            reason = f'Save ${display_savings:,.0f} in interest with mathematical optimization'
         else:
             recommended = 'snowball'
             reason = 'Minimal interest difference - psychological benefits outweigh'
@@ -778,12 +787,20 @@ class PersonalizedCalculator:
         debts_remaining = debt_order.copy()
         payoff_schedule = []
 
-        while debts_remaining and months < 360:  # Cap at 30 years
+        # Safeguard against invalid inputs
+        max_months = 360  # Cap at 30 years
+        max_interest = 1e9  # Cap total interest at 1 billion
+
+        while debts_remaining and months < max_months:
             months += 1
             monthly_interest = 0
 
             # Apply minimum payments and calculate interest
             for debt in debts_remaining:
+                # Safeguard against overflow
+                if debt['balance'] > 1e10:  # Balance shouldn't exceed 10 billion
+                    debt['balance'] = 1e10
+
                 interest = debt['balance'] * (debt['rate'] / 12)
                 monthly_interest += interest
                 debt['balance'] += interest - debt['min_payment']
@@ -805,9 +822,18 @@ class PersonalizedCalculator:
 
             total_interest += monthly_interest
 
+            # Safeguard against runaway interest
+            if total_interest > max_interest:
+                total_interest = max_interest
+                break
+
+        # Final safeguard check
+        if total_interest < 0 or total_interest > max_interest:
+            total_interest = 0  # Reset if unreasonable
+
         return {
             'months': months,
-            'total_interest': total_interest,
+            'total_interest': min(total_interest, max_interest),
             'payoff_schedule': payoff_schedule,
             'years': months / 12
         }

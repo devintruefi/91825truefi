@@ -14,6 +14,7 @@ from agents.calculations import PersonalizedCalculator
 from agents.calculation_router import CalculationRouter
 from agents.intents import Intent
 from agents.router import classify_intent
+from agents.formatting import format_computation_result
 
 logger = logging.getLogger(__name__)
 
@@ -222,35 +223,35 @@ Sample data: {rows[0] if rows else 'None'}
                     if calc_type == 'after_tax_income':
                         income = profile_pack.get('user_core', {}).get('household_income', 75000)
                         result = calculator.calculate_after_tax_income(income)
-                        computations.append(result)
+                        computations.append(format_computation_result(result))
 
                     elif calc_type == 'retirement_runway':
                         monthly_expenses = profile_pack.get('derived_metrics', {}).get('monthly_expenses_avg', 5000)
                         result = calculator.calculate_retirement_runway(monthly_expenses)
-                        computations.append(result)
+                        computations.append(format_computation_result(result))
 
                     elif calc_type == 'college_savings':
                         result = calculator.calculate_college_savings_need()
                         if result.get('needed', 0) > 0:
-                            computations.append(result)
+                            computations.append(format_computation_result(result))
 
                     elif calc_type == 'portfolio_projection':
                         years = 10  # Default projection
                         monthly_contribution = 500  # Default contribution
                         result = calculator.calculate_portfolio_projection(years, monthly_contribution)
-                        computations.append(result)
+                        computations.append(format_computation_result(result))
 
                     elif calc_type == 'debt_strategies' and profile_pack.get('manual_liabilities'):
                         debts = profile_pack.get('manual_liabilities', [])
                         result = calculator.compare_debt_strategies(debts)
-                        computations.append(result)
+                        computations.append(format_computation_result(result))
 
                     elif calc_type == 'spending_flexibility':
                         # Get recent transactions if available
                         transactions = profile_pack.get('transactions_sample', [])
                         if transactions:
                             result = calculator.analyze_spending_flexibility(transactions)
-                            computations.append(result)
+                            computations.append(format_computation_result(result))
 
                     elif calc_type == 'true_savings_capacity':
                         income = profile_pack.get('derived_metrics', {}).get('monthly_income_avg', 7000)
@@ -262,7 +263,7 @@ Sample data: {rows[0] if rows else 'None'}
                             'other': 2000
                         }  # Would extract from actual data
                         result = calculator.calculate_true_savings_capacity(income, expenses)
-                        computations.append(result)
+                        computations.append(format_computation_result(result))
 
                     elif calc_type == 'expected_returns':
                         rate = calculator.get_expected_return_rate()
@@ -275,7 +276,7 @@ Sample data: {rows[0] if rows else 'None'}
 
                     elif calc_type == 'social_security':
                         result = calculator.estimate_social_security_benefit()
-                        computations.append(result)
+                        computations.append(format_computation_result(result))
 
                     elif calc_type == 'financial_scenario':
                         # Determine scenario type from question
@@ -293,7 +294,7 @@ Sample data: {rows[0] if rows else 'None'}
                             result = calculator.simulate_financial_scenario('investment_change', params)
                         else:
                             continue
-                        computations.append(result)
+                        computations.append(format_computation_result(result))
 
                 except Exception as e:
                     logger.warning(f"Failed to perform calculation {calc_type}: {e}")
