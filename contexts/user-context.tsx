@@ -316,7 +316,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       // Try to call backend API for real user authentication
       try {
-        const response = await fetch('http://localhost:8080/api/auth/login', {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
+        const response = await fetch(`${backendUrl}/api/auth/login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
