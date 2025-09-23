@@ -194,7 +194,9 @@ app.add_middleware(
         "http://localhost:3001",
         "https://truefi.ai",
         "https://www.truefi.ai",
-        "https://*.vercel.app"  # Allow all Vercel preview deployments
+        "https://truefi-production.vercel.app",
+        "https://truefi-production-*.vercel.app",
+        "*"  # Allow all origins temporarily for debugging
     ],
     allow_credentials=True,
     allow_methods=["*"],
