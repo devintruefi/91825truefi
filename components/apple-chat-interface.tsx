@@ -1184,7 +1184,25 @@ function AppleChatInterfaceInner() {
       } else {
         // Handle JSON response (for authenticated users)
         const data = await response.json()
-        if (data.error) throw new Error(data.error)
+
+        // Check if there's an error response with content (soft error)
+        if (data.error && data.content) {
+          // Use the error message as content
+          aiResponseContent = data.content
+
+          // Update the streaming message with the error message
+          setMessages(prev => prev.map(msg =>
+            msg.id === streamingId
+              ? { ...msg, content: aiResponseContent }
+              : msg
+          ))
+
+          // Don't continue processing
+          return
+        }
+
+        // Hard error - throw
+        if (data.error && !data.content) throw new Error(data.error)
         
         // Update session ID if provided by backend
         if (data.session_id && data.session_id !== activeSessionId) {

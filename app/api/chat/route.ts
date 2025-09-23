@@ -91,10 +91,17 @@ export async function POST(request: NextRequest) {
         }, { status: 200 }); // Explicitly return 200 OK for demo users
       }
       
-      // For authenticated users, forward the error
+      // For authenticated users, provide a helpful error message
+      const errorMessage = typeof data.message === 'string'
+        ? data.message
+        : data.detail || 'Backend error';
+
       return NextResponse.json(
-        { error: data.detail || 'Backend error', message: data.message },
-        { status: response.status }
+        {
+          error: 'API Error',
+          content: `I'm sorry, I'm having trouble connecting right now. Error: ${errorMessage}. Please try again in a moment.`
+        },
+        { status: 200 } // Return 200 to prevent frontend error handling
       );
     }
 
