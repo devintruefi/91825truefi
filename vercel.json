@@ -1,11 +1,3 @@
 {
-  "framework": "nextjs",
-  "buildCommand": "rm -rf .next node_modules/.cache && npm run vercel-build",
-  "installCommand": "rm -rf node_modules && npm install",
-  "build": {
-    "env": {
-      "FORCE_REBUILD": "true",
-      "NO_CACHE": "1"
-    }
-  }
+  "framework": "nextjs"
 }

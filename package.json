@@ -7,7 +7,7 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
-    "vercel-build": "prisma generate && npx tsx scripts/ensure-plaid-tables.ts && next build",
+    "vercel-build": "rm -rf .next && prisma generate && npx tsx scripts/ensure-plaid-tables.ts && next build",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
