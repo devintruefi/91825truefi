@@ -2,6 +2,7 @@
 // This is a proxy layer that forwards chat requests to the FastAPI backend
 // Handles both authenticated (logged-in) and non-authenticated (sample/demo) users
 import { NextRequest, NextResponse } from 'next/server';
+import { getBackendUrl } from '@/lib/backend-config';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,10 +18,12 @@ export async function POST(request: NextRequest) {
     console.log('Auth header present:', !!authHeader);
     
     // Prepare the request to FastAPI backend
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
-    
+    const backendUrl = getBackendUrl();
+    console.log('Using backend URL:', backendUrl);
+
     // Determine which endpoint to use based on authentication
     const endpoint = authHeader ? '/chat' : '/chat/public';
+    console.log('Using endpoint:', endpoint);
     
     // Prepare headers - only include auth header if it exists
     const headers: HeadersInit = {

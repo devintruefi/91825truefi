@@ -132,13 +132,13 @@ Download and install gcloud CLI from [cloud.google.com/sdk/docs/install](https:/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://gitlab.com/truefi-mvp/truefi-app.git
+git clone 
 cd truefi-app
 ```
 
 ### 2. Install Dependencies
 ```bash
-npm install
+
 # or if using pnpm
 pnpm install
 ```

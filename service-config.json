@@ -1,0 +1,176 @@
+{
+  "apiVersion": "serving.knative.dev/v1",
+  "kind": "Service",
+  "metadata": {
+    "annotations": {
+      "run.googleapis.com/build-enable-automatic-updates": "false",
+      "run.googleapis.com/build-id": "49649750-2133-4b2a-8de3-0b0541eca9cb",
+      "run.googleapis.com/build-image-uri": "us-central1-docker.pkg.dev/truefi/cloud-run-source-deploy/truefi-backend",
+      "run.googleapis.com/build-name": "projects/118529284371/locations/us-central1/builds/49649750-2133-4b2a-8de3-0b0541eca9cb",
+      "run.googleapis.com/build-source-location": "gs://run-sources-truefi-us-central1/services/truefi-backend/1758360649.824308-aea63a14c01d423880aa4e83e488b62e.zip#1758360654119282",
+      "run.googleapis.com/client-name": "gcloud",
+      "run.googleapis.com/client-version": "529.0.0",
+      "run.googleapis.com/ingress": "all",
+      "run.googleapis.com/ingress-status": "all",
+      "run.googleapis.com/invoker-iam-disabled": "true",
+      "run.googleapis.com/operation-id": "0ae2e994-cd63-4b1c-9088-60d9bbb86015",
+      "run.googleapis.com/urls": "[\"https://truefi-backend-118529284371.us-central1.run.app\",\"https://truefi-backend-ywcifgcdtq-uc.a.run.app\"]",
+      "serving.knative.dev/creator": "devin@truefi.ai",
+      "serving.knative.dev/lastModifier": "devin@truefi.ai"
+    },
+    "creationTimestamp": "2025-09-20T09:07:14.746854Z",
+    "generation": 42,
+    "labels": {
+      "cloud.googleapis.com/location": "us-central1",
+      "commit-sha": "2808dbfaa55b2146532ff5b6c3a5d144c054975e",
+      "gcb-build-id": "a678804a-c16b-45a0-86c3-928342fc1cb9",
+      "gcb-trigger-id": "bf6505ef-ee9b-4f99-8c2d-04b0c01c6fcf",
+      "gcb-trigger-region": "global",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "name": "truefi-backend",
+    "namespace": "118529284371",
+    "resourceVersion": "AAY/b7f7gSc",
+    "selfLink": "/apis/serving.knative.dev/v1/namespaces/118529284371/services/truefi-backend",
+    "uid": "760711bc-db76-4529-b174-8877874625ba"
+  },
+  "spec": {
+    "template": {
+      "metadata": {
+        "annotations": {
+          "autoscaling.knative.dev/maxScale": "10",
+          "autoscaling.knative.dev/minScale": "1",
+          "run.googleapis.com/client-name": "gcloud",
+          "run.googleapis.com/client-version": "529.0.0",
+          "run.googleapis.com/cloudsql-instances": "truefi:us-central1:true-fi-db",
+          "run.googleapis.com/execution-environment": "gen2",
+          "run.googleapis.com/startup-cpu-boost": "true"
+        },
+        "labels": {
+          "client.knative.dev/nonce": "bcbuisrpup",
+          "commit-sha": "2808dbfaa55b2146532ff5b6c3a5d144c054975e",
+          "gcb-build-id": "a678804a-c16b-45a0-86c3-928342fc1cb9",
+          "gcb-trigger-id": "bf6505ef-ee9b-4f99-8c2d-04b0c01c6fcf",
+          "gcb-trigger-region": "global",
+          "managed-by": "gcp-cloud-build-deploy-cloud-run",
+          "run.googleapis.com/startupProbeType": "Default"
+        }
+      },
+      "spec": {
+        "containerConcurrency": 80,
+        "containers": [
+          {
+            "env": [
+              {
+                "name": "PYTHONUNBUFFERED",
+                "value": "1"
+              },
+              {
+                "name": "DB_NAME",
+                "value": "truefi_app_data"
+              },
+              {
+                "name": "DB_USER",
+                "value": "truefi_user"
+              },
+              {
+                "name": "DATABASE_URL",
+                "value": "postgresql://truefi_user@/truefi_app_data?host=/cloudsql/truefi:us-central1:true-fi-db"
+              },
+              {
+                "name": "DB_PASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "latest",
+                    "name": "db-password"
+                  }
+                }
+              },
+              {
+                "name": "OPENAI_API_KEY",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "latest",
+                    "name": "openai-api-key"
+                  }
+                }
+              },
+              {
+                "name": "JWT_SECRET",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "latest",
+                    "name": "jwt-secret"
+                  }
+                }
+              }
+            ],
+            "image": "gcr.io/truefi/truefi-backend:db723ae",
+            "name": "placeholder-1",
+            "ports": [
+              {
+                "containerPort": 8080,
+                "name": "http1"
+              }
+            ],
+            "resources": {
+              "limits": {
+                "cpu": "2",
+                "memory": "1Gi"
+              }
+            },
+            "startupProbe": {
+              "failureThreshold": 1,
+              "periodSeconds": 240,
+              "tcpSocket": {
+                "port": 8080
+              },
+              "timeoutSeconds": 240
+            }
+          }
+        ],
+        "serviceAccountName": "118529284371-compute@developer.gserviceaccount.com",
+        "timeoutSeconds": 300
+      }
+    },
+    "traffic": [
+      {
+        "latestRevision": true,
+        "percent": 100
+      }
+    ]
+  },
+  "status": {
+    "address": {
+      "url": "https://truefi-backend-ywcifgcdtq-uc.a.run.app"
+    },
+    "conditions": [
+      {
+        "lastTransitionTime": "2025-09-23T03:42:00.896807Z",
+        "status": "True",
+        "type": "Ready"
+      },
+      {
+        "lastTransitionTime": "2025-09-23T03:42:00.431323Z",
+        "status": "True",
+        "type": "ConfigurationsReady"
+      },
+      {
+        "lastTransitionTime": "2025-09-23T03:42:00.863876Z",
+        "status": "True",
+        "type": "RoutesReady"
+      }
+    ],
+    "latestCreatedRevisionName": "truefi-backend-00041-qz2",
+    "latestReadyRevisionName": "truefi-backend-00041-qz2",
+    "observedGeneration": 42,
+    "traffic": [
+      {
+        "latestRevision": true,
+        "percent": 100,
+        "revisionName": "truefi-backend-00041-qz2"
+      }
+    ],
+    "url": "https://truefi-backend-ywcifgcdtq-uc.a.run.app"
+  }
+}
