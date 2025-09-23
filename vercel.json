@@ -1,5 +1,15 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run vercel-build",
-  "installCommand": "npm install"
+  "buildCommand": "rm -rf .next && npm run vercel-build",
+  "installCommand": "npm install",
+  "functions": {
+    "api/chat/route.ts": {
+      "maxDuration": 30
+    }
+  },
+  "build": {
+    "env": {
+      "FORCE_REBUILD": "true"
+    }
+  }
 }
