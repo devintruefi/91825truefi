@@ -16,6 +16,9 @@ from agents.intents import Intent
 from agents.router import classify_intent
 from agents.formatting import format_computation_result
 from agents.response_formatter import ResponseFormatter
+from agents.monte_carlo import MonteCarloEngine
+from agents.chart_generator import ChartGenerator
+from agents.scenario_analyzer import ScenarioAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -301,6 +304,99 @@ Sample data: {rows[0] if rows else 'None'}
                         else:
                             continue
                         computations.append(format_computation_result(result))
+
+                    # New Monte Carlo simulation capability
+                    elif calc_type == 'monte_carlo' or 'monte carlo' in question.lower():
+                        monte_carlo = MonteCarloEngine(num_simulations=10000)
+
+                        # Get investment values
+                        current_portfolio = profile_pack.get('derived_metrics', {}).get('investment_balance', 0)
+                        if current_portfolio == 0:
+                            current_portfolio = profile_pack.get('derived_metrics', {}).get('total_assets', 10000)
+
+                        # Determine simulation type from question
+                        if 'retirement' in question.lower():
+                            result = monte_carlo.simulate_retirement_adequacy(
+                                current_age=profile_pack.get('demographics', {}).get('age', 35),
+                                retirement_age=65,
+                                life_expectancy=85,
+                                current_savings=current_portfolio,
+                                monthly_contribution=profile_pack.get('derived_metrics', {}).get('monthly_income_avg', 5000) * 0.2,
+                                annual_expenses_retirement=profile_pack.get('derived_metrics', {}).get('monthly_expenses_avg', 5000) * 12
+                            )
+                        else:
+                            # Default portfolio growth simulation
+                            result = monte_carlo.simulate_portfolio_returns(
+                                initial_value=current_portfolio,
+                                years=20,
+                                expected_return=0.07,
+                                volatility=0.15,
+                                annual_contribution=12000
+                            )
+
+                        # Add chart visualization
+                        if result.get('success') and 'paths' in result:
+                            chart = ChartGenerator.generate_monte_carlo_chart(
+                                paths=result['paths'],
+                                percentiles=result.get('percentiles', {}),
+                                time_labels=[f"Year {i}" for i in range(21)]
+                            )
+                            ui_blocks.append(chart)
+
+                        computations.append({
+                            'name': 'Monte Carlo Simulation',
+                            'formula': 'Probabilistic modeling with 10,000 simulations',
+                            'inputs': result.get('simulation_params', {}),
+                            'result': result
+                        })
+
+                    # Scenario comparison capability
+                    elif calc_type == 'scenario_comparison' or 'compare' in question.lower():
+                        analyzer = ScenarioAnalyzer(profile_pack)
+
+                        if 'saving' in question.lower() or 'savings strateg' in question.lower():
+                            result = analyzer.compare_savings_strategies()
+                        elif 'debt' in question.lower():
+                            debts = profile_pack.get('manual_liabilities', [])
+                            if debts:
+                                result = analyzer.compare_debt_payoff_strategies(debts)
+                            else:
+                                continue
+                        elif 'allocation' in question.lower() or 'portfolio' in question.lower():
+                            result = analyzer.compare_investment_allocations()
+                        elif 'retirement' in question.lower():
+                            result = analyzer.compare_retirement_scenarios()
+                        else:
+                            # Default to savings strategies
+                            result = analyzer.compare_savings_strategies()
+
+                        computations.append({
+                            'name': 'Scenario Comparison Analysis',
+                            'formula': 'Multi-scenario financial modeling',
+                            'inputs': {'scenarios_analyzed': len(result.get('scenarios', []))},
+                            'result': result
+                        })
+
+                    # Chart generation for spending patterns
+                    elif 'chart' in question.lower() or 'graph' in question.lower() or 'visuali' in question.lower():
+                        transactions = profile_pack.get('transactions_sample', [])
+                        if transactions and 'spending' in question.lower():
+                            # Group by category
+                            category_totals = {}
+                            for t in transactions:
+                                cat = t.get('category', 'Other')
+                                amount = abs(float(t.get('amount', 0)))
+                                if amount > 0:
+                                    category_totals[cat] = category_totals.get(cat, 0) + amount
+
+                            chart_data = [{'category': k, 'amount': v} for k, v in category_totals.items()]
+                            chart = ChartGenerator.generate_pie_chart(
+                                data=chart_data[:8],  # Top 8 categories
+                                label_field='category',
+                                value_field='amount',
+                                title='Spending by Category'
+                            )
+                            ui_blocks.append(chart)
 
                 except Exception as e:
                     logger.warning(f"Failed to perform calculation {calc_type}: {e}")

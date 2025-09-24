@@ -22,6 +22,9 @@ class ResponseFormatter:
         text = re.sub(r'(\$[\d,]+\.?\d*)((?:and|which|that|this|but|however|therefore))', r'\1 \2', text, flags=re.IGNORECASE)
         text = re.sub(r'(\d+\.?\d*%)((?:and|which|that|this|but|however|therefore))', r'\1 \2', text, flags=re.IGNORECASE)
 
+        # Fix currency amounts directly followed by periods and text (e.g., "$42,600.Youhavesaved")
+        text = re.sub(r'(\$[\d,]+(?:\.\d{2})?)\.([A-Z])', r'\1. \2', text)
+
         # Fix missing spaces after periods
         text = re.sub(r'\.([A-Z])', r'. \1', text)
 
@@ -30,8 +33,8 @@ class ResponseFormatter:
 
         # Fix concatenated words with currency amounts
         # Pattern: word directly attached to currency
-        text = re.sub(r'([a-z])(\$[\d,]+)', r'\1 \2', text, flags=re.IGNORECASE)
-        text = re.sub(r'(\$[\d,]+\.?\d*)([a-z])', r'\1 \2', text, flags=re.IGNORECASE)
+        text = re.sub(r'([a-zA-Z])(\$[\d,]+)', r'\1 \2', text)
+        text = re.sub(r'(\$[\d,]+\.?\d*)([a-zA-Z])', r'\1 \2', text)
 
         # Fix specific patterns we've seen
         text = re.sub(r'of\$', r'of $', text, flags=re.IGNORECASE)
@@ -52,6 +55,16 @@ class ResponseFormatter:
             (r'Thisisconsiderably', r'This is considerably'),
             (r'whichisa', r'which is a'),
             (r'thisisabout', r'this is about'),
+            (r'Youhavesaved', r'You have saved'),
+            (r'Youhave', r'You have'),
+            (r'Ihave', r'I have'),
+            (r'havesaved', r'have saved'),
+            (r'ofyour', r'of your'),
+            (r'inyour', r'in your'),
+            (r'foryour', r'for your'),
+            (r'withyour', r'with your'),
+            (r'onyour', r'on your'),
+            (r'fromyour', r'from your'),
         ]
 
         for pattern, replacement in patterns:
