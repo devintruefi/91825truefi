@@ -203,6 +203,30 @@ async function analyzeUserIncome(userId: string, months: number = 6): Promise<In
   // Cap confidence at 1.0
   confidence = Math.min(confidence, 1.0);
 
+  // Check for manual income fallback if detection failed or confidence is low
+  if (monthlyIncome === 0 || confidence < 0.5) {
+    const userPrefs = await prisma.user_preferences.findFirst({
+      where: { user_id: userId }
+    });
+
+    const financialGoals = userPrefs?.financial_goals as any;
+    const manualIncome = financialGoals?.manual_monthly_income;
+
+    if (manualIncome && manualIncome > 0) {
+      return {
+        monthlyIncome: manualIncome,
+        incomeStreams: [{
+          source: 'User Defined Income',
+          amount: manualIncome,
+          frequency: 'monthly',
+          isStable: true
+        }],
+        stability: 'stable',
+        confidence: 1.0  // 100% confidence in user-provided data
+      };
+    }
+  }
+
   return {
     monthlyIncome: Math.round(monthlyIncome),
     incomeStreams,

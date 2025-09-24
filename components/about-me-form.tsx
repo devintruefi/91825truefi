@@ -759,6 +759,22 @@ export function AboutMeForm({ onComplete }: { onComplete?: () => void }) {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="manual_monthly_income">Monthly Income (Manual Override)</Label>
+                <Input
+                  id="manual_monthly_income"
+                  type="number"
+                  min="0"
+                  step="100"
+                  placeholder="e.g., 5000"
+                  value={data.manual_monthly_income || ''}
+                  onChange={(e) => updateField('manual_monthly_income', parseFloat(e.target.value) || null)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional: Set your monthly income manually if auto-detection isn't working correctly. Leave blank to use automatic detection.
+                </p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="default_checking_buffer">Checking Account Buffer ($)</Label>
                 <Input
                   id="default_checking_buffer"
