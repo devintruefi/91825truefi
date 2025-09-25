@@ -48,37 +48,31 @@ const CHART_COLORS = ['#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#e
 function coerceToMarkdown(maybe: any): string {
   if (!maybe) return ''
   if (typeof maybe === 'string') {
-    // Check if the string contains a JSON object with answer_markdown
-    // Handle cases where there's text before the JSON (like "## Financial Snapshot\n\n{...")
-    // Also handle escaped underscores in the JSON keys
-    const jsonMatch = maybe.match(/\{[\s\S]*"answer\\_?markdown"[\s\S]*\}/);
-    if (jsonMatch) {
+    const s = maybe.trim()
+    if (s.startsWith('{')) {
       try {
-        // Remove backslash escapes before parsing
-        const unescaped = jsonMatch[0].replace(/\\/g, '')
-        const parsed = JSON.parse(unescaped)
-        if (parsed?.answer_markdown) return String(parsed.answer_markdown)
-      } catch {
-        // If unescaping didn't work, try original
-        try {
-          const parsed = JSON.parse(jsonMatch[0])
-          if (parsed?.answer_markdown) return String(parsed.answer_markdown)
-        } catch {}
-      }
+        const parsed = JSON.parse(s)
+        if (typeof parsed?.answer_markdown === 'string') return parsed.answer_markdown
+      } catch {}
     }
     return maybe
   }
   if (typeof maybe === 'object') {
-    if (typeof maybe.answer_markdown === 'string') return maybe.answer_markdown
-    if (typeof maybe.markdown === 'string') return maybe.markdown
-    if (typeof maybe.message === 'string') return maybe.message
+    if (typeof (maybe as any).answer_markdown === 'string') return (maybe as any).answer_markdown
+    if (typeof (maybe as any).markdown === 'string') return (maybe as any).markdown
+    if (typeof (maybe as any).message === 'string') return (maybe as any).message
   }
   return ''
 }
 
 export function PennyResponseRenderer({ content, metadata }: PennyResponseRendererProps) {
+  // Debug logging
+  console.debug('[PennyRenderer] content typeof:', typeof content)
+  if (typeof content !== 'string') console.debug('[PennyRenderer] content keys:', Object.keys(content || {}))
+
   // Coerce to markdown string properly
   const safeContent = coerceToMarkdown(content)
+  console.debug('[PennyRenderer] preview:', (safeContent || '').slice(0, 140))
 
   const renderKPICard = (block: any) => {
     const { value, formatted_value, change, change_type, subtitle, icon } = block.data

@@ -24,16 +24,22 @@ import UnifiedMarkdownRenderer from '@/components/unified-markdown-renderer'
 // Coerce potential JSON responses to markdown
 function coerceToMarkdown(maybe: any): string {
   if (!maybe) return ''
-  if (typeof maybe === 'string' && maybe.trim().startsWith('{')) {
-    try {
-      const parsed = JSON.parse(maybe)
-      if (parsed && typeof parsed.answer_markdown === 'string') return parsed.answer_markdown
-    } catch {}
+  if (typeof maybe === 'string') {
+    const s = maybe.trim()
+    if (s.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(s)
+        if (typeof parsed?.answer_markdown === 'string') return parsed.answer_markdown
+      } catch {}
+    }
+    return maybe
   }
-  if (typeof maybe === 'object' && typeof maybe.answer_markdown === 'string') {
-    return maybe.answer_markdown
+  if (typeof maybe === 'object') {
+    if (typeof (maybe as any).answer_markdown === 'string') return (maybe as any).answer_markdown
+    if (typeof (maybe as any).markdown === 'string') return (maybe as any).markdown
+    if (typeof (maybe as any).message === 'string') return (maybe as any).message
   }
-  return String(maybe)
+  return ''
 }
 
 interface Message {
@@ -734,7 +740,8 @@ function AppleChatInterfaceInner() {
             content: msg.message_type === 'user' ? msg.content : coerceToMarkdown(msg.content),
             sender: msg.message_type === 'user' ? 'user' : 'penny',
             timestamp: new Date(msg.created_at),
-            feedback: null
+            feedback: null,
+            metadata: msg.metadata || null
           }))
           setMessages(formattedMessages)
         } else {
@@ -1184,6 +1191,10 @@ function AppleChatInterfaceInner() {
         // Extract message content and metadata from response
         // Use coercion function to safely extract markdown from any response format
         const rawContent = data.content || data.message || data.response
+        console.debug('[AppleChat] backend payload typeof:', typeof rawContent)
+        if (typeof rawContent === 'string' && rawContent.trim().startsWith('{')) {
+          console.debug('[AppleChat] looks like JSON string — coercing to answer_markdown')
+        }
         aiResponseContent = coerceToMarkdown(rawContent) || "I'm here to help with your financial journey!"
         const metadata = data.metadata || null
         const richContent = data.rich_content || null
