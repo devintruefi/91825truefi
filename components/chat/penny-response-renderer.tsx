@@ -13,9 +13,7 @@ import { InlineMath, BlockMath } from "react-katex"
 import "katex/dist/katex.min.css"
 import { motion } from "framer-motion"
 import { TrendingUp, TrendingDown, Wallet, AlertCircle, Info, CheckCircle } from "lucide-react"
-import ReactMarkdown from 'react-markdown'
-import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
+import UnifiedMarkdownRenderer from '@/components/unified-markdown-renderer'
 
 interface PennyResponseRendererProps {
   content: string
@@ -23,6 +21,12 @@ interface PennyResponseRendererProps {
     ui_blocks?: any[]
     computations?: any[]
     assumptions?: string[]
+    future_value?: number
+    total_contributions?: number
+    total_growth?: number
+    growth_percentage?: number
+    yearly_projections?: any[]
+    [key: string]: any  // Allow for other properties
   }
 }
 
@@ -42,6 +46,10 @@ const formatPercent = (value: number): string => {
 const CHART_COLORS = ['#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#3b82f6', '#10b981']
 
 export function PennyResponseRenderer({ content, metadata }: PennyResponseRendererProps) {
+  // Ensure content is always a string
+  const safeContent = typeof content === 'string' ? content :
+    (typeof content === 'object' ? JSON.stringify(content) : String(content))
+
   const renderKPICard = (block: any) => {
     const { value, formatted_value, change, change_type, subtitle, icon } = block.data
     const isPositive = change_type === 'positive'
@@ -79,6 +87,20 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
     const { headers, rows, formatting } = block.data
     const metadata = block.metadata || {}
 
+    // Auto-detect numeric columns
+    const isNumericColumn = (colIndex: number) => {
+      const numericHeaders = ['Total', 'Avg', 'Average', 'Amount', 'Transactions', 'Value', 'Gain/Loss', 'Progress', 'Count']
+      const header = headers[colIndex]
+      if (numericHeaders.some(h => header?.includes(h))) return true
+
+      // Check first row for numeric patterns
+      if (rows.length > 0) {
+        const firstValue = rows[0][colIndex]
+        return /^[\$\-\+]?[\d,]+\.?\d*%?$/.test(firstValue)
+      }
+      return false
+    }
+
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -98,7 +120,7 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
                     {headers.map((header: string, i: number) => (
                       <TableHead
                         key={i}
-                        className={formatting?.align?.[i] === 'right' ? 'text-right' : ''}
+                        className={`${formatting?.align?.[i] === 'right' || isNumericColumn(i) ? 'text-right' : ''} ${isNumericColumn(i) ? 'tabular-nums' : ''}`}
                       >
                         {header}
                       </TableHead>
@@ -111,7 +133,7 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
                       {row.map((cell: string, cellIdx: number) => (
                         <TableCell
                           key={cellIdx}
-                          className={`${formatting?.align?.[cellIdx] === 'right' ? 'text-right' : ''}
+                          className={`${formatting?.align?.[cellIdx] === 'right' || isNumericColumn(cellIdx) ? 'text-right tabular-nums' : ''}
                                      ${formatting?.highlight_column === cellIdx ? 'font-semibold' : ''}`}
                         >
                           {cell}
@@ -143,6 +165,18 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
   const renderLineChart = (block: any) => {
     const { labels, datasets, average_line } = block.data
     const metadata = block.metadata || {}
+
+    // Guard against malformed data
+    if (!labels || !Array.isArray(labels) || !datasets || !Array.isArray(datasets) || datasets.length === 0) {
+      return (
+        <Alert className="my-4">
+          <AlertTitle>Chart unavailable</AlertTitle>
+          <AlertDescription>
+            This chart could not be rendered due to missing or invalid data.
+          </AlertDescription>
+        </Alert>
+      )
+    }
 
     const chartData = labels.map((label: string, i: number) => {
       const point: any = { name: label }
@@ -211,6 +245,18 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
     const { labels, datasets } = block.data
     const metadata = block.metadata || {}
 
+    // Guard against malformed data
+    if (!labels || !Array.isArray(labels) || !datasets || !Array.isArray(datasets) || datasets.length === 0) {
+      return (
+        <Alert className="my-4">
+          <AlertTitle>Chart unavailable</AlertTitle>
+          <AlertDescription>
+            This chart could not be rendered due to missing or invalid data.
+          </AlertDescription>
+        </Alert>
+      )
+    }
+
     const chartData = labels.map((label: string, i: number) => {
       const point: any = { name: label }
       datasets.forEach((dataset: any) => {
@@ -258,6 +304,18 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
     const { labels, values, colors, percentages } = block.data
     const metadata = block.metadata || {}
 
+    // Guard against malformed data
+    if (!labels || !Array.isArray(labels) || !values || !Array.isArray(values) || labels.length !== values.length) {
+      return (
+        <Alert className="my-4">
+          <AlertTitle>Chart unavailable</AlertTitle>
+          <AlertDescription>
+            This chart could not be rendered due to missing or invalid data.
+          </AlertDescription>
+        </Alert>
+      )
+    }
+
     const chartData = labels.map((label: string, i: number) => ({
       name: label,
       value: values[i],
@@ -285,13 +343,13 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
                   cx="50%"
                   cy="50%"
                   outerRadius={100}
-                  label={({ name, percentage }) =>
+                  label={({ name, percentage }: { name: string; percentage?: number }) =>
                     metadata.show_percentages && percentage
                       ? `${name} (${formatPercent(percentage)})`
                       : name
                   }
                 >
-                  {chartData.map((entry, i) => (
+                  {chartData.map((entry: any, i: number) => (
                     <Cell key={`cell-${i}`} fill={colors?.[i] || CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
                 </Pie>
@@ -419,7 +477,7 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
         return (
           <Card className="my-4">
             <CardContent className="pt-6">
-              <ReactMarkdown>{block.data.content || block.data}</ReactMarkdown>
+              <UnifiedMarkdownRenderer content={block.data.content || block.data} />
             </CardContent>
           </Card>
         )
@@ -431,14 +489,7 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
   return (
     <div className="space-y-4">
       {/* Main content with markdown support */}
-      <div className="prose prose-sm dark:prose-invert max-w-none">
-        <ReactMarkdown
-          remarkPlugins={[remarkMath]}
-          rehypePlugins={[rehypeKatex]}
-        >
-          {content}
-        </ReactMarkdown>
-      </div>
+      <UnifiedMarkdownRenderer content={safeContent} />
 
       {/* Render UI blocks if available */}
       {metadata?.ui_blocks && metadata.ui_blocks.length > 0 && (
@@ -459,15 +510,55 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {metadata.computations.map((comp: any, i: number) => (
-                <div key={i} className="border-l-2 border-primary/50 pl-4">
-                  <div className="font-semibold text-sm">{comp.name}</div>
-                  <div className="text-sm text-muted-foreground font-mono">{comp.formula}</div>
-                  <div className="text-sm mt-1">
-                    Result: <span className="font-semibold">{comp.result}</span>
+              {metadata.computations.map((comp: any, i: number) => {
+                const renderResult = () => {
+                  if (typeof comp.result === 'object' && comp.result !== null) {
+                    // Special handling for complex results
+                    if (comp.result.yearly_projections) {
+                      // This is a portfolio projection
+                      return (
+                        <div className="mt-2 space-y-1">
+                          <div>Future Value: {formatCurrency(comp.result.future_value || 0)}</div>
+                          <div>Total Growth: {formatCurrency(comp.result.total_growth || 0)}</div>
+                          <div>Growth %: {formatPercent(comp.result.growth_percentage || 0)}</div>
+                        </div>
+                      )
+                    } else if (comp.result.current_savings !== undefined) {
+                      // This is a savings capacity analysis
+                      return (
+                        <div className="mt-2 space-y-1">
+                          <div>Current Savings: {formatCurrency(comp.result.current_savings || 0)}</div>
+                          <div>Savings Rate: {formatPercent(comp.result.current_rate || 0)}</div>
+                          {comp.result.recommendation && (
+                            <div className="text-xs italic">{comp.result.recommendation}</div>
+                          )}
+                        </div>
+                      )
+                    } else {
+                      // Generic object display
+                      return (
+                        <pre className="text-xs mt-1 bg-muted/50 p-2 rounded overflow-auto">
+                          {JSON.stringify(comp.result, null, 2)}
+                        </pre>
+                      )
+                    }
+                  } else if (typeof comp.result === 'number') {
+                    return <span className="font-semibold">{formatCurrency(comp.result)}</span>
+                  } else {
+                    return <span className="font-semibold">{String(comp.result)}</span>
+                  }
+                }
+
+                return (
+                  <div key={i} className="border-l-2 border-primary/50 pl-4">
+                    <div className="font-semibold text-sm">{comp.name}</div>
+                    <div className="text-sm text-muted-foreground font-mono">{comp.formula}</div>
+                    <div className="text-sm mt-1">
+                      {renderResult()}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -485,6 +576,72 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
                 <li key={i} className="text-sm text-muted-foreground">{assumption}</li>
               ))}
             </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Render investment projection data if available */}
+      {(metadata?.future_value || metadata?.total_contributions || metadata?.total_growth) && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Investment Projection Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              {metadata.future_value && (
+                <div>
+                  <div className="text-sm text-muted-foreground">Future Value</div>
+                  <div className="text-lg font-semibold">{formatCurrency(metadata.future_value)}</div>
+                </div>
+              )}
+              {metadata.total_contributions && (
+                <div>
+                  <div className="text-sm text-muted-foreground">Total Contributions</div>
+                  <div className="text-lg font-semibold">{formatCurrency(metadata.total_contributions)}</div>
+                </div>
+              )}
+              {metadata.total_growth && (
+                <div>
+                  <div className="text-sm text-muted-foreground">Total Growth</div>
+                  <div className="text-lg font-semibold">{formatCurrency(metadata.total_growth)}</div>
+                </div>
+              )}
+              {metadata.growth_percentage && (
+                <div>
+                  <div className="text-sm text-muted-foreground">Growth Percentage</div>
+                  <div className="text-lg font-semibold">{formatPercent(metadata.growth_percentage)}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Render yearly projections if available */}
+            {metadata.yearly_projections && metadata.yearly_projections.length > 0 && (
+              <div className="mt-4">
+                <h4 className="font-semibold text-sm mb-2">Yearly Projections</h4>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Year</TableHead>
+                        <TableHead className="text-right">Balance</TableHead>
+                        <TableHead className="text-right">Contributions</TableHead>
+                        <TableHead className="text-right">Growth</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {metadata.yearly_projections.slice(0, 10).map((proj: any, i: number) => (
+                        <TableRow key={i}>
+                          <TableCell>{proj.year || i + 1}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(proj.balance || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(proj.contributions || 0)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(proj.growth || 0)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

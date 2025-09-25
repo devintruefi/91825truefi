@@ -7,12 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Send, Mic, Paperclip, MoreVertical } from "lucide-react"
 import Image from "next/image"
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize from 'rehype-sanitize'
-import rehypeKatex from 'rehype-katex'
+import UnifiedMarkdownRenderer from '@/components/unified-markdown-renderer'
 import { BlockMath } from "react-katex"
 import "katex/dist/katex.min.css"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts"
@@ -197,40 +192,7 @@ export function ChatInterface() {
                       const parts = finalContent.split(/<!--CHART_BLOCK_(\d+)-->/g)
 
                       return (
-                    <ReactMarkdown
-                          key={`markdown-part-${index}`}
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[[rehypeKatex, { output: 'html', strict: false }], rehypeRaw, rehypeSanitize]}
-                      components={{
-                        table: ({ node, ...props }) => (
-                          <table {...props} className="min-w-full border border-black dark:border-gray-600 rounded-lg overflow-hidden my-6 shadow-lg" />
-                        ),
-                        thead: (props) => <thead {...props} className="bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20" />,
-                        th: (props) => <th {...props} className="font-bold text-gray-900 dark:text-gray-100 px-4 py-3 border-b border-black dark:border-gray-600" />,
-                        tr: (props) => <tr {...props} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" />,
-                        td: (props) => <td {...props} className="px-4 py-3 border-b border-gray-200 dark:border-gray-700" />,
-                        ul: (props: React.HTMLAttributes<HTMLUListElement>) => {
-                          const { className = '', ...rest } = props;
-                          return <ul className={`list-disc pl-4 my-2 ${className}`} {...rest} />;
-                        },
-                        ol: (props: React.HTMLAttributes<HTMLOListElement>) => {
-                          const { className = '', ...rest } = props;
-                          return <ol className={`list-decimal pl-4 my-2 ${className}`} {...rest} />;
-                        },
-                        code: ({ node, className, children, ...props }) => {
-                          if (className?.includes('language-math')) {
-                            let mathContent = '';
-                            if (Array.isArray(children) && children[0]) {
-                              mathContent = String(children[0]).replace(/\$\$/g, '');
-                            } else if (children) {
-                              mathContent = String(children).replace(/\$\$/g, '');
-                            }
-                            return <BlockMath math={mathContent} />;
-                          }
-                          return <code className={className} {...props}>{children}</code>;
-                        },
-                      }}
-                    >
+                        <div key={`content-${index}`}>
                           {parts.map((part, partIndex) => {
                             if (/^\d+$/.test(part)) {
                               const chartIdx = parseInt(part, 10)
@@ -242,37 +204,9 @@ export function ChatInterface() {
                                 </div>
                               )
                             }
-                            return <ReactMarkdown key={`markdown-part-${partIndex}`} remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { output: 'html', strict: false }], rehypeRaw, rehypeSanitize]} components={{
-                              table: ({ node, ...props }) => (
-                                <table {...props} className="min-w-full border border-black dark:border-gray-600 rounded-lg overflow-hidden my-6 shadow-lg" />
-                              ),
-                              thead: (props) => <thead {...props} className="bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20" />,
-                              th: (props) => <th {...props} className="font-bold text-gray-900 dark:text-gray-100 px-4 py-3 border-b border-black dark:border-gray-600" />,
-                              tr: (props) => <tr {...props} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" />,
-                              td: (props) => <td {...props} className="px-4 py-3 border-b border-gray-200 dark:border-gray-700" />,
-                              ul: (props: React.HTMLAttributes<HTMLUListElement>) => {
-                                const { className = '', ...rest } = props;
-                                return <ul className={`list-disc pl-4 my-2 ${className}`} {...rest} />;
-                              },
-                              ol: (props: React.HTMLAttributes<HTMLOListElement>) => {
-                                const { className = '', ...rest } = props;
-                                return <ol className={`list-decimal pl-4 my-2 ${className}`} {...rest} />;
-                              },
-                              code: ({ node, className, children, ...props }) => {
-                                if (className?.includes('language-math')) {
-                                  let mathContent = '';
-                                  if (Array.isArray(children) && children[0]) {
-                                    mathContent = String(children[0]).replace(/\$\$/g, '');
-                                  } else if (children) {
-                                    mathContent = String(children).replace(/\$\$/g, '');
-                                  }
-                                  return <BlockMath math={mathContent} />;
-                                }
-                                return <code className={className} {...props}>{children}</code>;
-                              },
-                            }}>{part}</ReactMarkdown>
+                            return <UnifiedMarkdownRenderer key={`markdown-part-${partIndex}`} content={part} />
                           })}
-                    </ReactMarkdown>
+                        </div>
                       )
                     })}
                   </div>

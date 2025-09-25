@@ -106,15 +106,26 @@
     padding: 0;
   }
   
-  body {
+  html, body {
     @apply bg-background text-foreground antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-weight: 400;
     letter-spacing: -0.015em;
     line-height: 1.47059;
+  }
+
+  /* Markdown content hardening */
+  .markdown-content {
+    word-break: keep-all;
+    overflow-wrap: anywhere;  /* prevent overflow but don't split words by default */
+  }
+
+  /* Tabular numbers for better digit alignment */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
   
   /* Apple-style typography scale */

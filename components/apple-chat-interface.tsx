@@ -19,12 +19,22 @@ import { Badge } from "@/components/ui/badge"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from 'next-themes'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize from 'rehype-sanitize'
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
+import UnifiedMarkdownRenderer from '@/components/unified-markdown-renderer'
+
+// Coerce potential JSON responses to markdown
+function coerceToMarkdown(maybe: any): string {
+  if (!maybe) return ''
+  if (typeof maybe === 'string' && maybe.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(maybe)
+      if (parsed && typeof parsed.answer_markdown === 'string') return parsed.answer_markdown
+    } catch {}
+  }
+  if (typeof maybe === 'object' && typeof maybe.answer_markdown === 'string') {
+    return maybe.answer_markdown
+  }
+  return String(maybe)
+}
 
 interface Message {
   id: string
@@ -430,53 +440,7 @@ function renderPennyMessage(content: string, theme: string) {
           )
         }
         // Otherwise, render the markdown content
-        return (
-          <ReactMarkdown
-            key={`markdown-part-${idx}`}
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[[rehypeKatex, { output: 'html', strict: false }], rehypeRaw, rehypeSanitize]}
-            components={{
-              table: ({ node, ...props }) => (
-                <table {...props} className="min-w-full border border-black dark:border-gray-600 rounded-lg overflow-hidden my-6 shadow-lg" />
-              ),
-              thead: (props) => <thead {...props} className="bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20" />,
-              th: (props) => <th {...props} className="font-bold text-gray-900 dark:text-gray-100 px-4 py-3 border-b border-black dark:border-gray-600" />,
-              tr: (props) => <tr {...props} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" />,
-              td: (props) => <td {...props} className="px-4 py-3 border-b border-gray-200 dark:border-gray-700" />,
-              ul: (props: React.HTMLAttributes<HTMLUListElement>) => {
-                const { className = '', ...rest } = props;
-                return <ul className={`list-disc pl-4 my-2 ${className}`} {...rest} />;
-              },
-              ol: (props: React.HTMLAttributes<HTMLOListElement>) => {
-                const { className = '', ...rest } = props;
-                return <ol className={`list-decimal pl-4 my-2 ${className}`} {...rest} />;
-              },
-              code: ({ node, className, children, ...props }) => {
-                if (className?.includes('language-math')) {
-                  let mathContent = '';
-                  if (Array.isArray(children) && children[0]) {
-                    mathContent = String(children[0]).replace(/\$\$/g, '');
-                  } else if (children) {
-                    mathContent = String(children).replace(/\$\$/g, '');
-                  }
-                  return <BlockMath math={mathContent} />;
-                }
-                return <code className={className} {...props}>{children}</code>;
-              },
-              p: (props) => <p {...props} className="my-4 leading-relaxed" />,
-              h1: (props) => <h1 {...props} className="mt-8 mb-4 text-2xl font-bold" />,
-              h2: (props) => <h2 {...props} className="mt-8 mb-4 text-xl font-bold" />,
-              h3: (props) => <h3 {...props} className="mt-6 mb-3 text-lg font-semibold" />,
-              h4: (props) => <h4 {...props} className="mt-6 mb-3 text-base font-semibold" />,
-              h5: (props) => <h5 {...props} className="mt-4 mb-2 text-base font-semibold" />,
-              h6: (props) => <h6 {...props} className="mt-4 mb-2 text-sm font-semibold" />,
-              blockquote: (props) => <blockquote {...props} className="border-l-4 border-cyan-400 pl-4 italic my-6" />,
-              hr: (props) => <hr {...props} className="my-8 border-gray-300 dark:border-gray-700" />,
-            }}
-          >
-            {part}
-          </ReactMarkdown>
-        )
+        return <UnifiedMarkdownRenderer key={`markdown-part-${idx}`} content={part} />
       })}
     </>
   )
@@ -1141,10 +1105,10 @@ function AppleChatInterfaceInner() {
         headers,
         body: JSON.stringify(requestBody),
       })
-      
+
       console.log('Response status:', response.status);
       console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
+
       if (!response.ok) {
         let errorText = '';
         try {
@@ -1153,14 +1117,14 @@ function AppleChatInterfaceInner() {
           errorText = 'Unable to read error response';
         }
         console.error('API Error Response:', errorText);
-        
+
         // If error text is empty, provide a meaningful message
         const errorMessage = errorText || `Server error (${response.status})`;
         throw new Error(`API Error: ${response.status} - ${errorMessage}`);
       }
-      
+
       let aiResponseContent = ""
-      
+
       // Check if response supports streaming
       if (response.headers.get('content-type')?.includes('text/plain')) {
         // Handle streaming response (for unauthenticated users)
@@ -1218,7 +1182,9 @@ function AppleChatInterfaceInner() {
         }
         
         // Extract message content and metadata from response
-        aiResponseContent = data.content || data.message || data.response || "I'm here to help with your financial journey!"
+        // Use coercion function to safely extract markdown from any response format
+        const rawContent = data.content || data.message || data.response
+        aiResponseContent = coerceToMarkdown(rawContent) || "I'm here to help with your financial journey!"
         const metadata = data.metadata || null
         const richContent = data.rich_content || null
 

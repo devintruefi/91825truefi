@@ -8,7 +8,7 @@ import logging
 import json
 import traceback
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, AsyncGenerator
 from dotenv import load_dotenv
 import os
 from fastapi import FastAPI, Request, HTTPException, Depends, status, Body, Query
@@ -16,7 +16,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
 from pydantic import BaseModel
-import openai
+from openai import AsyncOpenAI
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
 import asyncio
@@ -57,11 +57,17 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Import new agent framework
-from orchestrator import AgentOrchestrator
 from config import config as agent_config
 from db import initialize_db_pool
 from agent_logging.logger import agent_logger
+
+# Import GPT-5 orchestrator if enabled
+try:
+    if agent_config.USE_GPT5_UNIFIED:
+        from orchestrator_gpt5 import GPT5Orchestrator
+        logger.info("GPT-5 Unified Orchestrator loaded")
+except ImportError as e:
+    logger.warning(f"GPT-5 orchestrator not available: {e}")
 
 # Legacy imports removed - using new orchestrator only
 
@@ -94,7 +100,7 @@ except ValueError as e:
     # Use fallback configuration for basic operation
 
 # Async OpenAI
-client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 # Plaid configuration
 if PLAID_AVAILABLE:
@@ -173,14 +179,14 @@ async def health_check():
         # Check if agents are initialized
         agent_status = "not initialized"
         if orchestrator is not None:
-            agent_status = "orchestrator_v4_ready"
+            agent_status = "gpt5_unified_ready"
         
         return {
             "status": "healthy",
             "database": "connected",
-            "version": "1.0.1",
+            "api_version": "1.0.1",
             "agent_system": agent_status,
-            "version": "2.0.0"
+            "agent_system_version": "2.0.0"
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -237,7 +243,7 @@ async def authenticate(credentials: Optional[HTTPAuthorizationCredentials] = Dep
         return user_id
     except jwt.ExpiredSignatureError:
         return None
-    except jwt.JWTError:
+    except (jwt.DecodeError, jwt.InvalidTokenError, AttributeError, Exception):
         return None
 
 def get_db_cursor():
@@ -274,12 +280,49 @@ def check_data_freshness(cur, user_id: str) -> Dict[str, Any]:
         logger.error(f"Error checking data freshness: {e}")
         return {"last_sync": None, "hours_since_sync": 0, "is_stale": False}
 
+ZERO_WIDTH = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff']
+
+def sanitize_markdown(text: str) -> str:
+    """Unified markdown sanitization - removes zero-width chars, fixes formatting issues."""
+    if not isinstance(text, str):
+        return text
+
+    try:
+        import re
+
+        # Remove zero-width & BOM characters
+        for zw in ZERO_WIDTH:
+            text = text.replace(zw, '')
+
+        # Replace thin/narrow spaces with normal space
+        text = text.replace('\u2009', ' ').replace('\u202f', ' ')
+
+        # Fix soft line breaks inside tokens (numbers/words split across newlines)
+        text = re.sub(r"(?<=[\d,\.])[ \t]*\n[ \t]*(?=[\d,\.])", "", text)
+        text = re.sub(r"(?<=\w)[ \t]*\n[ \t]*(?=\w)", " ", text)
+
+        # Add missing spaces between letters and digits (both directions)
+        text = re.sub(r'([A-Za-z])(\d)', r'\1 \2', text)
+        text = re.sub(r'(\d)([A-Za-z])', r'\1 \2', text)
+
+        # Fix spaced thousands (4, 000 -> 4,000)
+        text = re.sub(r'(\d),\s+(\d{3})', r'\1,\2', text)
+
+        # Normalize whitespace
+        text = re.sub(r"[ \t]{2,}", " ", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+
+        return text
+    except Exception:
+        return text
+
+
 def add_advisor_framing(response_text: str, result: Dict[str, Any]) -> str:
     """Add advisor-style framing to make responses more personal and actionable"""
     try:
         # Don't frame if it's already well-formatted or very short
         if len(response_text) < 100 or response_text.startswith("##"):
-            return response_text
+            return sanitize_markdown(response_text)
 
         # Extract key metrics if available
         has_computations = result.get('computations', [])
@@ -313,10 +356,10 @@ def add_advisor_framing(response_text: str, result: Dict[str, Any]) -> str:
         if follow_up:
             framed_response += f"\n\n_{follow_up}_"
 
-        return framed_response
+        return sanitize_markdown(framed_response)
     except Exception as e:
         logger.error(f"Error adding advisor framing: {e}")
-        return response_text  # Return original if framing fails
+        return sanitize_markdown(response_text)  # Return sanitized original if framing fails
 
 def generate_next_steps(response_text: str, result: Dict[str, Any]) -> List[str]:
     """Generate contextual next steps based on the response"""
@@ -529,58 +572,6 @@ async def get_session_messages(
         if conn:
             db_pool.putconn(conn)
 
-@app.patch("/api/chat/sessions/{session_id}")
-async def update_session_title(
-    session_id: str,
-    request: Request,
-    user_id: str = Depends(authenticate),
-    db = Depends(get_db_cursor)
-):
-    """Update the title of a chat session"""
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    
-    cur, conn = db
-    try:
-        body = await request.json()
-        new_title = body.get("title")
-        
-        if not new_title:
-            raise HTTPException(status_code=400, detail="Title is required")
-        
-        # Verify session ownership - look up by session_id field, not id
-        cur.execute("""
-            SELECT id FROM chat_sessions
-            WHERE session_id = %s AND user_id = %s
-        """, (session_id, user_id))
-
-        session_row = cur.fetchone()
-        if not session_row:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        # Get the actual primary key id
-        chat_session_id = session_row[0]
-
-        # Update the title using the primary key
-        cur.execute("""
-            UPDATE chat_sessions
-            SET title = %s, updated_at = CURRENT_TIMESTAMP
-            WHERE id = %s AND user_id = %s
-        """, (new_title, chat_session_id, user_id))
-        
-        conn.commit()
-        
-        return {"success": True, "title": new_title}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update session title: {e}")
-        if conn:
-            conn.rollback()
-        raise HTTPException(status_code=500, detail="Failed to update session title")
-    finally:
-        if conn:
-            db_pool.putconn(conn)
 
 @app.post("/api/chat/sessions/{session_id}/messages")
 async def save_message(
@@ -803,7 +794,7 @@ Your role is to:
 Remember: This is demo data to show what TrueFi can do with real user data."""
 
 def initialize_agents():
-    """Initialize the agentic framework v4.0"""
+    """Initialize the GPT-5 unified orchestrator only"""
     global orchestrator, new_db_pool
 
     if orchestrator is not None:
@@ -813,10 +804,16 @@ def initialize_agents():
         # Initialize database pool
         new_db_pool = initialize_db_pool()
 
-        # Initialize orchestrator
-        orchestrator = AgentOrchestrator()
+        # Initialize orchestrator - GPT-5 unified only
+        if agent_config.USE_GPT5_UNIFIED:
+            orchestrator = GPT5Orchestrator()
+        else:
+            orchestrator = GPT5Orchestrator()  # Force GPT-5 to simplify stack
 
-        logger.info("Agentic framework v4.0 initialized successfully")
+        logger.info("=" * 80)
+        logger.info("GPT-5 UNIFIED FRAMEWORK INITIALIZED")
+        logger.info("GPT-5 is the primary AI brain handling all financial analysis")
+        logger.info("=" * 80)
     except Exception as e:
         logger.error(f"Failed to initialize agents: {e}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
@@ -924,10 +921,11 @@ async def chat_public(input: MessageInput, request: Request = None):
             "requires_auth": False
         }
 
-# Chat endpoint using New Agentic Framework v4.0 for authenticated users
+
+# Chat endpoint using GPT-5 unified framework for authenticated users
 @app.post("/chat")
 async def chat(input: MessageInput, user_id: Optional[str] = Depends(authenticate), db = Depends(get_db_cursor)):
-    """Authenticated chat endpoint with new agentic framework"""
+    """Authenticated chat endpoint using GPT-5 unified orchestrator only"""
     cur, conn = db
 
     # Check if user is authenticated
@@ -961,115 +959,91 @@ async def chat(input: MessageInput, user_id: Optional[str] = Depends(authenticat
             })
 
         logger.info(f"=" * 80)
-        logger.info(f"NEW AGENT FRAMEWORK v4.0 EXECUTION START")
+        logger.info(f"GPT-5 UNIFIED EXECUTION START")
         logger.info(f"User: {user_id} | Name: {user_name} | Session: {session_id}")
         logger.info(f"Query: {input.message.encode('ascii', 'replace').decode('ascii')}")
         logger.info(f"=" * 80)
 
-        # Use the new orchestrator
-        if orchestrator is not None:
-            try:
-                orchestrator_result = await orchestrator.process_question(
-                    user_id=user_id,
-                    question=input.message,
-                    conversation_history=conversation_history,
-                    session_id=input.session_id  # Pass session_id for memory support
-                )
+        # Use the GPT-5 orchestrator only
+        if orchestrator is None:
+            raise HTTPException(status_code=503, detail="Service not initialized")
 
-                if 'error' in orchestrator_result:
-                    logger.error(f"Orchestrator error: {orchestrator_result['error']}")
-                    # Fall back to legacy agents if available
-                    raise Exception(orchestrator_result['error'])
-
-                # Extract the result with rich content
-                result = orchestrator_result.get('result', {})
-                response_text = result.get('answer_markdown', 'I apologize, but I encountered an issue processing your request.')
-
-                # Add advisor framing for better UX
-                response_text = add_advisor_framing(response_text, result)
-
-                # Check data freshness
-                data_freshness = check_data_freshness(cur, user_id)
-
-                # Prepare rich content for frontend
-                rich_content = {
-                    'ui_blocks': result.get('ui_blocks', []),
-                    'computations': result.get('computations', []),
-                    'assumptions': result.get('assumptions', []),
-                    'data_freshness': data_freshness
-                }
-
-                # Add freshness warning if data is stale
-                freshness_note = ""
-                if data_freshness and data_freshness.get('hours_since_sync', 0) > 24:
-                    freshness_note = f"\n\n_Note: Account data last synced {data_freshness['hours_since_sync']:.0f} hours ago._"
-
-                # Store assistant response with rich content
-                store_message(cur, valid_session_id, "assistant", response_text, conn, user_id, rich_content=rich_content)
-
-                logger.info(f"=" * 80)
-                logger.info(f"NEW AGENT FRAMEWORK EXECUTION COMPLETE")
-                logger.info(f"Execution time: {orchestrator_result.get('execution_time_ms', 0):.2f}ms")
-                logger.info(f"=" * 80)
-
-                return {
-                    "message": response_text + freshness_note,
-                    "session_id": valid_session_id,
-                    "agent_used": "orchestrator_v4",
-                    "rich_content": rich_content,
-                    "metadata": {
-                        "execution_time_ms": orchestrator_result.get('execution_time_ms', 0),
-                        "profile_pack_summary": orchestrator_result.get('profile_pack_summary', {}),
-                        "ui_blocks": result.get('ui_blocks', []),
-                        "computations": result.get('computations', []),
-                        "assumptions": result.get('assumptions', []),
-                        "data_freshness": data_freshness
-                    },
-                    "success": True
-                }
-
-            except Exception as e:
-                logger.error(f"New orchestrator failed: {e}")
-                logger.info("Falling back to basic OpenAI...")
-                # Fall through to basic OpenAI fallback
-
-        # Final fallback to basic OpenAI
-        logger.info("Using basic OpenAI fallback")
-
-        # Fetch user data for context
-        data_dump = get_data_dump(cur, user_id)
-
-        system_content = f"""You are Penny, a helpful financial advisor AI assistant for TrueFi.
-
-User: {user_name}
-User ID: {user_id}
-
-Provide helpful, accurate financial advice based on the user's question. Be friendly and professional.
-
-Recent conversation history:
-{chr(10).join([f"{msg['role']}: {msg['content']}" for msg in history[-5:]])}
-"""
-
-        # Call basic OpenAI
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": input.message}
-            ],
-            temperature=0.7,
-            max_tokens=1000
+        orchestrator_result = await orchestrator.process_question(
+            user_id=user_id,
+            question=input.message,
+            conversation_history=conversation_history,
+            session_id=input.session_id  # Pass session_id for memory support
         )
 
-        response_text = response.choices[0].message.content
+        if 'error' in orchestrator_result:
+            logger.error(f"Orchestrator error: {orchestrator_result['error']}")
+            raise HTTPException(status_code=500, detail=orchestrator_result['error'])
 
-        # Store assistant response
-        store_message(cur, valid_session_id, "assistant", response_text, conn, user_id)
+        # Extract the result with rich content
+        result = orchestrator_result.get('result', {})
+
+        # Debug: Check what we're getting
+        if isinstance(result, str):
+            # If result is a string (which shouldn't happen), try to parse it
+            logger.warning(f"Result is a string, not a dict: {result[:200]}")
+            try:
+                import json
+                result = json.loads(result)
+            except:
+                # If it's not JSON, use it as the response directly
+                response_text = result
+                result = {'answer_markdown': result}
+        else:
+            response_text = result.get('answer_markdown', 'I encountered an issue processing your request.')
+
+        # Add advisor framing for better UX
+        response_text = add_advisor_framing(response_text, result)
+
+        # Apply final sanitization to ensure clean markdown
+        response_text = sanitize_markdown(response_text)
+
+        # Check data freshness
+        data_freshness = check_data_freshness(cur, user_id)
+
+        # Prepare rich content for frontend
+        rich_content = {
+            'ui_blocks': result.get('ui_blocks', []),
+            'computations': result.get('computations', []),
+            'assumptions': result.get('assumptions', []),
+            'data_freshness': data_freshness
+        }
+
+        # Add freshness warning if data is stale
+        freshness_note = ""
+        if data_freshness and data_freshness.get('hours_since_sync', 0) > 24:
+            freshness_note = f"\n\n_Note: Account data last synced {data_freshness['hours_since_sync']:.0f} hours ago._"
+
+        # Store assistant response with rich content
+        store_message(cur, valid_session_id, "assistant", response_text, conn, user_id, rich_content=rich_content)
+
+        logger.info(f"=" * 80)
+        logger.info(f"GPT-5 UNIFIED EXECUTION COMPLETE")
+        logger.info(f"Execution time: {orchestrator_result.get('execution_time_ms', 0):.2f}ms")
+        logger.info(f"=" * 80)
+
+        # Final check - make sure response_text is actually a string
+        if not isinstance(response_text, str):
+            logger.error(f"Response text is not a string: {type(response_text)}")
+            response_text = str(response_text)
 
         return {
-            "message": response_text,
+            "message": response_text + freshness_note,
             "session_id": valid_session_id,
-            "agent_used": "openai_fallback",
+            "agent_used": "gpt5_unified",
+            "rich_content": rich_content,
+            "metadata": {
+                "execution_time_ms": orchestrator_result.get('execution_time_ms', 0),
+                "profile_pack_summary": orchestrator_result.get('profile_pack_summary', {}),
+                "ui_blocks": result.get('ui_blocks', []),
+                "computations": result.get('computations', []),
+                "assumptions": result.get('assumptions', []),
+                "data_freshness": data_freshness
+            },
             "success": True
         }
 
@@ -1099,14 +1073,14 @@ async def test_agents(input: MessageInput):
         logger.info(f"Query: {input.message}")
         logger.info("=" * 80)
 
-        # Use test user ID for demo (using the first test user)
-        test_user_id = "04063b94-8377-426c-b8ff-83adae7a1839"
+        # Use the provided user ID from the request
+        user_id = input.user_id if hasattr(input, 'user_id') and input.user_id else "04063b94-8377-426c-b8ff-83adae7a1839"
 
         # Use the new orchestrator
         if orchestrator is not None:
             try:
                 orchestrator_result = await orchestrator.process_question(
-                    user_id=test_user_id,
+                    user_id=user_id,
                     question=input.message,
                     conversation_history=[]
                 )
@@ -1127,7 +1101,7 @@ async def test_agents(input: MessageInput):
                 return {
                     "message": response_text,
                     "session_id": "test-session",
-                    "agent_used": "orchestrator_v4",
+                    "agent_used": "gpt5_unified",
                     "metadata": {
                         "execution_time_ms": orchestrator_result.get('execution_time_ms', 0),
                         "profile_pack_summary": orchestrator_result.get('profile_pack_summary', {}),
@@ -1518,7 +1492,7 @@ def store_message(cur, session_id, message_type, content, conn, user_id=None, ri
         user_id = session_user_id
 
     # Convert rich_content to JSON if provided
-    rich_content_json = json.dumps(rich_content) if rich_content else None
+    rich_content_json = json.dumps(rich_content, default=str) if rich_content else None
 
     cur.execute("""
         INSERT INTO chat_messages (id, session_id, message_type, content, rich_content, turn_number, created_at, user_id)
@@ -1561,10 +1535,10 @@ def store_session_analysis(cur, session_id, user_id, analysis, conn):
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
     """, (
         str(uuid.uuid4()), chat_session_id, user_id, analysis['summary'],
-        json.dumps(analysis.get('sentiment_analysis')),
-        json.dumps(analysis.get('key_topics')),
-        json.dumps(analysis.get('action_items')),
-        json.dumps(analysis.get('goals_identified')),
+        json.dumps(analysis.get('sentiment_analysis'), default=str),
+        json.dumps(analysis.get('key_topics'), default=str),
+        json.dumps(analysis.get('action_items'), default=str),
+        json.dumps(analysis.get('goals_identified'), default=str),
         analysis.get('risk_assessment'),
         analysis.get('next_steps'),
         analysis.get('confidence_score', 0.8)
@@ -1610,8 +1584,8 @@ async def get_agent_logs():
         if orchestrator is None:
             return {"logs": [], "message": "New orchestrator not initialized"}
 
-        # For now, return basic orchestrator status since we replaced the legacy logging system
-        logs = [{"agent_name": "orchestrator_v4", "status": "active", "message": "New agentic framework running"}]
+        # For now, return basic orchestrator status for the unified GPT-5 system
+        logs = [{"agent_name": "gpt5_unified", "status": "active", "message": "GPT-5 unified framework running"}]
         
         # Enhance logs with additional metadata and full details
         enhanced_logs = []
@@ -3464,19 +3438,12 @@ async def startup():
     initialize_agents()
 
     if orchestrator and new_db_pool:
-        logger.info("[SUCCESS] New Agentic Framework v4.0: INITIALIZED")
-        logger.info("  - Agent Orchestrator: READY")
-        logger.info("  - SQL Agent: READY")
-        logger.info("  - Financial Modeling Agent: READY")
-        logger.info("  - Critique Agent: READY")
+        logger.info("[SUCCESS] GPT-5 Unified Framework: INITIALIZED")
+        logger.info("  - GPT-5 Orchestrator: READY")
         logger.info("  - PostgreSQL Pool: CONNECTED")
         logger.info("  - Profile Pack Builder: READY")
-        logger.info("  - Entity Resolution: ENABLED")
-        logger.info("  - SQL Sanitization: ENABLED")
-        logger.info("  - Loop Control: ENABLED (Max 1 revision per stage)")
     else:
-        logger.warning("[WARNING] New Agentic Framework: NOT INITIALIZED")
-        logger.warning("  Falling back to basic OpenAI chat")
+        logger.warning("[WARNING] GPT-5 Unified Framework: NOT INITIALIZED")
 
     logger.info("=" * 80)
     logger.info("BACKEND READY - Listening on port 8080")
