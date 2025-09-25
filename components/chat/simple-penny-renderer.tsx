@@ -20,7 +20,7 @@ function extractMarkdown(content: any): string {
     const trimmed = content.trim()
 
     // Check if it looks like it contains JSON with answer_markdown
-    if (trimmed.includes('"answer_markdown"') || trimmed.includes('"answer\\_markdown"')) {
+    if (trimmed.includes('answer_markdown')) {
       // Find the JSON object in the string
       const startIdx = trimmed.indexOf('{')
       const endIdx = trimmed.lastIndexOf('}')
