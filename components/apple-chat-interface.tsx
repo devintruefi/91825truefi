@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 // Chat components only - onboarding moved to dashboard
 import { DashboardPreview } from '@/components/chat/dashboard-preview'
-import { SimplePennyRenderer } from '@/components/chat/simple-penny-renderer'
+import { PennyResponseRenderer } from '@/components/chat/penny-response-renderer'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown, Edit2, Check, X } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
@@ -21,25 +21,36 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from 'next-themes'
 import UnifiedMarkdownRenderer from '@/components/unified-markdown-renderer'
 
-// Coerce potential JSON responses to markdown
-function coerceToMarkdown(maybe: any): string {
-  if (!maybe) return ''
-  if (typeof maybe === 'string') {
-    const s = maybe.trim()
-    if (s.startsWith('{')) {
-      try {
+// Extract both markdown and metadata from various response shapes
+function extractRichResponse(input: any): { markdown: string; metadata?: any } {
+  // Normalize multiple shapes:
+  // - object with answer_markdown/ui_blocks/assumptions/...
+  // - { content: "..."} / { message: "..."} / { response: "..."}
+  // - JSON string of either of the above
+  // - plain markdown string
+  try {
+    if (typeof input === 'string') {
+      const s = input.trim()
+      if (s.startsWith('{')) {
         const parsed = JSON.parse(s)
-        if (typeof parsed?.answer_markdown === 'string') return parsed.answer_markdown
-      } catch {}
+        return extractRichResponse(parsed)
+      }
+      return { markdown: s }
     }
-    return maybe
-  }
-  if (typeof maybe === 'object') {
-    if (typeof (maybe as any).answer_markdown === 'string') return (maybe as any).answer_markdown
-    if (typeof (maybe as any).markdown === 'string') return (maybe as any).markdown
-    if (typeof (maybe as any).message === 'string') return (maybe as any).message
-  }
-  return ''
+    if (input && typeof input === 'object') {
+      if (typeof input.answer_markdown === 'string') {
+        return { markdown: input.answer_markdown, metadata: input } // include ui_blocks etc.
+      }
+      // common fallbacks
+      if (typeof input.content === 'string') return { markdown: input.content }
+      if (typeof input.message === 'string') return { markdown: input.message }
+      if (typeof input.response === 'string') return { markdown: input.response }
+      if (input.rich_content && typeof input.rich_content.answer_markdown === 'string') {
+        return { markdown: input.rich_content.answer_markdown, metadata: input.rich_content }
+      }
+    }
+  } catch {}
+  return { markdown: String(input ?? '') }
 }
 
 interface Message {
@@ -1147,9 +1158,10 @@ function AppleChatInterfaceInner() {
         }
         aiResponseContent = accumulatedContent
         // When done, update the streaming message with the full content
+        const { markdown, metadata } = extractRichResponse(accumulatedContent)
         setMessages(prev => prev.map(msg =>
-              msg.id === streamingId 
-                ? { ...msg, content: accumulatedContent }
+              msg.id === streamingId
+                ? { ...msg, content: markdown, metadata }
                 : msg
         ));
       } else {
@@ -1188,21 +1200,14 @@ function AppleChatInterfaceInner() {
           }
         }
         
-        // Extract message content and metadata from response
-        // Use coercion function to safely extract markdown from any response format
-        const rawContent = data.content || data.message || data.response
-        console.debug('[AppleChat] backend payload typeof:', typeof rawContent)
-        if (typeof rawContent === 'string' && rawContent.trim().startsWith('{')) {
-          console.debug('[AppleChat] looks like JSON string — coercing to answer_markdown')
-        }
-        aiResponseContent = coerceToMarkdown(rawContent) || "I'm here to help with your financial journey!"
-        const metadata = data.metadata || null
-        const richContent = data.rich_content || null
+        // Extract both markdown and metadata from response
+        const { markdown, metadata } = extractRichResponse(data)
+        aiResponseContent = markdown || "I'm here to help with your financial journey!"
 
-        // Generate chart tags from rich_content UI blocks if present
+        // Generate chart tags from metadata.ui_blocks if present
         let enhancedContent = aiResponseContent
-        if (richContent && richContent.ui_blocks && Array.isArray(richContent.ui_blocks)) {
-          richContent.ui_blocks.forEach((block: any) => {
+        if (metadata && metadata.ui_blocks && Array.isArray(metadata.ui_blocks)) {
+          metadata.ui_blocks.forEach((block: any) => {
             if (block.type === 'line_chart' || block.type === 'bar_chart' || block.type === 'pie_chart') {
               // Convert UI block to chart tag format
               const chartType = block.type.replace('_chart', '')
@@ -1700,7 +1705,7 @@ function AppleChatInterfaceInner() {
                         >
                           {/* Removed onboarding progress - handled by dashboard */}
                           {message.metadata ? (
-                            <SimplePennyRenderer content={message.content || ''} metadata={message.metadata} />
+                            <PennyResponseRenderer content={message.content || ''} metadata={message.metadata} />
                           ) : (
                             message.id === streamingMessageId && isTyping
                               ? renderPennyMessage(message.content || '', theme)

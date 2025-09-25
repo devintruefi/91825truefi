@@ -7,6 +7,7 @@ import uuid
 import logging
 import json
 import traceback
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List, Any, AsyncGenerator
 from dotenv import load_dotenv
