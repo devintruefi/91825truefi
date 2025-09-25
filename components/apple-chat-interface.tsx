@@ -1158,7 +1158,10 @@ function AppleChatInterfaceInner() {
         }
         aiResponseContent = accumulatedContent
         // When done, update the streaming message with the full content
+        console.log('[CRITICAL STREAMING] accumulatedContent type:', typeof accumulatedContent)
+        console.log('[CRITICAL STREAMING] accumulatedContent preview:', accumulatedContent.substring(0, 200))
         const { markdown, metadata } = extractRichResponse(accumulatedContent)
+        console.log('[CRITICAL STREAMING] Extracted markdown:', markdown?.substring(0, 200))
         setMessages(prev => prev.map(msg =>
               msg.id === streamingId
                 ? { ...msg, content: markdown, metadata }
@@ -1201,7 +1204,11 @@ function AppleChatInterfaceInner() {
         }
         
         // Extract both markdown and metadata from response
+        console.log('[CRITICAL] Raw data from backend:', data)
+        console.log('[CRITICAL] Type of data:', typeof data)
         const { markdown, metadata } = extractRichResponse(data)
+        console.log('[CRITICAL] Extracted markdown:', markdown?.substring(0, 200))
+        console.log('[CRITICAL] Extracted metadata:', metadata ? 'Has metadata' : 'No metadata')
         aiResponseContent = markdown || "I'm here to help with your financial journey!"
 
         // Generate chart tags from metadata.ui_blocks if present
