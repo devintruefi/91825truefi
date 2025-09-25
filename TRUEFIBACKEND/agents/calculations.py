@@ -2,6 +2,7 @@
 # Personalized financial calculations using user profile data
 
 from typing import Dict, Any, List, Optional, Tuple
+import copy
 from decimal import Decimal
 from datetime import datetime, timedelta
 import logging
@@ -25,6 +26,22 @@ class PersonalizedCalculator:
         self.goals = profile_pack.get('goals', [])
         self.budgets = profile_pack.get('budgets', [])
         self.liabilities = profile_pack.get('manual_liabilities', [])
+
+    def _normalize_rate(self, rate: float, default: float = 0.10) -> float:
+        """Normalize interest/discount rates to decimals and clamp to sensible bounds.
+        - If a value like 18 or 7 is provided, treat as percent (0.18 or 0.07).
+        - Clamp to [0, 1] to avoid astronomical growth from bad inputs.
+        """
+        try:
+            r = float(rate)
+        except Exception:
+            r = default
+        # Convert percents like 7, 18 into 0.07, 0.18
+        if r > 1:
+            r = r / 100.0
+        # Clamp
+        r = max(0.0, min(r, 1.0))
+        return r
 
     def _extract_demographics(self) -> Dict[str, Any]:
         """Extract demographic information from profile"""
@@ -707,7 +724,7 @@ class PersonalizedCalculator:
         debt_list = []
         for debt in debts:
             balance = float(debt.get('balance', 0))
-            rate = float(debt.get('interest_rate', 0.10))  # Default 10% if not provided
+            rate = self._normalize_rate(debt.get('interest_rate', 0.10), default=0.10)  # Normalize to decimal
             min_payment = float(debt.get('minimum_payment', balance * 0.02))  # Default 2% of balance
 
             if balance > 0:
@@ -730,11 +747,11 @@ class PersonalizedCalculator:
         extra_payment = monthly_income * 0.10
 
         # Calculate avalanche strategy (highest rate first)
-        avalanche_order = sorted(debt_list, key=lambda x: x['rate'], reverse=True)
+        avalanche_order = sorted([copy.deepcopy(d) for d in debt_list], key=lambda x: x['rate'], reverse=True)
         avalanche_result = self._calculate_debt_payoff(avalanche_order, extra_payment)
 
         # Calculate snowball strategy (smallest balance first)
-        snowball_order = sorted(debt_list, key=lambda x: x['balance'])
+        snowball_order = sorted([copy.deepcopy(d) for d in debt_list], key=lambda x: x['balance'])
         snowball_result = self._calculate_debt_payoff(snowball_order, extra_payment)
 
         # Compare strategies
@@ -775,7 +792,7 @@ class PersonalizedCalculator:
         """Calculate debt payoff for a given order"""
         total_interest = 0
         months = 0
-        debts_remaining = debt_order.copy()
+        debts_remaining = copy.deepcopy(debt_order)
         payoff_schedule = []
 
         while debts_remaining and months < 360:  # Cap at 30 years
@@ -784,7 +801,9 @@ class PersonalizedCalculator:
 
             # Apply minimum payments and calculate interest
             for debt in debts_remaining:
-                interest = debt['balance'] * (debt['rate'] / 12)
+                # Ensure rate is normalized each iteration (defensive)
+                effective_rate = self._normalize_rate(debt.get('rate', 0.10), default=0.10)
+                interest = debt['balance'] * (effective_rate / 12)
                 monthly_interest += interest
                 debt['balance'] += interest - debt['min_payment']
 
@@ -824,10 +843,10 @@ class PersonalizedCalculator:
         scored_debts = []
         for debt in debts:
             balance = float(debt.get('balance', 0))
-            rate = float(debt.get('interest_rate', 0.10))
+            rate = self._normalize_rate(debt.get('interest_rate', 0.10), default=0.10)
 
             # Scoring factors
-            rate_score = rate * 100  # Higher rate = higher priority
+            rate_score = rate * 100  # Higher rate = higher priority (rate normalized to 0-1)
             balance_score = (1 / balance if balance > 0 else 0) * 1000  # Smaller balance = higher score
 
             # Type-based scoring
@@ -1002,7 +1021,7 @@ class PersonalizedCalculator:
         purchase_price = parameters.get('purchase_price', 300000)
         down_payment_percent = parameters.get('down_payment_percent', 20)
         loan_term_years = parameters.get('loan_term_years', 30)
-        interest_rate = parameters.get('interest_rate', 0.07)
+        interest_rate = self._normalize_rate(parameters.get('interest_rate', 0.07), default=0.07)
 
         down_payment = purchase_price * (down_payment_percent / 100)
         loan_amount = purchase_price - down_payment

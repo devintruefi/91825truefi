@@ -19,9 +19,16 @@ def classify_intent(question: str) -> Intent:
     if re.search(r'^\s*(how\s+are\s+you|what\'?s\s+up|whatsup|sup|how\'?s\s+it\s+going|how\s+you\s+doing)\s*[?!.]?\s*$', q):
         return Intent.CASUAL_CONVERSATION
 
-    # Additional spending pattern
-    if re.search(r'\b(show.*spend|spending|spent.*me)\b', q):
-        return Intent.SPEND_BY_TIME
+    # Merchant-specific phrasing: "at <merchant>", quoted names, or brand tokens
+    # MUST BE BEFORE generic spending patterns
+    if re.search(r'\bat\s+[a-z][\w\s&\']+', q) or re.search(r'"[^"]+"', q):
+        return Intent.TRANSACTION_SEARCH
+    if re.search(r'\b(purchases?|spend(ing)?|charges?)\s+at\s+[a-z]', q):
+        return Intent.TRANSACTION_SEARCH
+    if re.search(r'\b(trader|whole\s+foods|amazon|starbucks|walmart|target|costco)\b', q):
+        return Intent.TRANSACTION_SEARCH
+
+    # Additional spending pattern - REMOVED (too broad, interferes with specific intents)
 
     # Net worth queries
     if re.search(r'\b(net\s*worth|what\s+am\s+i\s+worth|overall\s+wealth|total\s+value|assets.*liabilities)\b', q):
@@ -35,16 +42,16 @@ def classify_intent(question: str) -> Intent:
     if re.search(r'\b(all\s+accounts|list.*accounts|show.*accounts|accounts\s+breakdown)\b', q):
         return Intent.BALANCES_BY_ACCOUNT
 
-    # Top merchants
-    if re.search(r'\b(top\s+merchant|most\s+spent|where.*spend.*most|frequent.*merchant)\b', q):
+    # Top merchants/places - MUST come before generic spending patterns
+    if re.search(r'\b(top\s+(merchant|place|store|shop|vendor)|most\s+spent|where.*spend.*most|frequent.*(merchant|place|store)|places.*spending|top.*spending)\b', q):
         return Intent.TOP_MERCHANTS
 
     # Month over month comparison
     if re.search(r'\b(month\s+over\s+month|mom|compared?.*last\s+month|vs\s+last\s+month|spending.*change)\b', q):
         return Intent.SPENDING_MOM_DELTA
 
-    # Spending by category
-    if re.search(r'\b(category|categories|breakdown|by type|where.*spend)\b', q):
+    # Spending by category - check before generic spending
+    if re.search(r'\b(category|categories|breakdown|by type)\b', q):
         return Intent.SPEND_BY_CATEGORY
 
     # Time-based spending (last month, this year, etc)
@@ -185,7 +192,8 @@ def intent_contract(question: str) -> Tuple[Intent, Dict[str, Any]]:
 
     # Add time range to contract if relevant
     if intent in [Intent.RECENT_TRANSACTIONS, Intent.SPEND_BY_CATEGORY,
-                  Intent.SPEND_BY_TIME, Intent.CASHFLOW_SUMMARY]:
+                  Intent.SPEND_BY_TIME, Intent.CASHFLOW_SUMMARY,
+                  Intent.TOP_MERCHANTS, Intent.SPENDING_MOM_DELTA]:
         time_range = get_time_range(question)
         contract["time_range"] = time_range
 

@@ -94,14 +94,18 @@ class SearchQueryBuilder:
         categories = self._extract_categories(question_lower)
         transaction_type = self._extract_transaction_type(question_lower)
 
-        # Build merchant conditions
+        # Build merchant conditions - MUST check both merchant_name AND name columns
         if merchants:
             merchant_conditions = []
             for i, merchant in enumerate(merchants):
                 param_name = f'merchant_{self.param_counter}'
                 self.param_counter += 1
                 self.params[param_name] = f'%{merchant}%'
-                merchant_conditions.append(f"LOWER(merchant_name) LIKE %({param_name})s")
+                # Check BOTH merchant_name and name columns
+                merchant_conditions.append(
+                    f"(LOWER(COALESCE(merchant_name,'')) LIKE %({param_name})s OR "
+                    f"LOWER(COALESCE(name,'')) LIKE %({param_name})s)"
+                )
             if merchant_conditions:
                 self.query_parts.append(f"({' OR '.join(merchant_conditions)})")
 
@@ -135,10 +139,14 @@ class SearchQueryBuilder:
                 self.query_parts.append(f"({' OR '.join(category_conditions)})")
 
         # Add transaction type filter (spending vs income)
+        # Handle both Plaid conventions: negative expenses OR positive expenses
         if transaction_type == 'spending':
-            self.query_parts.append("amount < 0")
+            # Accept both negative amounts (Plaid standard) and positive amounts (some implementations)
+            # Most expense transactions should be negative, but handle positive as fallback
+            self.query_parts.append("(amount < 0 OR (amount > 0 AND category NOT IN ('Transfer', 'Deposit', 'Payroll')))")
         elif transaction_type == 'income':
-            self.query_parts.append("amount > 0")
+            # Income can be positive deposits or negative transfers depending on context
+            self.query_parts.append("(amount > 0 OR category IN ('Transfer', 'Deposit', 'Payroll'))")
 
         # Exclude pending by default unless specifically requested
         if 'pending' not in question_lower:
@@ -302,25 +310,30 @@ class SearchQueryBuilder:
         if operator == 'gt':
             param_name = f'amount_{self.param_counter}'
             self.param_counter += 1
-            self.params[param_name] = -amount_filter['value']  # Negative for expenses
-            return f"amount < %({param_name})s"
+            # Handle both positive and negative amount conventions
+            value = amount_filter['value']
+            self.params[param_name] = value
+            return f"(ABS(amount) > %({param_name})s)"
         elif operator == 'lt':
             param_name = f'amount_{self.param_counter}'
             self.param_counter += 1
-            self.params[param_name] = -amount_filter['value']
-            return f"amount > %({param_name})s"
+            value = amount_filter['value']
+            self.params[param_name] = value
+            return f"(ABS(amount) < %({param_name})s)"
         elif operator == 'eq':
             param_name = f'amount_{self.param_counter}'
             self.param_counter += 1
-            self.params[param_name] = -amount_filter['value']
-            return f"ABS(amount + %({param_name})s) < 0.01"
+            value = amount_filter['value']
+            self.params[param_name] = value
+            return f"(ABS(amount) - %({param_name})s) < 0.01"
         elif operator == 'between':
             min_param = f'amount_min_{self.param_counter}'
             max_param = f'amount_max_{self.param_counter}'
             self.param_counter += 1
-            self.params[min_param] = -amount_filter['max']
-            self.params[max_param] = -amount_filter['min']
-            return f"(amount BETWEEN %({min_param})s AND %({max_param})s)"
+            # Use absolute values to handle both positive and negative amounts
+            self.params[min_param] = amount_filter['min']
+            self.params[max_param] = amount_filter['max']
+            return f"(ABS(amount) BETWEEN %({min_param})s AND %({max_param})s)"
 
         return ""
 
@@ -346,3 +359,91 @@ class SearchQueryBuilder:
 
         conditions = ' AND '.join(self.query_parts) if self.query_parts else '1=1'
         return base_sql.format(conditions=conditions).strip()
+
+
+def compile_transaction_search(user_id: str, merchants: List[str] = None,
+                              categories: List[str] = None,
+                              date_from=None, date_to=None,
+                              default_days: int = 90,
+                              transaction_type: str = "spending") -> Tuple[str, Dict[str, Any]]:
+    """
+    Public entrypoint for planner to compile transaction search SQL.
+
+    Args:
+        user_id: User ID for security filtering
+        merchants: List of canonical merchant names to search
+        categories: List of categories to filter
+        date_from: Start date (datetime or date object)
+        date_to: End date (datetime or date object)
+        default_days: Default lookback days if no date range specified (90)
+        transaction_type: "spending" or "income"
+
+    Returns:
+        Tuple of (SQL query, parameters dict)
+    """
+    builder = SearchQueryBuilder()
+
+    # Start with base filters
+    builder.query_parts = [f"user_id = %(user_id)s"]
+    builder.params = {'user_id': user_id}
+    builder.param_counter = 0
+
+    # Add merchant filters if provided
+    if merchants:
+        merchant_conditions = []
+        for i, merchant in enumerate(merchants):
+            param_name = f'merchant_{builder.param_counter}'
+            builder.param_counter += 1
+            builder.params[param_name] = f'%{merchant}%'
+            # Check BOTH merchant_name and name columns
+            merchant_conditions.append(
+                f"(LOWER(COALESCE(merchant_name,'')) LIKE %({param_name})s OR "
+                f"LOWER(COALESCE(name,'')) LIKE %({param_name})s)"
+            )
+        if merchant_conditions:
+            builder.query_parts.append(f"({' OR '.join(merchant_conditions)})")
+
+    # Add date range
+    if date_from or date_to:
+        if date_from:
+            builder.params['start_date'] = date_from
+            builder.query_parts.append("COALESCE(posted_datetime, date::timestamptz) >= %(start_date)s")
+        if date_to:
+            builder.params['end_date'] = date_to
+            builder.query_parts.append("COALESCE(posted_datetime, date::timestamptz) <= %(end_date)s")
+    elif merchants:  # Default date range for merchant queries
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=default_days)
+        builder.params['start_date'] = start_date
+        builder.params['end_date'] = end_date
+        builder.query_parts.append("COALESCE(posted_datetime, date::timestamptz) >= %(start_date)s")
+        builder.query_parts.append("COALESCE(posted_datetime, date::timestamptz) <= %(end_date)s")
+
+    # Add category filters
+    if categories:
+        category_conditions = []
+        for i, category in enumerate(categories):
+            param_name = f'category_{builder.param_counter}'
+            builder.param_counter += 1
+            builder.params[param_name] = f'%{category}%'
+            category_conditions.append(
+                f"(LOWER(category) LIKE %({param_name})s OR LOWER(pfc_primary) LIKE %({param_name})s)"
+            )
+        if category_conditions:
+            builder.query_parts.append(f"({' OR '.join(category_conditions)})")
+
+    # Add transaction type filter
+    # Handle both Plaid conventions: negative expenses OR positive expenses
+    if transaction_type == 'spending':
+        # Accept both negative amounts (Plaid standard) and positive amounts (some implementations)
+        builder.query_parts.append("(amount < 0 OR (amount > 0 AND category NOT IN ('Transfer', 'Deposit', 'Payroll')))")
+    elif transaction_type == 'income':
+        # Income can be positive deposits or negative transfers depending on context
+        builder.query_parts.append("(amount > 0 OR category IN ('Transfer', 'Deposit', 'Payroll'))")
+
+    # Exclude pending by default
+    builder.query_parts.append("pending = false")
+
+    # Build and return SQL
+    sql = builder._build_sql()
+    return sql, builder.params

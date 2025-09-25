@@ -1,0 +1,12 @@
+[
+  {
+    "user_id": "136e2d19-e31d-4691-94cb-1729585a340e",
+    "age": 37,
+    "household_income": "160000.00",
+    "marital_status": "single",
+    "dependents": 0,
+    "life_stage": null,
+    "created_at": "2025-09-01 18:40:20.298000+00:00",
+    "updated_at": "2025-09-21 03:30:02.971205+00:00"
+  }
+]

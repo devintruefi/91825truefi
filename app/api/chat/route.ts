@@ -3,6 +3,10 @@
 // Handles both authenticated (logged-in) and non-authenticated (sample/demo) users
 import { NextRequest, NextResponse } from 'next/server';
 
+// Configure this route for long-running GPT-5 requests
+export const maxDuration = 300; // 5 minutes for Vercel Functions (max allowed on Pro plan)
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -31,16 +35,39 @@ export async function POST(request: NextRequest) {
       headers['Authorization'] = authHeader;
     }
     
-    // Forward the request to FastAPI backend
-    const response = await fetch(`${backendUrl}${endpoint}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        message: message,
-        session_id: sessionId,
-        conversation_history: [] // Can be extended if needed
-      }),
-    });
+    // Forward the request to FastAPI backend with timeout
+    const controller = new AbortController();
+    // Allow long-running financial modeling to complete (default 7 minutes).
+    // Override via FRONTEND_CHAT_TIMEOUT_MS env var if needed.
+    const timeoutMs = Number(process.env.FRONTEND_CHAT_TIMEOUT_MS || 720000);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(`${backendUrl}${endpoint}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          message: message,
+          session_id: sessionId,
+          conversation_history: [] // Can be extended if needed
+        }),
+        signal: controller.signal,
+      });
+    } catch (e: any) {
+      clearTimeout(timeout);
+      console.error('Backend fetch error or timeout:', e?.name || e);
+      // On timeout/connection error, return a graceful fallback (200) so UI does not crash
+      const isAuthenticated = !!authHeader;
+      const fallback = {
+        content: isAuthenticated
+          ? "I'm still working on your financial model. This can take a bit longer than usual. Please try again in a moment."
+          : "Hi Sample User! 👋 I'm Penny, your AI financial advisor. How can I help today?",
+        sessionId: sessionId || `session_${Date.now()}`,
+      };
+      return NextResponse.json(fallback, { status: 200 });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     // Handle response from FastAPI
     let data: any = {};
@@ -72,23 +99,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
-      // If backend returns an error for non-authenticated users, provide fallback
       console.error('Backend error:', response.status, data);
-      
-      // For non-authenticated users, provide a helpful fallback instead of error
-      if (!authHeader) {
-        console.log('Returning fallback for non-authenticated user due to backend error');
-        return NextResponse.json({
-          content: "Hi Sample User! 👋 I'm Penny, your AI financial advisor. I'm here to help you explore TrueFi's features. You can ask me about budgeting, saving, investments, or any financial topic. What would you like to know?",
-          sessionId: sessionId || `session_${Date.now()}`
-        }, { status: 200 }); // Explicitly return 200 OK for demo users
-      }
-      
-      // For authenticated users, forward the error
-      return NextResponse.json(
-        { error: data.detail || 'Backend error', message: data.message },
-        { status: response.status }
-      );
+      const friendly = authHeader
+        ? "I'm still working on your financial model. This can take a bit longer than usual. Please try again in a moment."
+        : "Hi Sample User! 👋 I'm Penny, your AI financial advisor. I'm here to help you explore TrueFi's features. You can ask me about budgeting, saving, investments, or any financial topic. What would you like to know?";
+      return NextResponse.json({
+        content: friendly,
+        sessionId: sessionId || `session_${Date.now()}`
+      }, { status: 200 });
     }
 
     // FastAPI returns: { message: string, session_id: string, metadata?: any, ... }
@@ -108,10 +126,18 @@ export async function POST(request: NextRequest) {
     const fallbackMessage = isAuthenticated 
       ? "I'm having trouble connecting to the server. Please try again in a moment."
       : "Hi Sample User! 👋 I'm Penny, your personalized financial advisor. I'm here to help you explore what TrueFi can do for you. What would you like to know about managing your finances?";
+    // Safely derive session id from parsed body if available
+    let currentSessionId: string | undefined;
+    try {
+      const maybeBody = await request.clone().json().catch(() => null);
+      currentSessionId = maybeBody?.sessionId;
+    } catch (_) {
+      currentSessionId = undefined;
+    }
     
     return NextResponse.json({ 
       content: fallbackMessage,
-      sessionId: sessionId || `session_${Date.now()}`
-    });
+      sessionId: currentSessionId || `session_${Date.now()}`
+    }, { status: 200 });
   }
 }

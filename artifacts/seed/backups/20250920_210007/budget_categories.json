@@ -1,0 +1,82 @@
+[
+  {
+    "id": "f54ed762-3fa0-4329-b6aa-6903b04babed",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "Emergency Fund",
+    "amount": "2444.00",
+    "created_at": "2025-09-21 03:56:58.952000+00:00",
+    "updated_at": "2025-09-21 03:56:58.952000+00:00"
+  },
+  {
+    "id": "1ab76621-915f-47c2-b434-cb6a787a0130",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "Retirement",
+    "amount": "2444.00",
+    "created_at": "2025-09-21 03:56:59.111000+00:00",
+    "updated_at": "2025-09-21 03:56:59.111000+00:00"
+  },
+  {
+    "id": "ca8daf34-c4b1-4797-b4a0-80c3be60d199",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "Goals Savings",
+    "amount": "1222.00",
+    "created_at": "2025-09-21 03:56:59.185000+00:00",
+    "updated_at": "2025-09-21 03:56:59.185000+00:00"
+  },
+  {
+    "id": "ec55b2a2-639d-4056-a879-f9dab4d967d6",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "Income",
+    "amount": "4889.00",
+    "created_at": "2025-09-21 03:56:59.254000+00:00",
+    "updated_at": "2025-09-21 03:56:59.254000+00:00"
+  },
+  {
+    "id": "6621d343-4392-4954-a60c-b81b70cab750",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "Transfer",
+    "amount": "1200.00",
+    "created_at": "2025-09-21 03:56:59.403000+00:00",
+    "updated_at": "2025-09-21 03:56:59.403000+00:00"
+  },
+  {
+    "id": "9f514919-14e0-46ca-8a87-85a8bd8d0f3e",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Emergency Fund",
+    "amount": "2444.00",
+    "created_at": "2025-09-21 04:00:07.202000+00:00",
+    "updated_at": "2025-09-21 04:00:07.202000+00:00"
+  },
+  {
+    "id": "a5b7b2ae-b094-44d0-afcd-aee4673ae5d2",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Retirement",
+    "amount": "2444.00",
+    "created_at": "2025-09-21 04:00:07.272000+00:00",
+    "updated_at": "2025-09-21 04:00:07.272000+00:00"
+  },
+  {
+    "id": "f8d51910-3738-46cc-80ac-16b862b812ec",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Goals Savings",
+    "amount": "1222.00",
+    "created_at": "2025-09-21 04:00:07.347000+00:00",
+    "updated_at": "2025-09-21 04:00:07.347000+00:00"
+  },
+  {
+    "id": "1d38b232-fed3-489d-aa97-5543fe6b79d6",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Income",
+    "amount": "4889.00",
+    "created_at": "2025-09-21 04:00:07.415000+00:00",
+    "updated_at": "2025-09-21 04:00:07.415000+00:00"
+  },
+  {
+    "id": "1c3064c4-32fe-417a-9f57-32ef2301f832",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Transfer",
+    "amount": "1200.00",
+    "created_at": "2025-09-21 04:00:07.486000+00:00",
+    "updated_at": "2025-09-21 04:00:07.486000+00:00"
+  }
+]

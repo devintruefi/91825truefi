@@ -1,0 +1,47 @@
+[
+  {
+    "id": "3be4a631-414c-4b7a-98f1-c97b9f25511f",
+    "account_id": "0fc82dc0-64c8-48a1-861a-ba13ee95a95a",
+    "security_id": "f0b06a8f-0502-4624-a150-0f074eb1a892",
+    "quantity": "120",
+    "cost_basis_total": "15300.000",
+    "market_value": "18000.0",
+    "as_of_date": "2025-09-21"
+  },
+  {
+    "id": "6d59dc7d-b2c5-4ec1-adb4-dce4b9c0b9c2",
+    "account_id": "0fc82dc0-64c8-48a1-861a-ba13ee95a95a",
+    "security_id": "2be28da0-fb95-4e59-89f5-23c702159002",
+    "quantity": "80",
+    "cost_basis_total": "9562.500",
+    "market_value": "11250.0",
+    "as_of_date": "2025-09-21"
+  },
+  {
+    "id": "dca58863-4093-4f2e-af67-235f141f5f78",
+    "account_id": "0fc82dc0-64c8-48a1-861a-ba13ee95a95a",
+    "security_id": "a28805a2-dd2c-49de-ab9e-9ec4b1e806ef",
+    "quantity": "50",
+    "cost_basis_total": "7650.000",
+    "market_value": "9000.0",
+    "as_of_date": "2025-09-21"
+  },
+  {
+    "id": "5905b279-97da-4718-bca1-e6f99db659b7",
+    "account_id": "0fc82dc0-64c8-48a1-861a-ba13ee95a95a",
+    "security_id": "0696e2a0-998b-4402-a72e-bb0fc0d3d4c1",
+    "quantity": "30",
+    "cost_basis_total": "3825.000",
+    "market_value": "4500.0",
+    "as_of_date": "2025-09-21"
+  },
+  {
+    "id": "0758d3a6-b753-419b-93cc-b0fc40d7e1cd",
+    "account_id": "0fc82dc0-64c8-48a1-861a-ba13ee95a95a",
+    "security_id": "425e2878-403b-47fd-a201-fb2c03624353",
+    "quantity": "10",
+    "cost_basis_total": "1912.500",
+    "market_value": "2250.0",
+    "as_of_date": "2025-09-21"
+  }
+]

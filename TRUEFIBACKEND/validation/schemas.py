@@ -46,7 +46,7 @@ class ComputationSchema(BaseModel):
 
 class UIBlockSchema(BaseModel):
     """Schema for UI blocks with rich formatting support"""
-    type: Literal["table", "text", "chart", "kpi_card", "equation", "pie_chart", "bar_chart", "line_chart", "timeline", "alert"]
+    type: Literal["table", "text", "chart", "kpi_card", "equation", "pie_chart", "bar_chart", "line_chart", "timeline", "alert", "prediction_chart"]
     title: str
     data: Any
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)

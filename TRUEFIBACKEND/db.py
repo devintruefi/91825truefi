@@ -66,11 +66,16 @@ class DatabasePool:
                 else:
                     cursor.execute(sql)
 
-                if fetch_one:
-                    result = cursor.fetchone()
-                    return [result] if result else []
+                # Check if this is a SELECT/RETURNING query
+                if cursor.description:
+                    if fetch_one:
+                        result = cursor.fetchone()
+                        return [result] if result else []
+                    else:
+                        return cursor.fetchall()
                 else:
-                    return cursor.fetchall()
+                    # For INSERT/UPDATE/DELETE without RETURNING
+                    return []
 
     def close(self):
         """Close all connections in the pool"""
@@ -101,10 +106,18 @@ def execute_safe_query(
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """Execute a query with safety checks"""
     try:
-        # Add row limit if not present
+        # Add row limit if not present - check for LIMIT keyword followed by number or parameter
         sql_upper = sql.upper()
-        if 'LIMIT' not in sql_upper and sql_upper.startswith('SELECT'):
+        import re
+        # Check for LIMIT followed by digits, %(limit)s, or other parameter patterns (case insensitive)
+        limit_pattern = r'LIMIT\s+(?:\d+|%\([^)]+\)[Ss]|\$\d+)'
+        has_limit = bool(re.search(limit_pattern, sql_upper))
+
+        logger.info(f"SQL LIMIT CHECK: has_limit={has_limit}, sql_len={len(sql)}, sql_preview={sql[:100]}...")
+
+        if not has_limit and sql_upper.strip().startswith('SELECT'):
             sql = f"{sql.rstrip(';')} LIMIT {max_rows}"
+            logger.debug(f"Added LIMIT clause: {sql[-50:]}")
 
         pool = get_db_pool()
         results = pool.execute_query(sql, params)

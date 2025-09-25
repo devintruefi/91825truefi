@@ -80,8 +80,8 @@ class SQLSanitizer:
     @classmethod
     def add_safety_wrapper(cls, sql: str, user_id: str, max_rows: int = 1000) -> str:
         """Add safety wrapper to SQL query"""
-        # Remove any existing LIMIT clause
-        sql = re.sub(r'\s+LIMIT\s+\d+', '', sql, flags=re.IGNORECASE)
+        # Remove any existing LIMIT clause (both numeric and parameterized)
+        sql = re.sub(r'\s+LIMIT\s+(?:\d+|%\([^)]+\)[Ss]|\$\d+)', '', sql, flags=re.IGNORECASE)
 
         # Ensure user_id parameter is used
         if ':user_id' not in sql and '%(user_id)s' not in sql:

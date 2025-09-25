@@ -1,0 +1,9 @@
+{
+  "user_id": "136e2d19-e31d-4691-94cb-1729585a340e",
+  "timestamp": "20250920_210007",
+  "validations": {
+    "No NULLs in critical fields": true,
+    "Budget categories sum equals total": false
+  },
+  "all_passed": false
+}

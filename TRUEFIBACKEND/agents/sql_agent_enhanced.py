@@ -1,7 +1,7 @@
 # TRUEFIBACKEND/agents/sql_agent_enhanced.py
 # Enhanced SQL Agent with intent routing and better table selection
 
-import openai
+from openai import AsyncOpenAI
 from typing import Dict, Any, Optional, Tuple
 import json
 import logging
@@ -10,17 +10,25 @@ from decimal import Decimal
 from config import config
 from validation.schemas import SQLRequestSchema, SQLResponseSchema
 from validation.validate import validate_json
-from agents.router import intent_contract, validate_sql_tables, enhance_sql_with_intent
+from agents.router import validate_sql_tables, enhance_sql_with_intent
 from agents.intents import Intent
 from agents.search_builder import SearchQueryBuilder
 
 logger = logging.getLogger(__name__)
 
+# Use intelligent router instead of regex-based router
+try:
+    from agents.intelligent_router import intent_contract
+    logger.info("Using intelligent router for intent classification")
+except ImportError:
+    logger.warning("Intelligent router not available, falling back to regex router")
+    from agents.router import intent_contract
+
 class EnhancedSQLAgent:
     """Enhanced SQL Agent with deterministic intent routing"""
 
     def __init__(self):
-        self.client = openai.AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+        self.client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
         self.system_prompt = self._load_enhanced_system_prompt()
         self.search_builder = SearchQueryBuilder()
 

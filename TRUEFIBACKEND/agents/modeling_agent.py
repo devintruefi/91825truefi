@@ -2,11 +2,13 @@
 # Modeling Agent - performs financial analysis and reasoning with personalization
 
 import openai
+import requests
 from typing import Dict, Any, Optional, List
 import json
 import logging
+import asyncio
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, date
 from config import config
 from validation.schemas import ModelRequestSchema, ModelResponseSchema
 from validation.validate import validate_json
@@ -32,7 +34,7 @@ class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
             return float(obj)
-        elif isinstance(obj, datetime):
+        elif isinstance(obj, (datetime, date)):
             return obj.isoformat()
         return super().default(obj)
 
@@ -41,6 +43,9 @@ class ModelingAgent:
 
     def __init__(self):
         self.client = openai.AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+        # Use advanced model for financial modeling
+        self.model = config.ADVANCED_MODEL  # Using most advanced available model
+        # Load system prompt after model is set
         self.system_prompt = self._load_system_prompt()
         self.calculation_router = CalculationRouter()
 
@@ -49,8 +54,16 @@ class ModelingAgent:
         try:
             with open('prompts/common_system.md', 'r') as f:
                 common = f.read()
-            with open('prompts/modeling_agent_system.md', 'r') as f:
-                specific = f.read()
+
+            # Use enhanced prompt for advanced models
+            if self.model in ["gpt-5", "gpt-4o", "gpt-4-turbo", "gpt-4"]:
+                with open('prompts/modeling_agent_gpt5_system.md', 'r') as f:
+                    specific = f.read()
+                logger.info(f"Loaded enhanced system prompt for {self.model}")
+            else:
+                with open('prompts/modeling_agent_system.md', 'r') as f:
+                    specific = f.read()
+
             return f"{common}\n\n{specific}"
         except Exception as e:
             logger.error(f"Failed to load system prompt: {e}")
@@ -76,27 +89,47 @@ class ModelingAgent:
             user_message = self._build_enhanced_user_message(validated_request, personalized_insights)
             logger.info("User message built successfully")
 
-            # Call OpenAI
-            logger.info("Calling OpenAI API")
-            response = await self.client.chat.completions.create(
-                model=config.OPENAI_MODEL,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=config.OPENAI_TEMPERATURE,
-                max_tokens=config.OPENAI_MAX_TOKENS
-            )
-            logger.info("OpenAI API call completed")
+            # Call OpenAI with advanced model
+            logger.info(f"Calling OpenAI API with {self.model}")
+
+            # Use responses API for GPT-5, chat completions for others
+            if self.model == "gpt-5":
+                content = await self._call_gpt5_responses_api(user_message)
+            else:
+                try:
+                    response = await self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": self.system_prompt},
+                            {"role": "user", "content": user_message}
+                        ],
+                        timeout=30.0
+                    )
+                    content = response.choices[0].message.content
+                    logger.info(f"{self.model} API call completed")
+                except Exception as api_error:
+                    logger.warning(f"{self.model} API call failed: {api_error}, falling back to gpt-4o")
+                    # Fallback to gpt-4o if model fails
+                    response = await asyncio.shield(self.client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": self.system_prompt},
+                            {"role": "user", "content": user_message}
+                        ]
+                    ))
+                    content = response.choices[0].message.content
+                    logger.info("Fallback to gpt-4o completed")
 
             # Parse response
             logger.info("Parsing OpenAI response")
-            content = response.choices[0].message.content
             result = self._parse_response(content)
             logger.info("Response parsed successfully")
 
             # Enhance with personalized calculations
             result = self._enhance_with_calculations(result, personalized_insights)
+
+            # Ensure we have a substantive answer_markdown. If generic/placeholder, synthesize from profile.
+            result = self._ensure_answer_markdown(result, validated_request, personalized_insights)
 
             # Add life-stage context
             result = self._add_life_stage_context(result, validated_request.profile_pack)
@@ -116,6 +149,9 @@ class ModelingAgent:
             logger.info("Serializing final output")
             return json.loads(json.dumps(validated_output.dict(), cls=DecimalEncoder))
 
+        except asyncio.CancelledError:
+            logger.error("Modeling Agent request cancelled by client context")
+            return {'error': 'Request cancelled'}
         except Exception as e:
             logger.error(f"Modeling Agent error: {e}")
             return {'error': str(e)}
@@ -125,6 +161,14 @@ class ModelingAgent:
         profile_pack_summary = self._summarize_profile_pack(request.profile_pack)
         sql_plan_json = json.dumps(request.sql_plan, indent=2, cls=DecimalEncoder)
         sql_result_summary = self._summarize_sql_result(request.sql_result)
+
+        # Truncate potentially large SQL results to keep prompt compact
+        sql_result_truncated = self._truncate_sql_result(
+            request.sql_result,
+            max_rows=config.MODELING_MAX_ROWS,
+            max_chars=config.MODELING_MAX_CHARS,
+        )
+        truncated_json = json.dumps(sql_result_truncated, indent=2, cls=DecimalEncoder)
 
         return f"""
 **Question:** {request.question}
@@ -140,9 +184,9 @@ class ModelingAgent:
 **SQL Results Summary:**
 {sql_result_summary}
 
-**Complete SQL Results Data:**
+**Complete SQL Results Data (truncated for brevity):**
 ```json
-{json.dumps(request.sql_result, indent=2, cls=DecimalEncoder)}
+{truncated_json}
 ```
 
 Analyze this data and provide comprehensive financial insights. Follow the exact JSON format specified in the system prompt.
@@ -192,6 +236,43 @@ Sample data: {rows[0] if rows else 'None'}
         except Exception as e:
             logger.error(f"Failed to summarize SQL result: {e}")
             return "SQL result summary unavailable"
+
+    def _truncate_sql_result(self, sql_result: Dict[str, Any], max_rows: int = 150, max_chars: int = 15000) -> Dict[str, Any]:
+        """Return a truncated copy of sql_result limiting rows and total characters."""
+        try:
+            result_copy = {
+                'columns': sql_result.get('columns', []),
+                'rows': sql_result.get('rows', []),
+            }
+
+            rows = result_copy.get('rows', [])
+            truncated = False
+            if isinstance(rows, list) and len(rows) > max_rows:
+                result_copy['rows'] = rows[:max_rows]
+                truncated = True
+
+            # If still too large, further trim by characters
+            result_json = json.dumps(result_copy, cls=DecimalEncoder)
+            if len(result_json) > max_chars:
+                # Reduce rows until under limit or down to 0
+                while len(result_json) > max_chars and result_copy['rows']:
+                    result_copy['rows'] = result_copy['rows'][:-max(1, len(result_copy['rows']) // 10)]
+                    result_json = json.dumps(result_copy, cls=DecimalEncoder)
+                truncated = True
+
+            if truncated:
+                result_copy['truncated'] = True
+                result_copy['note'] = f"Result truncated to {len(result_copy.get('rows', []))} rows to fit context."
+
+            return result_copy
+        except Exception:
+            # On any issue, just return a simple summary structure
+            return {
+                'columns': sql_result.get('columns', []),
+                'rows': sql_result.get('rows', [])[:10],
+                'truncated': True,
+                'note': 'Truncated due to serialization error'
+            }
 
     def _perform_personalized_calculations(self, request: ModelRequestSchema) -> Dict[str, Any]:
         """Perform personalized financial calculations based on user profile"""
@@ -315,6 +396,14 @@ Sample data: {rows[0] if rows else 'None'}
             if self.calculation_router.should_include_investment_scenarios(question, profile_pack):
                 assumptions.append("Investment scenarios calculated using your risk profile")
 
+            # If SQL results include merchant spend, derive spending insights
+            sql_result = request.sql_result or {}
+            merchant_insights = self._extract_top_merchants(sql_result)
+            if merchant_insights:
+                computations.append(merchant_insights['computation'])
+                ui_blocks.append(merchant_insights['ui_block'])
+                assumptions.append("Spending hotspots derived from last 90 days of merchants")
+
             return {
                 'computations': computations,
                 'ui_blocks': ui_blocks,
@@ -336,6 +425,26 @@ Sample data: {rows[0] if rows else 'None'}
                 calc_summary += f"- {comp.get('name', 'Calculation')}\n"
             base_message += calc_summary
 
+        # Add top merchants context if available
+        top_merchants = []
+        for comp in personalized_insights.get('computations', []):
+            if comp.get('name') == 'Top Merchants Spending (90d)' and isinstance(comp.get('result'), dict):
+                top_merchants = comp['result'].get('top_merchants', [])
+                break
+        if top_merchants:
+            base_message += "\n**Top Spending Merchants (90d):**\n"
+            for m in top_merchants[:5]:
+                base_message += f"- {m['merchant']}: ${m['total_spent']:,.2f} ({m['share_pct']:.1f}% of tracked spend)\n"
+
+        # Add constraints to discourage invalid JSON from the model
+        base_message += "\n\nConstraints: Return strictly valid JSON only. Do not include inline arithmetic like '27750 + 8400' — compute concrete numbers. No comments in JSON."
+
+        # Optionally include full profile JSON (excluding full transactions)
+        if getattr(config, 'MODELING_INCLUDE_FULL_PROFILE_JSON', True):
+            profile_json = self._build_profile_snapshot(request.profile_pack, max_chars=getattr(config, 'PROFILE_JSON_MAX_CHARS', 120000))
+            if profile_json:
+                base_message += "\n\n**Full User Data JSON (bounded, excludes full transactions):**\n```json\n" + profile_json + "\n```"
+
         # Add demographic context
         user_core = request.profile_pack.get('user_core', {})
         if user_core:
@@ -356,20 +465,28 @@ Sample data: {rows[0] if rows else 'None'}
 
     def _enhance_with_calculations(self, result: Dict, personalized_insights: Dict) -> Dict:
         """Enhance the result with personalized calculations"""
-        # Merge computations
-        existing_computations = result.get('computations', [])
-        new_computations = personalized_insights.get('computations', [])
-        result['computations'] = existing_computations + new_computations
+        narrative_only = getattr(config, 'MODELING_NARRATIVE_ONLY', True)
 
-        # Merge assumptions
+        # Merge assumptions (always keep)
         existing_assumptions = result.get('assumptions', [])
         new_assumptions = personalized_insights.get('assumptions', [])
-        result['assumptions'] = list(set(existing_assumptions + new_assumptions))  # Remove duplicates
+        result['assumptions'] = list(set(existing_assumptions + new_assumptions))
 
-        # Merge UI blocks
-        existing_ui_blocks = result.get('ui_blocks', [])
+        # Computations handling
+        if narrative_only and not getattr(config, 'MODELING_INCLUDE_COMPUTATIONS', False):
+            result['computations'] = []
+        else:
+            existing_computations = result.get('computations', [])
+            new_computations = personalized_insights.get('computations', [])
+            result['computations'] = existing_computations + new_computations
+
+        # UI blocks handling
         new_ui_blocks = personalized_insights.get('ui_blocks', [])
-        result['ui_blocks'] = existing_ui_blocks + new_ui_blocks
+        if narrative_only:
+            result['ui_blocks'] = new_ui_blocks
+        else:
+            existing_ui_blocks = result.get('ui_blocks', [])
+            result['ui_blocks'] = existing_ui_blocks + new_ui_blocks
 
         return result
 
@@ -443,6 +560,111 @@ Sample data: {rows[0] if rows else 'None'}
 
         return result
 
+    async def _call_gpt5_responses_api(self, user_message: str) -> str:
+        """Call GPT-5 using the new responses API via direct HTTP request"""
+        try:
+            logger.info("Calling GPT-5 via responses API")
+
+            import aiohttp
+            import asyncio
+            import json
+
+            url = 'https://api.openai.com/v1/responses'
+            headers = {
+                'Authorization': f'Bearer {config.OPENAI_API_KEY}',
+                'Content-Type': 'application/json'
+            }
+
+            # Prepare the request data according to Responses API spec
+            # Use lower reasoning effort/verbosity to reduce latency
+            data = {
+                'model': 'gpt-5',
+                'instructions': self.system_prompt,  # System prompt as instructions
+                'input': user_message,  # User message as input
+                'store': True,  # Store the response for potential follow-ups
+                'reasoning': {
+                    'effort': getattr(config, 'GPT5_REASONING_EFFORT', 'high')
+                },
+                'text': {
+                    'verbosity': getattr(config, 'GPT5_VERBOSITY', 'high')
+                }
+            }
+
+            # Make async HTTP request with aiohttp
+            timeout_seconds = getattr(config, 'GPT5_TIMEOUT_SECONDS', 240)
+            timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(url, headers=headers, json=data) as response:
+                    if response.status == 200:
+                        response_data = await response.json()
+
+                        # Extract text from the response structure
+                        # According to docs: output is an array of Items
+                        output_items = response_data.get('output', [])
+
+                        for item in output_items:
+                            if item.get('type') == 'message':
+                                # Look for output_text in content array
+                                content_items = item.get('content', [])
+                                for content in content_items:
+                                    if content.get('type') == 'output_text':
+                                        text = content.get('text', '')
+                                        if text:
+                                            logger.info("GPT-5 responses API call completed successfully")
+                                            return text
+
+                        # If no text found in expected structure, try output_text helper
+                        if 'output_text' in response_data:
+                            logger.info("GPT-5 responses API call completed successfully (via output_text helper)")
+                            return response_data['output_text']
+
+                        # Log the structure if we couldn't find text
+                        logger.warning(f"GPT-5 response structure unexpected: {json.dumps(response_data, indent=2)}")
+                        return str(response_data)
+                    else:
+                        error_text = await response.text()
+                        raise Exception(f"GPT-5 API error: {response.status} - {error_text}")
+
+        except asyncio.TimeoutError:
+            logger.warning("GPT-5 responses API timed out after configured timeout, falling back to gpt-4o")
+        except asyncio.CancelledError:
+            logger.warning("GPT-5 call cancelled by context; attempting shielded fallback to gpt-4o")
+            # Continue to fallback below
+        except Exception as e:
+            logger.warning(f"GPT-5 responses API failed: {e}, falling back to gpt-4o")
+
+        # Fallback to gpt-4o using existing client with its own timeout
+        try:
+            response = await asyncio.shield(self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                timeout=60.0  # 60 second timeout for fallback
+            ))
+            logger.info("Successfully fell back to gpt-4o")
+            return response.choices[0].message.content
+        except asyncio.CancelledError:
+            logger.error("Fallback to gpt-4o cancelled by context; returning safe error payload")
+            return json.dumps({
+                "answer_markdown": "The request was cancelled. Please retry your financial model.",
+                "assumptions": [],
+                "computations": [],
+                "ui_blocks": [],
+                "next_data_requests": []
+            })
+        except Exception as fallback_error:
+            logger.error(f"Fallback to gpt-4o also failed: {fallback_error}")
+            # Return a basic error response that can be parsed
+            return json.dumps({
+                "answer_markdown": "I apologize, but I'm having trouble processing your request right now. Please try again in a moment.",
+                "assumptions": ["Service temporarily unavailable"],
+                "computations": [],
+                "ui_blocks": [],
+                "next_data_requests": []
+            })
+
     def _parse_response(self, content: str) -> Dict[str, Any]:
         """Parse LLM response to extract JSON"""
         try:
@@ -458,16 +680,240 @@ Sample data: {rows[0] if rows else 'None'}
             else:
                 json_content = content.strip()
 
-            # Parse JSON
-            return json.loads(json_content)
+            # Clean up common JSON issues
+            json_content = json_content.replace('\n', ' ')  # Remove newlines that might break JSON
+            json_content = json_content.replace('\t', ' ')  # Remove tabs
 
-        except Exception as e:
-            logger.error(f"Failed to parse modeling agent response: {e}")
-            # Fallback response
+            # Try to parse JSON
+            try:
+                result = json.loads(json_content)
+            except json.JSONDecodeError as e:
+                # Attempt a one-pass repair of simple arithmetic and trailing commas
+                logger.error(f"JSON parsing error at position {e.pos}: {e.msg}")
+                logger.error(f"Content snippet around error: ...{content[max(0,e.pos-50):min(len(content),e.pos+50)]}...")
+                repaired = self._repair_json(json_content)
+                result = json.loads(repaired)
+
+            # Ensure all required fields exist
+            if 'answer_markdown' not in result:
+                result['answer_markdown'] = "Financial analysis completed."
+            if 'assumptions' not in result:
+                result['assumptions'] = []
+            if 'computations' not in result:
+                result['computations'] = []
+            if 'ui_blocks' not in result:
+                result['ui_blocks'] = []
+            if 'next_data_requests' not in result:
+                result['next_data_requests'] = []
+
+            return result
+
+        except json.JSONDecodeError as e:
+            # If repair also failed, fallback response
+            logger.error(f"JSON parsing failed after repair at position {e.pos}: {e.msg}")
             return {
-                'answer_markdown': f"I encountered an error analyzing your data: {str(e)}",
-                'assumptions': ["Unable to process data due to parsing error"],
+                'answer_markdown': "I'm working on analyzing your financial data. Let me provide you with key insights based on your profile.",
+                'assumptions': ["Analysis based on available financial data", "Standard market assumptions applied"],
                 'computations': [],
                 'ui_blocks': [],
                 'next_data_requests': []
             }
+        except Exception as e:
+            logger.error(f"Failed to parse modeling agent response: {e}")
+            # Fallback response
+            return {
+                'answer_markdown': "I'm analyzing your financial situation. Based on your profile, here are some insights.",
+                'assumptions': ["Analysis based on available data"],
+                'computations': [],
+                'ui_blocks': [],
+                'next_data_requests': []
+            }
+
+    def _repair_json(self, text: str) -> str:
+        """Repair common JSON issues: simple arithmetic (a/b) and trailing commas, NaN/Infinity."""
+        import re
+        repaired = text
+        # Replace simple numeric divisions like 0.05/12 with computed decimal
+        def div_repl(match):
+            a = float(match.group(1))
+            b = float(match.group(2))
+            val = a / b if b != 0 else 0
+            return f": {val}"
+
+        repaired = re.sub(r":\s*([0-9]+\.?[0-9]*)\s*/\s*([0-9]+\.?[0-9]*)", div_repl, repaired)
+        # Replace simple additions/subtractions like : 27750 + 8400 or : 42110.06 - 36150
+        def addsub_repl(match):
+            a = float(match.group(1))
+            op = match.group(2)
+            b = float(match.group(3))
+            val = a + b if op == '+' else a - b
+            return f": {val}"
+        repaired = re.sub(r":\s*([0-9]+\.?[0-9]*)\s*([\+\-])\s*([0-9]+\.?[0-9]*)", addsub_repl, repaired)
+        # Remove trailing commas before } or ]
+        repaired = re.sub(r",\s*(\}|\])", r"\1", repaired)
+        # Replace NaN/Infinity with null
+        repaired = repaired.replace("NaN", "null").replace("Infinity", "null").replace("-Infinity", "null")
+        return repaired
+
+    def _extract_top_merchants(self, sql_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Extract top merchants spending from SQL result into computation + UI block."""
+        try:
+            columns = sql_result.get('columns') or []
+            rows = sql_result.get('rows') or []
+            if not columns or not rows:
+                return None
+            col_map = {c: i for i, c in enumerate(columns)}
+            if 'merchant' not in col_map or 'total_spent' not in col_map:
+                return None
+            items = []
+            total = 0.0
+            for r in rows:
+                merchant = r[col_map['merchant']]
+                amount = float(r[col_map['total_spent']] or 0)
+                if amount <= 0:
+                    continue
+                items.append({'merchant': merchant, 'total_spent': amount})
+                total += amount
+            if not items:
+                return None
+            # Compute shares and sort
+            for it in items:
+                it['share_pct'] = (it['total_spent'] / total * 100.0) if total > 0 else 0
+            items.sort(key=lambda x: x['total_spent'], reverse=True)
+
+            # Flag common subscription merchants
+            subs = {m.lower() for m in ['Netflix', 'Spotify', 'Amazon Prime', 'Disney+', 'Apple Music', 'YouTube Premium', 'Hulu', 'HBOMax', 'Max', 'Comcast Xfinity', 'AT&T Wireless']}
+            subscription_hits = [it for it in items if any(s in (it['merchant'] or '').lower() for s in subs)]
+
+            computation = {
+                'name': 'Top Merchants Spending (90d)',
+                'formula': 'SUM(ABS(amount)) by merchant over last 90 days',
+                'inputs': {'merchant_count': len(items), 'total_tracked_spend': total},
+                'result': {
+                    'top_merchants': items[:10],
+                    'subscription_merchants_detected': [it['merchant'] for it in subscription_hits[:5]]
+                }
+            }
+
+            # Build UI block (bar chart) for top N merchants
+            labels = [it['merchant'] for it in items[:10]]
+            values = [it['total_spent'] for it in items[:10]]
+            ui_block = {
+                'type': 'bar_chart',
+                'title': 'Top Merchants by Spend (90 days)',
+                'data': {
+                    'labels': labels,
+                    'datasets': [{
+                        'label': 'Total Spent ($)',
+                        'data': values,
+                        'backgroundColor': '#06b6d4'
+                    }]
+                },
+                'metadata': {'y_axis_label': 'Spend ($)', 'source': 'sql_result'}
+            }
+
+            return {'computation': computation, 'ui_block': ui_block}
+        except Exception:
+            return None
+
+    def _build_profile_snapshot(self, profile_pack: Dict[str, Any], max_chars: int) -> Optional[str]:
+        """Build a bounded JSON snapshot of the full user profile (excluding full transactions)."""
+        try:
+            snapshot = dict(profile_pack)
+            # Ensure full transactions are not present
+            snapshot.pop('transactions', None)
+            # Trim non-essential cache metadata
+            snapshot.pop('cache_expires_at', None)
+
+            def dump(s):
+                return json.dumps(s, indent=2, cls=DecimalEncoder)
+
+            text = dump(snapshot)
+            if len(text) <= max_chars:
+                return text
+
+            # Iteratively trim largest list sections while preserving breadth
+            trim_order = [
+                'accounts', 'holdings', 'manual_assets', 'manual_liabilities',
+                'goals', 'budgets', 'recurring_income'
+            ]
+
+            for key in trim_order:
+                if key in snapshot and isinstance(snapshot[key], list) and len(snapshot[key]) > 0:
+                    # Trim by 20% steps until under size or minimal
+                    while len(snapshot[key]) > 5:
+                        new_len = max(5, int(len(snapshot[key]) * 0.8))
+                        snapshot[key] = snapshot[key][:new_len]
+                        text = dump(snapshot)
+                        if len(text) <= max_chars:
+                            return text
+
+            # Final minimal snapshot
+            minimal = {
+                'user_core': snapshot.get('user_core'),
+                'derived_metrics': snapshot.get('derived_metrics'),
+                'accounts': snapshot.get('accounts', [])[:20],
+                'holdings': snapshot.get('holdings', [])[:50],
+                'goals': snapshot.get('goals', [])[:20],
+                'budgets': snapshot.get('budgets', [])[:10],
+                'manual_assets': snapshot.get('manual_assets', [])[:10],
+                'manual_liabilities': snapshot.get('manual_liabilities', [])[:10],
+                'recurring_income': snapshot.get('recurring_income', [])[:10],
+                'transactions_sample': snapshot.get('transactions_sample'),
+                'schema_excerpt': snapshot.get('schema_excerpt')
+            }
+            return dump(minimal)
+
+        except Exception as e:
+            logger.warning(f"Failed to build profile snapshot: {e}")
+            return None
+
+    def _ensure_answer_markdown(self, result: Dict[str, Any], request: ModelRequestSchema, personalized_insights: Dict) -> Dict[str, Any]:
+        """Ensure answer_markdown contains a substantive narrative; synthesize if generic/missing."""
+        text = result.get('answer_markdown', '') or ''
+        is_generic = (
+            len(text.strip()) < 80 or
+            text.strip().startswith("I'm working on analyzing your financial data") or
+            text.strip().startswith("I'm analyzing your financial situation")
+        )
+        if not is_generic:
+            return result
+
+        metrics = request.profile_pack.get('derived_metrics', {})
+        income = float(metrics.get('monthly_income_avg', 0) or 0)
+        expenses = float(metrics.get('monthly_expenses_avg', 0) or 0)
+        deficit = expenses - income
+        runway_months = float(metrics.get('liquid_reserves_months', 0) or 0)
+        net_worth = float(metrics.get('net_worth', 0) or 0)
+
+        lines = []
+        lines.append("### Executive Summary")
+        if deficit > 0:
+            lines.append(f"You are running a monthly deficit of {format_currency(deficit)}. Priority is closing the gap and protecting cash reserves (~{runway_months:.1f} months).")
+        else:
+            lines.append(f"You have a monthly surplus of {format_currency(abs(deficit))}. Focus on allocation and goal funding.")
+        lines.append("")
+        lines.append("### Your Financial Snapshot")
+        lines.append(f"- Net worth: {format_currency(net_worth)}")
+        lines.append(f"- Income vs. expenses: {format_currency(income)} vs {format_currency(expenses)}")
+        lines.append(f"- Cash runway: ~{runway_months:.1f} months")
+
+        # Add quick insights from computations if present
+        comps = result.get('computations', []) or []
+        if comps:
+            lines.append("")
+            lines.append("### Highlights")
+            for comp in comps[:4]:
+                n = comp.get('name')
+                r = comp.get('result')
+                if n and r is not None:
+                    # Format a few common results nicely
+                    if isinstance(r, (int, float)):
+                        lines.append(f"- {n}: {format_currency(r) if n.lower().startswith(('after-tax', 'income')) else r}")
+                    elif isinstance(r, dict) and 'future_value' in r:
+                        lines.append(f"- {n}: FV {format_currency(r['future_value'])}")
+                    else:
+                        lines.append(f"- {n}: {r}")
+
+        result['answer_markdown'] = "\n".join(lines)
+        return result

@@ -731,7 +731,7 @@ function AppleChatInterfaceInner() {
           // Convert backend messages to frontend format
           const formattedMessages = messages.map((msg: any) => ({
             id: msg.id,
-            content: msg.content,
+            content: msg.message_type === 'user' ? msg.content : coerceToMarkdown(msg.content),
             sender: msg.message_type === 'user' ? 'user' : 'penny',
             timestamp: new Date(msg.created_at),
             feedback: null

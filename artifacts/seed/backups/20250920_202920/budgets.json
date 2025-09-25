@@ -1,0 +1,28 @@
+[
+  {
+    "id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "user_id": "136e2d19-e31d-4691-94cb-1729585a340e",
+    "name": "Smart Monthly Budget",
+    "description": "AI-generated budget based on your spending patterns",
+    "amount": "3000.00",
+    "period": "monthly",
+    "start_date": "2025-09-01 17:56:30.625000+00:00",
+    "end_date": null,
+    "is_active": true,
+    "created_at": "2025-09-01 17:56:30.625000+00:00",
+    "updated_at": "2025-09-01 17:56:30.625000+00:00"
+  },
+  {
+    "id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "user_id": "136e2d19-e31d-4691-94cb-1729585a340e",
+    "name": "Monthly Budget",
+    "description": "Auto-generated from your spending patterns",
+    "amount": "2604.00",
+    "period": "monthly",
+    "start_date": "2025-09-20 23:15:55.497000+00:00",
+    "end_date": null,
+    "is_active": true,
+    "created_at": "2025-09-20 23:15:55.497000+00:00",
+    "updated_at": "2025-09-20 23:15:55.497000+00:00"
+  }
+]

@@ -4,7 +4,8 @@
 import logging
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
+from decimal import Decimal
 from typing import Dict, Any, Optional
 from config import config
 from db import get_db_pool
@@ -15,6 +16,18 @@ class AgentLogger:
     def __init__(self):
         self.db_pool = get_db_pool() if config.LOG_TO_DB else None
         self.setup_file_logging()
+
+    @staticmethod
+    def _json_default(obj):
+        """Default serializer for non-JSON types (date, datetime, Decimal)."""
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return str(obj)
+
+    def _safe_json_dumps(self, obj: Any) -> str:
+        return json.dumps(obj, default=self._json_default)
 
     def setup_file_logging(self):
         """Setup structured file logging"""
@@ -59,9 +72,9 @@ class AgentLogger:
         logger = logging.getLogger(f"agent.{agent_name}")
 
         if error_message:
-            logger.error(f"Agent execution failed: {json.dumps(log_entry, default=str)}")
+            logger.error(f"Agent execution failed: {self._safe_json_dumps(log_entry)}")
         else:
-            logger.info(f"Agent execution completed: {json.dumps(log_entry, default=str)}")
+            logger.info(f"Agent execution completed: {self._safe_json_dumps(log_entry)}")
 
         # Log to database if enabled
         if self.db_pool and config.LOG_TO_DB:
@@ -103,10 +116,10 @@ class AgentLogger:
             'id': run_id,
             'user_id': user_id,
             'agent_name': agent_name,
-            'input_data': json.dumps(input_data) if input_data else None,
-            'output_data': json.dumps(output_data) if output_data else None,
-            'sql_queries': json.dumps(sql_queries) if sql_queries else None,
-            'api_calls': json.dumps(api_calls) if api_calls else None,
+            'input_data': self._safe_json_dumps(input_data) if input_data else None,
+            'output_data': self._safe_json_dumps(output_data) if output_data else None,
+            'sql_queries': self._safe_json_dumps(sql_queries) if sql_queries else None,
+            'api_calls': self._safe_json_dumps(api_calls) if api_calls else None,
             'error_message': error_message,
             'execution_time_ms': execution_time_ms,
             'timestamp': datetime.now(timezone.utc)

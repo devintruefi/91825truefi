@@ -4,7 +4,8 @@
 import json
 import logging
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from decimal import Decimal
 from uuid import UUID
 import psycopg2.extras
 from db import get_db_pool
@@ -23,6 +24,17 @@ class MemoryManager:
     def __init__(self):
         self.search_builder = SearchQueryBuilder()
         self._init_tables()
+
+    @staticmethod
+    def _json_default(obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return str(obj)
+
+    def _safe_json_dumps(self, obj: Any) -> str:
+        return json.dumps(obj, default=self._json_default)
 
     def _init_tables(self):
         """Ensure memory tables exist in the database"""
@@ -136,7 +148,7 @@ class MemoryManager:
                         RETURNING id
                     """, (
                         internal_session_id, user_id, role, content,
-                        json.dumps(rich_content),
+                        self._safe_json_dumps(rich_content),
                         turn_number
                     ))
 
@@ -496,7 +508,7 @@ class MemoryManager:
                         RETURNING id
                     """, (
                         internal_session_id, user_id, context_type,
-                        json.dumps(context_value),
+                        self._safe_json_dumps(context_value),
                         relevance_score, expires_at
                     ))
 

@@ -1,0 +1,178 @@
+[
+  {
+    "id": "6dfd42ef-8eb6-4c4e-b4d7-c86dd0fd82fe",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Miscellaneous",
+    "amount": "142.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-01 17:56:30.626000+00:00"
+  },
+  {
+    "id": "f8fd21ec-727b-4688-8432-e7c8653b1033",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Housing",
+    "amount": "1500.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-01 17:56:30.626000+00:00"
+  },
+  {
+    "id": "0ca23573-d0c6-4759-952a-9993ed3c6eec",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Transportation",
+    "amount": "400.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-01 17:56:30.626000+00:00"
+  },
+  {
+    "id": "173bffda-e3d0-4498-a3bb-8722713b898e",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Food & Dining",
+    "amount": "600.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-01 17:56:30.626000+00:00"
+  },
+  {
+    "id": "d1f2a005-04d9-4c0b-a2dc-ecdb2f048cb5",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Utilities",
+    "amount": "200.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-01 17:56:30.626000+00:00"
+  },
+  {
+    "id": "5c283803-6a4d-42fc-b044-da321bf38a07",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Insurance",
+    "amount": "200.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-01 17:56:30.626000+00:00"
+  },
+  {
+    "id": "ab5a51ec-f4e3-4a0d-9ea3-9671eaeb8dfa",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Basic Groceries",
+    "amount": "400.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-01 17:56:30.626000+00:00"
+  },
+  {
+    "id": "be7991a3-d304-4611-bdfb-e8542490cea5",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Savings",
+    "amount": "400.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-20 00:22:12.132000+00:00"
+  },
+  {
+    "id": "757c76d9-bd7f-467c-bdf3-e8ed7199b02a",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Debt Payments",
+    "amount": "500.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-20 07:03:31.418000+00:00"
+  },
+  {
+    "id": "6e517b95-30b4-4bdd-bc59-eeaa090a7039",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "housing",
+    "amount": "729.00",
+    "created_at": "2025-09-20 23:15:55.637000+00:00",
+    "updated_at": "2025-09-20 23:15:55.637000+00:00"
+  },
+  {
+    "id": "6c8902ec-f1b9-4e33-882e-b80ba185b43b",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "food",
+    "amount": "312.00",
+    "created_at": "2025-09-20 23:15:55.759000+00:00",
+    "updated_at": "2025-09-20 23:15:55.759000+00:00"
+  },
+  {
+    "id": "3b9afb75-80f8-459c-84bf-e2f72b9c46d7",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "transport",
+    "amount": "391.00",
+    "created_at": "2025-09-20 23:15:55.857000+00:00",
+    "updated_at": "2025-09-20 23:15:55.857000+00:00"
+  },
+  {
+    "id": "8055a14e-aa70-4b56-b8a4-33c8c9d21cf4",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "utilities",
+    "amount": "130.00",
+    "created_at": "2025-09-20 23:15:55.943000+00:00",
+    "updated_at": "2025-09-20 23:15:55.943000+00:00"
+  },
+  {
+    "id": "76fb564f-d59e-44cb-9640-b88b6728add5",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "insurance",
+    "amount": "130.00",
+    "created_at": "2025-09-20 23:15:56.111000+00:00",
+    "updated_at": "2025-09-20 23:15:56.111000+00:00"
+  },
+  {
+    "id": "46bc7288-d9a6-44a8-b443-ebe8ee7c0f50",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "healthcare",
+    "amount": "130.00",
+    "created_at": "2025-09-20 23:15:56.197000+00:00",
+    "updated_at": "2025-09-20 23:15:56.197000+00:00"
+  },
+  {
+    "id": "56f0097c-94f6-4847-83f3-2ee0239392e0",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "entertainment",
+    "amount": "130.00",
+    "created_at": "2025-09-20 23:15:56.309000+00:00",
+    "updated_at": "2025-09-20 23:15:56.310000+00:00"
+  },
+  {
+    "id": "cb7c020a-e8c3-4dc5-af74-634a2b07de2c",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "shopping",
+    "amount": "130.00",
+    "created_at": "2025-09-20 23:15:56.378000+00:00",
+    "updated_at": "2025-09-20 23:15:56.378000+00:00"
+  },
+  {
+    "id": "159fd1b8-a0dc-4949-ab16-e49ad35140cd",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "personal",
+    "amount": "130.00",
+    "created_at": "2025-09-20 23:15:56.448000+00:00",
+    "updated_at": "2025-09-20 23:15:56.448000+00:00"
+  },
+  {
+    "id": "ed77a274-9ff9-4cf8-a71d-c18b0e014375",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "savings",
+    "amount": "521.00",
+    "created_at": "2025-09-20 23:15:56.530000+00:00",
+    "updated_at": "2025-09-20 23:15:56.530000+00:00"
+  },
+  {
+    "id": "80c2c0de-5b40-41ad-8de3-a1363e812670",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "emergency",
+    "amount": "260.00",
+    "created_at": "2025-09-20 23:15:56.600000+00:00",
+    "updated_at": "2025-09-20 23:15:56.600000+00:00"
+  },
+  {
+    "id": "ee9a3a20-b23f-4555-8f2d-13a7875ed790",
+    "budget_id": "576dbbbe-cc34-46b1-99bb-012974b0cd66",
+    "category": "investments",
+    "amount": "260.00",
+    "created_at": "2025-09-20 23:15:56.669000+00:00",
+    "updated_at": "2025-09-20 23:15:56.669000+00:00"
+  },
+  {
+    "id": "52f313f8-ea94-484f-ac5d-57abd4677586",
+    "budget_id": "049a0b21-4656-4708-8e58-27a0ece9fc45",
+    "category": "Healthcare",
+    "amount": "400.00",
+    "created_at": "2025-09-01 17:56:30.626000+00:00",
+    "updated_at": "2025-09-21 01:22:56.939000+00:00"
+  }
+]

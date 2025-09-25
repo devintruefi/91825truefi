@@ -1,0 +1,17 @@
+[
+  {
+    "id": "67a625e0-ce46-450f-93e0-a99818c20fe3",
+    "user_id": "136e2d19-e31d-4691-94cb-1729585a340e",
+    "source": "Salary",
+    "gross_monthly": "13333.00",
+    "next_pay_date": "2025-09-26",
+    "inflation_adj": true,
+    "frequency": "biweekly",
+    "net_monthly": "12300",
+    "employer": "EMPLOYER INC",
+    "effective_from": "2024-09-21",
+    "effective_to": null,
+    "is_net": false,
+    "metadata": {}
+  }
+]

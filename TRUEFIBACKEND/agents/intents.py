@@ -79,7 +79,7 @@ INTENT_TO_ALLOWED: Dict[Intent, Dict[str, Any]] = {
                    COUNT(*) as transaction_count
             FROM transactions
             WHERE user_id = %(user_id)s
-              AND amount < 0
+              AND (amount < 0 OR (amount > 0 AND category NOT IN ('Transfer', 'Deposit', 'Payroll')))
               AND pending = false
               AND COALESCE(posted_datetime, date::timestamptz) >= %(start_date)s
               AND COALESCE(posted_datetime, date::timestamptz) <= %(end_date)s
@@ -96,7 +96,7 @@ INTENT_TO_ALLOWED: Dict[Intent, Dict[str, Any]] = {
                    SUM(ABS(amount)) as total_spent
             FROM transactions
             WHERE user_id = %(user_id)s
-              AND amount < 0
+              AND (amount < 0 OR (amount > 0 AND category NOT IN ('Transfer', 'Deposit', 'Payroll')))
               AND pending = false
               AND COALESCE(posted_datetime, date::timestamptz) >= %(start_date)s
             GROUP BY 1
@@ -205,7 +205,7 @@ INTENT_TO_ALLOWED: Dict[Intent, Dict[str, Any]] = {
                    MAX(COALESCE(posted_datetime, date::timestamptz)) as last_occurrence
             FROM transactions
             WHERE user_id = %(user_id)s
-              AND amount < 0
+              AND (amount < 0 OR (amount > 0 AND category NOT IN ('Transfer', 'Deposit', 'Payroll')))
               AND pending = false
             GROUP BY merchant_name
             HAVING COUNT(*) >= 3
@@ -290,9 +290,9 @@ INTENT_TO_ALLOWED: Dict[Intent, Dict[str, Any]] = {
                 AVG(ABS(amount)) as avg_transaction
             FROM transactions
             WHERE user_id = %(user_id)s
-              AND amount < 0
+              AND (amount < 0 OR (amount > 0 AND category NOT IN ('Transfer', 'Deposit', 'Payroll')))
               AND pending = false
-              AND COALESCE(posted_datetime, date::timestamptz) >= %(start_date)s
+              AND COALESCE(posted_datetime, date::timestamptz) >= CURRENT_DATE - INTERVAL '90 days'
             GROUP BY 1
             HAVING SUM(ABS(amount)) > 0
             ORDER BY total_spent DESC

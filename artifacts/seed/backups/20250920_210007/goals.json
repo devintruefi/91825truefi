@@ -1,0 +1,40 @@
+[
+  {
+    "id": "58cb6d29-128f-465f-8019-1c3472cf085a",
+    "user_id": "136e2d19-e31d-4691-94cb-1729585a340e",
+    "name": "Emergency Fund",
+    "description": null,
+    "target_amount": "42600.00",
+    "current_amount": "35500.00",
+    "target_date": "2026-09-21 03:30:06.123816+00:00",
+    "priority": "high",
+    "is_active": true,
+    "created_at": "2025-09-01 23:56:54.025000+00:00",
+    "updated_at": "2025-09-03 05:50:24.229000+00:00",
+    "allocation_method": "auto",
+    "checking_buffer_amount": "2000.00",
+    "allocation_percentage": null,
+    "allocation_priority": 5,
+    "auto_calculated_amount": null,
+    "last_auto_calculation": null
+  },
+  {
+    "id": "c4e0da31-8202-476d-b31f-bc5c7501f843",
+    "user_id": "136e2d19-e31d-4691-94cb-1729585a340e",
+    "name": "New Car",
+    "description": null,
+    "target_amount": "50000.00",
+    "current_amount": "12000.00",
+    "target_date": "2027-09-21 03:30:06.193968+00:00",
+    "priority": "medium",
+    "is_active": true,
+    "created_at": "2025-09-01 18:07:05.107000+00:00",
+    "updated_at": "2025-09-01 18:07:05.107000+00:00",
+    "allocation_method": "auto",
+    "checking_buffer_amount": "2000.00",
+    "allocation_percentage": null,
+    "allocation_priority": 5,
+    "auto_calculated_amount": null,
+    "last_auto_calculation": null
+  }
+]
