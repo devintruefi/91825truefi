@@ -66,8 +66,13 @@ function coerceToMarkdown(maybe: any): string {
 }
 
 export function PennyResponseRenderer({ content, metadata }: PennyResponseRendererProps) {
+  // Debug logging
+  console.log('[PennyResponseRenderer] Raw content type:', typeof content)
+  console.log('[PennyResponseRenderer] Raw content preview:', typeof content === 'string' ? content.substring(0, 100) : content)
+
   // Coerce to markdown string properly
   const safeContent = coerceToMarkdown(content)
+  console.log('[PennyResponseRenderer] After coerce:', safeContent.substring(0, 100))
 
   const renderKPICard = (block: any) => {
     const { value, formatted_value, change, change_type, subtitle, icon } = block.data
