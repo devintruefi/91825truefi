@@ -12,7 +12,17 @@ interface UnifiedMarkdownRendererProps {
 }
 
 export default function UnifiedMarkdownRenderer({ content, className = '' }: UnifiedMarkdownRendererProps) {
-  const safe = scrubMarkdown(content || '')
+  // Belt-and-suspenders guard against JSON objects
+  let safe = content ?? ''
+  if (safe && typeof safe === 'string' && safe.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(safe)
+      if (parsed?.answer_markdown) safe = parsed.answer_markdown
+    } catch {}
+  }
+
+  // Apply scrub to clean zero-width chars
+  safe = scrubMarkdown(safe)
 
   return (
     <div className={`prose prose-base dark:prose-invert max-w-none markdown-content tabular-nums leading-relaxed break-words ${className}`.trim()}>

@@ -45,10 +45,29 @@ const formatPercent = (value: number): string => {
 
 const CHART_COLORS = ['#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#3b82f6', '#10b981']
 
+function coerceToMarkdown(maybe: any): string {
+  if (!maybe) return ''
+  if (typeof maybe === 'string') {
+    // A few backends sometimes send a JSON string
+    if (maybe.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(maybe)
+        if (parsed?.answer_markdown) return String(parsed.answer_markdown)
+      } catch {}
+    }
+    return maybe
+  }
+  if (typeof maybe === 'object') {
+    if (typeof maybe.answer_markdown === 'string') return maybe.answer_markdown
+    if (typeof maybe.markdown === 'string') return maybe.markdown
+    if (typeof maybe.message === 'string') return maybe.message
+  }
+  return ''
+}
+
 export function PennyResponseRenderer({ content, metadata }: PennyResponseRendererProps) {
-  // Ensure content is always a string
-  const safeContent = typeof content === 'string' ? content :
-    (typeof content === 'object' ? JSON.stringify(content) : String(content))
+  // Coerce to markdown string properly
+  const safeContent = coerceToMarkdown(content)
 
   const renderKPICard = (block: any) => {
     const { value, formatted_value, change, change_type, subtitle, icon } = block.data
@@ -489,7 +508,7 @@ export function PennyResponseRenderer({ content, metadata }: PennyResponseRender
   return (
     <div className="space-y-4">
       {/* Main content with markdown support */}
-      <UnifiedMarkdownRenderer content={safeContent} />
+      {safeContent && <UnifiedMarkdownRenderer content={safeContent} />}
 
       {/* Render UI blocks if available */}
       {metadata?.ui_blocks && metadata.ui_blocks.length > 0 && (

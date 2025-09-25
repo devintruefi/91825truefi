@@ -446,9 +446,9 @@ function renderPennyMessage(content: string, theme: string) {
   )
 }
 
-// Enhanced inline text renderer
+// Enhanced inline text renderer - disabled preprocessing to avoid breaking sanitized text
 function renderInline(text: string): React.ReactNode {
-  return <span dangerouslySetInnerHTML={{ __html: preprocessContent(text) }} />
+  return <span>{text}</span>
 }
 
 // Use a counter for stable IDs instead of Date.now()
