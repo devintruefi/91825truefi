@@ -17,15 +17,26 @@ export default function UnifiedMarkdownRenderer({ content, className = '' }: Uni
 
   // Check if the string contains a JSON object with answer_markdown
   // Handle cases where there's text before the JSON (like "## Financial Snapshot\n\n{...")
+  // Also handle escaped underscores in the JSON keys
   if (safe && typeof safe === 'string') {
-    const jsonMatch = safe.match(/\{[\s\S]*"answer_markdown"[\s\S]*\}/);
+    const jsonMatch = safe.match(/\{[\s\S]*"answer\\_?markdown"[\s\S]*\}/);
     if (jsonMatch) {
       try {
-        const parsed = JSON.parse(jsonMatch[0])
+        // Remove backslash escapes before parsing
+        const unescaped = jsonMatch[0].replace(/\\/g, '')
+        const parsed = JSON.parse(unescaped)
         if (parsed?.answer_markdown) {
           safe = parsed.answer_markdown
         }
-      } catch {}
+      } catch {
+        // If unescaping didn't work, try original
+        try {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed?.answer_markdown) {
+            safe = parsed.answer_markdown
+          }
+        } catch {}
+      }
     }
   }
 

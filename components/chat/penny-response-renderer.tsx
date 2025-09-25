@@ -50,12 +50,21 @@ function coerceToMarkdown(maybe: any): string {
   if (typeof maybe === 'string') {
     // Check if the string contains a JSON object with answer_markdown
     // Handle cases where there's text before the JSON (like "## Financial Snapshot\n\n{...")
-    const jsonMatch = maybe.match(/\{[\s\S]*"answer_markdown"[\s\S]*\}/);
+    // Also handle escaped underscores in the JSON keys
+    const jsonMatch = maybe.match(/\{[\s\S]*"answer\\_?markdown"[\s\S]*\}/);
     if (jsonMatch) {
       try {
-        const parsed = JSON.parse(jsonMatch[0])
+        // Remove backslash escapes before parsing
+        const unescaped = jsonMatch[0].replace(/\\/g, '')
+        const parsed = JSON.parse(unescaped)
         if (parsed?.answer_markdown) return String(parsed.answer_markdown)
-      } catch {}
+      } catch {
+        // If unescaping didn't work, try original
+        try {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed?.answer_markdown) return String(parsed.answer_markdown)
+        } catch {}
+      }
     }
     return maybe
   }
