@@ -48,10 +48,12 @@ const CHART_COLORS = ['#06b6d4', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#e
 function coerceToMarkdown(maybe: any): string {
   if (!maybe) return ''
   if (typeof maybe === 'string') {
-    // A few backends sometimes send a JSON string
-    if (maybe.trim().startsWith('{')) {
+    // Check if the string contains a JSON object with answer_markdown
+    // Handle cases where there's text before the JSON (like "## Financial Snapshot\n\n{...")
+    const jsonMatch = maybe.match(/\{[\s\S]*"answer_markdown"[\s\S]*\}/);
+    if (jsonMatch) {
       try {
-        const parsed = JSON.parse(maybe)
+        const parsed = JSON.parse(jsonMatch[0])
         if (parsed?.answer_markdown) return String(parsed.answer_markdown)
       } catch {}
     }
@@ -66,13 +68,8 @@ function coerceToMarkdown(maybe: any): string {
 }
 
 export function PennyResponseRenderer({ content, metadata }: PennyResponseRendererProps) {
-  // Debug logging
-  console.log('[PennyResponseRenderer] Raw content type:', typeof content)
-  console.log('[PennyResponseRenderer] Raw content preview:', typeof content === 'string' ? content.substring(0, 100) : content)
-
   // Coerce to markdown string properly
   const safeContent = coerceToMarkdown(content)
-  console.log('[PennyResponseRenderer] After coerce:', safeContent.substring(0, 100))
 
   const renderKPICard = (block: any) => {
     const { value, formatted_value, change, change_type, subtitle, icon } = block.data

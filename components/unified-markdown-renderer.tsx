@@ -14,20 +14,18 @@ interface UnifiedMarkdownRendererProps {
 export default function UnifiedMarkdownRenderer({ content, className = '' }: UnifiedMarkdownRendererProps) {
   // Belt-and-suspenders guard against JSON objects
   let safe = content ?? ''
-  console.log('[UnifiedMarkdownRenderer] Input type:', typeof safe)
-  console.log('[UnifiedMarkdownRenderer] Input preview:', safe.substring ? safe.substring(0, 100) : safe)
 
-  if (safe && typeof safe === 'string' && safe.trim().startsWith('{')) {
-    console.log('[UnifiedMarkdownRenderer] Attempting JSON parse...')
-    try {
-      const parsed = JSON.parse(safe)
-      console.log('[UnifiedMarkdownRenderer] Parsed keys:', Object.keys(parsed))
-      if (parsed?.answer_markdown) {
-        safe = parsed.answer_markdown
-        console.log('[UnifiedMarkdownRenderer] Extracted answer_markdown')
-      }
-    } catch (e) {
-      console.log('[UnifiedMarkdownRenderer] JSON parse failed:', e)
+  // Check if the string contains a JSON object with answer_markdown
+  // Handle cases where there's text before the JSON (like "## Financial Snapshot\n\n{...")
+  if (safe && typeof safe === 'string') {
+    const jsonMatch = safe.match(/\{[\s\S]*"answer_markdown"[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0])
+        if (parsed?.answer_markdown) {
+          safe = parsed.answer_markdown
+        }
+      } catch {}
     }
   }
 
