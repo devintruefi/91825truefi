@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 // Chat components only - onboarding moved to dashboard
 import { DashboardPreview } from '@/components/chat/dashboard-preview'
-import { PennyResponseRenderer } from '@/components/chat/penny-response-renderer'
+import { SimplePennyRenderer } from '@/components/chat/simple-penny-renderer'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Send, Mic, Paperclip, ThumbsUp, ThumbsDown, Copy, Download, Volume2, VolumeX, ChevronLeft, ChevronRight, Plus, MessageSquare, Clock, Trash2, ChevronUp, ChevronDown, Edit2, Check, X } from "lucide-react"
 import { InlineMath, BlockMath } from "react-katex"
@@ -1700,7 +1700,7 @@ function AppleChatInterfaceInner() {
                         >
                           {/* Removed onboarding progress - handled by dashboard */}
                           {message.metadata ? (
-                            <PennyResponseRenderer content={message.content || ''} metadata={message.metadata} />
+                            <SimplePennyRenderer content={message.content || ''} metadata={message.metadata} />
                           ) : (
                             message.id === streamingMessageId && isTyping
                               ? renderPennyMessage(message.content || '', theme)
