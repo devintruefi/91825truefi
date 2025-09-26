@@ -28,9 +28,9 @@
     "@hookform/resolvers": "^3.9.1",
     "@prisma/client": "^6.16.2",
     "@radix-ui/react-accordion": "latest",
-    "@radix-ui/react-alert-dialog": "latest",
+    "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "latest",
-    "@radix-ui/react-avatar": "latest",
+    "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "latest",
     "@radix-ui/react-collapsible": "latest",
     "@radix-ui/react-context-menu": "latest",
@@ -93,7 +93,7 @@
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^11.1.0",
     "vaul": "latest",
-    "zod": "^3.24.1"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.10",
